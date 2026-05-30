@@ -1,0 +1,62 @@
+[
+  {
+    "id": "spirit_001",
+    "name": "烈焰龙",
+    "element": "雷火",
+    "rarity": "传奇",
+    "energy_max": 100,
+    "energy_regen": 5,
+    "skill_ids": ["skill_fire_001", "skill_fire_002", "skill_fire_003", "skill_fire_passive"],
+    "description": "雷火元素传奇元灵，拥有强大的进攻能力"
+  },
+  {
+    "id": "spirit_002",
+    "name": "铁壁金刚",
+    "element": "金刚",
+    "rarity": "传奇",
+    "energy_max": 100,
+    "energy_regen": 4,
+    "skill_ids": ["skill_metal_001", "skill_metal_002", "skill_metal_003", "skill_metal_passive"],
+    "description": "金刚元素传奇元灵，坚不可摧的防御力量"
+  },
+  {
+    "id": "spirit_003",
+    "name": "梦蝶",
+    "element": "梦幻",
+    "rarity": "珍稀",
+    "energy_max": 90,
+    "energy_regen": 6,
+    "skill_ids": ["skill_dream_001", "skill_dream_002", "skill_dream_003"],
+    "description": "梦幻元素珍稀元灵，操控梦境改变战局"
+  },
+  {
+    "id": "spirit_004",
+    "name": "藤蔓守卫",
+    "element": "草木",
+    "rarity": "珍稀",
+    "energy_max": 90,
+    "energy_regen": 5,
+    "skill_ids": ["skill_grass_001", "skill_grass_002", "skill_grass_003"],
+    "description": "草木元素珍稀元灵，缠绕控制能力出众"
+  },
+  {
+    "id": "spirit_005",
+    "name": "冰晶凤凰",
+    "element": "冰雪",
+    "rarity": "优秀",
+    "energy_max": 80,
+    "energy_regen": 5,
+    "skill_ids": ["skill_ice_001", "skill_ice_002", "skill_ice_003"],
+    "description": "冰雪元素优秀元灵，冻结一切"
+  },
+  {
+    "id": "spirit_006",
+    "name": "岩石巨人",
+    "element": "大地",
+    "rarity": "优秀",
+    "energy_max": 80,
+    "energy_regen": 4,
+    "skill_ids": ["skill_earth_001", "skill_earth_002", "skill_earth_003"],
+    "description": "大地元素优秀元灵，稳固如山"
+  }
+]

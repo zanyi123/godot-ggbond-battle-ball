@@ -1,0 +1,80 @@
+[
+  {
+    "id": "char_001",
+    "name": "猪猪侠",
+    "stamina": 80,
+    "defense": 60,
+    "speed": 70,
+    "attack": 75,
+    "resilience": 50,
+    "talent_name": "不屈意志",
+    "talent_desc": "体力低于30%时，攻击力+15%",
+    "spirit_preference": "雷火",
+    "description": "主角，攻守兼备的全能型球员"
+  },
+  {
+    "id": "char_002",
+    "name": "超人强",
+    "stamina": 90,
+    "defense": 80,
+    "speed": 50,
+    "attack": 60,
+    "resilience": 70,
+    "talent_name": "铁壁",
+    "talent_desc": "在场上时，基于基础血量的5%增加永久护盾，不再生",
+    "spirit_preference": "金刚",
+    "description": "防御型球员，高韧性高防御"
+  },
+  {
+    "id": "char_003",
+    "name": "菲菲",
+    "stamina": 70,
+    "defense": 50,
+    "speed": 85,
+    "attack": 65,
+    "resilience": 40,
+    "talent_name": "灵巧步伐",
+    "talent_desc": "移速+10%，被击中时10%概率闪避",
+    "spirit_preference": "梦幻",
+    "description": "高速度辅助型球员"
+  },
+  {
+    "id": "char_004",
+    "name": "小呆呆",
+    "stamina": 75,
+    "defense": 65,
+    "speed": 60,
+    "attack": 70,
+    "resilience": 55,
+    "talent_name": "坚定",
+    "talent_desc": "韧性+10，被击退距离减少20%",
+    "spirit_preference": "大地",
+    "description": "均衡型球员，适合多种位置"
+  },
+  {
+    "id": "char_005",
+    "name": "波比",
+    "stamina": 65,
+    "defense": 55,
+    "speed": 75,
+    "attack": 85,
+    "resilience": 35,
+    "talent_name": "猛攻",
+    "talent_desc": "攻击时10%概率造成双倍伤害",
+    "spirit_preference": "草木",
+    "description": "高攻击力的进攻型球员"
+  },
+  {
+    "id": "char_006",
+    "name": "迷糊老师",
+    "stamina": 70,
+    "defense": 70,
+    "speed": 55,
+    "attack": 60,
+    "resilience": 60,
+    "talent_name": "智慧光环",
+    "talent_desc": "周围队友元灵能量回复速度+15%",
+    "spirit_preference": "冰雪",
+    "description": "辅助型球员，增强团队能力"
+  }
+]
