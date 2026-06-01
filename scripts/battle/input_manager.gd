@@ -55,9 +55,11 @@ func _input(event: InputEvent) -> void:
 			skill_requested.emit(2)
 		# 快捷指令
 		elif event.keycode == KEY_7:
-			quick_command_requested.emit(0)  # 把球给我
+			quick_command_requested.emit(0)  # 注意防守
 		elif event.keycode == KEY_8:
-			quick_command_requested.emit(1)  # 准备接球
+			quick_command_requested.emit(1)  # 传球给我
+		elif event.keycode == KEY_9:
+			quick_command_requested.emit(2)  # 别传球
 		# Tab切换球员
 		elif event.keycode == KEY_TAB:
 			_cycle_player()
@@ -79,13 +81,13 @@ func _input(event: InputEvent) -> void:
 func _on_left_click_press() -> void:
 	if controlled_player == null:
 		return
-	
+
 	if controlled_player.is_carrying_ball:
 		# 持球：进入瞄准状态
 		is_aiming = true
 	else:
-		# 无球：加速奔跑
-		controlled_player.speed *= 1.5
+		# 无球：冲刺加速
+		controlled_player.start_sprint()
 
 
 func _on_left_click_release() -> void:
@@ -102,12 +104,14 @@ func _on_left_click_release() -> void:
 			throw_requested.emit(direction, power)
 		else:
 			throw_cancelled.emit()
+			# 发送空的瞄准信息（确保UI清除瞄准线）
+			aim_info_updated.emit({"aiming": false})
 		
 		is_aiming = false
 	
 	elif not controlled_player.is_carrying_ball:
-		# 无球加速结束
-		controlled_player.speed /= 1.5
+		# 无球松开：冲刺不受松开影响（持续到时间结束）
+		pass
 
 
 func _on_right_click_press() -> void:
@@ -117,7 +121,10 @@ func _on_right_click_press() -> void:
 	if is_aiming:
 		# 预发球中右键取消
 		is_aiming = false
+		# 发送取消信号（清除瞄准线）
 		throw_cancelled.emit()
+		# 发送空的瞄准信息（确保UI清除瞄准线）
+		aim_info_updated.emit({"aiming": false})
 	elif not controlled_player.is_carrying_ball:
 		# 无球：进入待接球状态
 		controlled_player.enter_catch_state()
@@ -183,14 +190,13 @@ func _process(_delta: float) -> void:
 		var camera := viewport.get_camera_2d()
 		if camera:
 			mouse_world_pos = camera.get_global_mouse_position()
-		
+	
 	# 更新球员朝向
 	controlled_player.facing_direction = (mouse_world_pos - controlled_player.global_position).normalized()
 	player_facing_updated.emit(controlled_player, controlled_player.facing_direction)
 	
-	# 更新瞄准信息
-	if is_aiming:
-		aim_info_updated.emit(get_aim_info())
+	# 更新瞄准信息（始终发送，确保取消时能清除）
+	aim_info_updated.emit(get_aim_info())
 	
 	# 更新鼠标圆环动画
 	cursor_ring_timer += _delta * CURSOR_RING_ANIMATION_SPEED

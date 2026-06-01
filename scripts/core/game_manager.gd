@@ -67,12 +67,23 @@ func _advance_phase() -> void:
 		MatchPhase.FIRST_HALF:
 			_set_phase(MatchPhase.HALF_TIME)
 			match_time = HALF_TIME_DURATION
+			print("[GameManager] 上半场结束，中场休息")
 		MatchPhase.HALF_TIME:
 			_set_phase(MatchPhase.SECOND_HALF)
 			match_time = SECOND_HALF_DURATION
+			print("[GameManager] 下半场开始")
 		MatchPhase.SECOND_HALF:
 			_set_phase(MatchPhase.RESULTS)
+			print("[GameManager] 下半场结束，比赛结果: 队A %d - 队B %d" % [score_team_a, score_team_b])
 			match_ended.emit(score_team_a, score_team_b)
+			
+			# 宣布胜者
+			if score_team_a > score_team_b:
+				print("[GameManager] 胜者：队A！")
+			elif score_team_b > score_team_a:
+				print("[GameManager] 胜者：队B！")
+			else:
+				print("[GameManager] 平局！")
 
 
 func _set_phase(phase: MatchPhase) -> void:
@@ -89,16 +100,31 @@ func add_score(team: String, amount: int = 1) -> void:
 		score_team_b += amount
 		score_updated.emit("b", score_team_b)
 	print("[GameManager] 得分: 队A %d - 队B %d" % [score_team_a, score_team_b])
+	
+	# 检查是否有一队全部被击败
+	_check_defeat_condition()
 
 
 func check_all_defeated(team: String) -> bool:
 	var team_players: Array[CharacterBody2D] = (team_a if team == "b" else team_b)
 	var all_defeated := true
 	for player: CharacterBody2D in team_players:
-		if not player.is_defeated:
+		if player and is_instance_valid(player) and not player.is_defeated:
 			all_defeated = false
 			break
 	return all_defeated
+
+
+func _check_defeat_condition() -> void:
+	"""检查是否有一队全部被击败，如果是则结束比赛"""
+	var all_a_defeated: bool = check_all_defeated("a")
+	var all_b_defeated: bool = check_all_defeated("b")
+	
+	if all_a_defeated or all_b_defeated:
+		print("[GameManager] 队%s全部被击败，比赛结束！" % ("A" if all_a_defeated else "B"))
+		# 提前结束比赛
+		_set_phase(MatchPhase.RESULTS)
+		match_ended.emit(score_team_a, score_team_b)
 
 
 func pause_match() -> void:

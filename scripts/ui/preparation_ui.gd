@@ -2,6 +2,8 @@ extends Control
 ## 备战界面 - 比赛前和中场休息时使用
 ## 功能：球员替补、元灵切换、战术策略配置
 
+const AIProfile = preload("res://scripts/battle/ai_profile.gd")
+
 signal strategy_changed(player_strategy: int, team_strategy: int)
 signal player_substituted(index: int, new_char_id: String)
 signal spirit_changed(index: int, spirit_id: String)
@@ -23,6 +25,11 @@ enum TeamStrategy {
 # 当前策略
 var current_player_strategy: int = PlayerStrategy.PASSING
 var current_team_strategy: int = TeamStrategy.BALANCED
+
+# AI Profile 映射
+var current_role: String = "supporter"
+var current_team_strategy_str: String = "balanced"
+var current_difficulty: String = "normal"
 
 # 战斗数据引用
 var team_a_players: Array[CharacterBody2D] = []
@@ -360,15 +367,38 @@ func _update_player_widget(index: int, player: CharacterBody2D) -> void:
 # ===== 信号处理 =====
 
 func _on_strategy_selected(strategy: int) -> void:
-	"""策略选择"""
+	"""策略选择 → 映射到 AIProfile 参数"""
 	if strategy < 3:
 		current_player_strategy = strategy
+		match strategy:
+			0: current_role = "attacker"
+			1: current_role = "defender"
+			2: current_role = "supporter"
 	else:
 		current_team_strategy = strategy - 3
+		match strategy - 3:
+			0: current_team_strategy_str = "offensive"
+			1: current_team_strategy_str = "defensive"
+			2: current_team_strategy_str = "balanced"
 	
+	# 更新所有AI队友的profile（保持各自角色，只更新团队策略）
+	_rebuild_team_a_profiles()
 	_update_strategy_button_styles()
 	strategy_changed.emit(current_player_strategy, current_team_strategy)
-	print("[备战] 策略: 个人=%d 团队=%d" % [current_player_strategy, current_team_strategy])
+	print("[备战] 策略: 个人=%s 团队=%s" % [current_role, current_team_strategy_str])
+
+
+func _rebuild_team_a_profiles() -> void:
+	"""重建队A所有AI队友的profile（保持各自角色分工，只更新团队策略）"""
+	if not ai_manager:
+		return
+	# 3个队友保持各自角色，不统一改成同一角色
+	var roles := ["attacker", "defender", "supporter"]
+	for i in range(3):
+		var profile: AIProfile = AIProfile.get_role_preset(roles[i])
+		AIProfile.apply_team_strategy(profile, current_team_strategy_str)
+		AIProfile.apply_difficulty(profile, current_difficulty)
+		ai_manager.update_player_profile(i, profile)
 
 
 func _update_strategy_button_styles() -> void:

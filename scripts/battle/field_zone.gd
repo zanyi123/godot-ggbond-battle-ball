@@ -258,12 +258,8 @@ func _build_visual_field() -> void:
 	
 	# 6. 白色框线
 	_draw_border_rect(INNER, 2.0)
-	_draw_border_rect(LEFT_OUTER.main, 2.0)
-	_draw_border_rect(LEFT_OUTER.top_arm, 2.0)
-	_draw_border_rect(LEFT_OUTER.bot_arm, 2.0)
-	_draw_border_rect(RIGHT_OUTER.main, 2.0)
-	_draw_border_rect(RIGHT_OUTER.top_arm, 2.0)
-	_draw_border_rect(RIGHT_OUTER.bot_arm, 2.0)
+	_draw_outer_field_border(LEFT_OUTER, 2.0)
+	_draw_outer_field_border(RIGHT_OUTER, 2.0)
 	_draw_border_rect({"x": -FIELD_WIDTH / 2, "y": -FIELD_HEIGHT / 2, "width": FIELD_WIDTH, "height": FIELD_HEIGHT}, 3.0)
 	
 	# 7. 队伍标签
@@ -312,6 +308,84 @@ func _draw_border_rect(zone: Dictionary, border_width: float) -> void:
 	r.position = Vector2(x + rw - bw, y)
 	r.color = c
 	add_child(r)
+
+
+func _draw_outer_field_border(outer: Dictionary, border_width: float) -> void:
+	"""绘制凹字形外场整体边框（不画内部子区域之间的分隔线）"""
+	var m: Dictionary = outer.main    # 主体
+	var ta: Dictionary = outer.top_arm  # 上臂
+	var ba: Dictionary = outer.bot_arm  # 下臂
+	var bw: float = border_width
+	var c := Color.WHITE
+
+	# 计算整体外包围盒
+	var all_x: Array[float] = [m.x, m.x + m.width, ta.x, ta.x + ta.width, ba.x, ba.x + ba.width]
+	var all_y: Array[float] = [m.y, m.y + m.height, ta.y, ta.y + ta.height, ba.y, ba.y + ba.height]
+	var min_x: float = all_x.min()
+	var max_x: float = all_x.max()
+	var min_y: float = all_y.min()
+	var max_y: float = all_y.max()
+
+	# 判断臂在哪一侧（左外场：主体在左，臂在右；右外场：主体在右，臂在左）
+	var arms_on_right: bool = (ta.x > m.x)
+
+	# 用Line2D绘制外轮廓（凹字形路径）
+	var line := Line2D.new()
+	line.width = bw * 2.0  # Line2D宽度是全宽
+	line.default_color = c
+
+	var points: PackedVector2Array = []
+
+	if arms_on_right:
+		# 左外场形状：主体左侧 → 主体上侧 → 上臂上侧 → 上臂右侧 → 上臂下侧(回到主体范围) →
+		# 主体内侧上部 → 主体内侧下部 → 下臂上侧 → 下臂右侧 → 下臂下侧 → 主体下侧 → 主体左侧
+		var main_left: float = m.x
+		var main_right: float = m.x + m.width
+		var arm_right: float = ta.x + ta.width
+		var arm_top_top: float = ta.y
+		var arm_top_bot: float = ta.y + ta.height
+		var arm_bot_top: float = ba.y
+		var arm_bot_bot: float = ba.y + ba.height
+
+		points.append(Vector2(main_left, m.y))           # 左上角
+		points.append(Vector2(main_right, m.y))          # 主体右上角
+		points.append(Vector2(main_right, arm_top_top))  # 到上臂顶
+		points.append(Vector2(arm_right, arm_top_top))   # 上臂右上
+		points.append(Vector2(arm_right, arm_top_bot))   # 上臂右下
+		points.append(Vector2(main_right, arm_top_bot))  # 回到主体右侧
+		points.append(Vector2(main_right, arm_bot_top))  # 到下臂顶
+		points.append(Vector2(arm_right, arm_bot_top))   # 下臂右上
+		points.append(Vector2(arm_right, arm_bot_bot))   # 下臂右下
+		points.append(Vector2(main_right, arm_bot_bot))  # 回到主体右侧
+		points.append(Vector2(main_right, m.y + m.height))  # 主体右下角
+		points.append(Vector2(main_left, m.y + m.height))   # 左下角
+		points.append(Vector2(main_left, m.y))              # 回到左上角
+	else:
+		# 右外场形状（镜像）
+		var main_right: float = m.x + m.width
+		var main_left: float = m.x
+		var arm_left: float = ta.x
+		var arm_top_top: float = ta.y
+		var arm_top_bot: float = ta.y + ta.height
+		var arm_bot_top: float = ba.y
+		var arm_bot_bot: float = ba.y + ba.height
+
+		points.append(Vector2(main_right, m.y))          # 右上角
+		points.append(Vector2(main_left, m.y))           # 主体左上角
+		points.append(Vector2(main_left, arm_top_top))   # 到上臂顶
+		points.append(Vector2(arm_left, arm_top_top))    # 上臂左上
+		points.append(Vector2(arm_left, arm_top_bot))    # 上臂左下
+		points.append(Vector2(main_left, arm_top_bot))   # 回到主体左侧
+		points.append(Vector2(main_left, arm_bot_top))   # 到下臂顶
+		points.append(Vector2(arm_left, arm_bot_top))    # 下臂左上
+		points.append(Vector2(arm_left, arm_bot_bot))    # 下臂左下
+		points.append(Vector2(main_left, arm_bot_bot))   # 回到主体左侧
+		points.append(Vector2(main_left, m.y + m.height))   # 主体左下角
+		points.append(Vector2(main_right, m.y + m.height))  # 右下角
+		points.append(Vector2(main_right, m.y))              # 回到右上角
+
+	line.points = points
+	add_child(line)
 
 
 func _label(text: String, pos: Vector2, color: Color) -> void:

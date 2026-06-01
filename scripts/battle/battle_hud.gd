@@ -8,6 +8,8 @@ extends Control
 var player_panels: Array[Control] = []
 var timer_label: Label
 var score_label: Label
+var quick_msg_buttons: Array[Button] = []
+var comm_system: Node = null  # AI通信系统引用
 
 
 func _ready() -> void:
@@ -17,6 +19,7 @@ func _ready() -> void:
 	
 	_create_score_panel()
 	_create_player_panels()
+	_create_quick_message_bar()
 
 
 func _create_score_panel() -> void:
@@ -141,3 +144,69 @@ func _on_time_updated(time: float) -> void:
 
 func _on_score_updated(team: String, new_score: int) -> void:
 	score_label.text = "队A %d : %d 队B" % [GameManager.score_team_a, GameManager.score_team_b]
+
+
+func _create_quick_message_bar() -> void:
+	"""在球员面板左侧创建快捷消息栏"""
+	var bar_width: float = 70.0
+	var bar_height: float = 90.0
+	var bar_x: float = 10.0
+	var bar_y: float = 810.0 - bar_height - 12.0
+	
+	# 背景
+	var bg := Panel.new()
+	bg.position = Vector2(bar_x, bar_y)
+	bg.size = Vector2(bar_width, bar_height)
+	add_child(bg)
+	
+	var inner_bg := ColorRect.new()
+	inner_bg.size = Vector2(bar_width, bar_height)
+	inner_bg.color = Color(0.1, 0.15, 0.25, 0.85)
+	bg.add_child(inner_bg)
+	
+	# 标题
+	var title := Label.new()
+	title.text = "信号"
+	title.position = Vector2(18, 3)
+	title.add_theme_font_size_override("font_size", 11)
+	title.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
+	bg.add_child(title)
+	
+	# 三个消息按钮
+	var labels := ["防守[7]", "传我[8]", "别传[9]"]
+	var colors := [
+		Color(1.0, 0.7, 0.3),   # 防守-橙色
+		Color(0.3, 1.0, 0.5),   # 传我-绿色
+		Color(1.0, 0.4, 0.4),   # 别传-红色
+	]
+	
+	for i in range(3):
+		var btn := Button.new()
+		btn.text = labels[i]
+		btn.position = Vector2(3, 18 + i * 24)
+		btn.size = Vector2(64, 21)
+		btn.add_theme_font_size_override("font_size", 11)
+		btn.add_theme_color_override("font_color", colors[i])
+		btn.add_theme_color_override("font_hover_color", colors[i].lightened(0.3))
+		var msg_index: int = i  # 0=DEFEND_ALERT, 1=PASS_TO_ME, 2=DONT_PASS
+		btn.pressed.connect(_on_quick_msg_pressed.bind(msg_index))
+		bg.add_child(btn)
+		quick_msg_buttons.append(btn)
+
+
+func _on_quick_msg_pressed(msg_index: int) -> void:
+	"""快捷消息按钮点击"""
+	if comm_system:
+		var player: CharacterBody2D = null
+		# 获取玩家控制的球员
+		if GameManager and not GameManager.team_a.is_empty():
+			for p in GameManager.team_a:
+				if p and p.is_player_controlled:
+					player = p
+					break
+		if player:
+			comm_system.try_send_message(player, msg_index)
+
+
+func set_comm_system(sys: Node) -> void:
+	comm_system = sys
