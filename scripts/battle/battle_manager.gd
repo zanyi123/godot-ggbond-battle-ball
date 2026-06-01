@@ -101,7 +101,8 @@ func _create_field() -> void:
 
 	# 不在内/外场边界创建空气墙--AI靠逻辑不越线,球/球员可物理跨越
 	# 隔离墙仅为被惩罚球员动态创建
-
+	_create_penalty_walls()
+	
 	print("[Match] 场地创建完成")
 
 
@@ -188,7 +189,7 @@ func _create_player(char_id: String, team_name: String, controlled: bool, start_
 	player.set_script(player_script)
 	player.position = start_pos
 	player.collision_layer = 1
-	player.collision_mask = 1  # layer 1 only（球员互碰），layer 5隔离墙由set_penalized动态控制
+	player.collision_mask = 1  # layer 1 only(球员互碰),layer 5隔离墙由set_penalized动态控制
 	add_child(player)
 	player.initialize(char_id, team_name, controlled)
 	# 连接被击败信号
@@ -365,8 +366,10 @@ func _on_player_defeated(player: CharacterBody2D) -> void:
 	# 移动到外场
 	field_zone.start_field_transition(player, defeated_count)
 
-	# 等待传送完成后设置惩罚状态
-	await field_zone.player_transition_completed
+	# 等待【自己的】传送完成（忽略其他球员的传送信号）
+	var completed_player: CharacterBody2D = await field_zone.player_transition_completed
+	while completed_player != player:
+		completed_player = await field_zone.player_transition_completed
 
 	# 设置惩罚状态(限制在外场内)
 	player.set_penalized(true)
@@ -538,9 +541,9 @@ func _create_penalty_wall(pos: Vector2, size: Vector2, wall_name: String = "Pena
 	wall.position = pos
 	wall.name = wall_name
 
-	# 设置碰撞层：layer 5 (penalty_walls)
+	# 设置碰撞层:layer 5 (penalty_walls)
 	wall.collision_layer = 1 << 4  # bit 4 = layer 5
-	wall.collision_mask = 0  # 墙不检测任何碰撞，只阻挡球员
+	wall.collision_mask = 0  # 墙不检测任何碰撞,只阻挡球员
 
 	var wall_shape := CollisionShape2D.new()
 	var rect := RectangleShape2D.new()
@@ -558,7 +561,7 @@ func _build_penalty_enclosure(team: String) -> void:
 	_remove_penalty_enclosure(team)
 
 	if team == "a":
-		# 右外场完整隔离（主体+上臂+下臂的包围盒）
+		# 右外场完整隔离(主体+上臂+下臂的包围盒)
 		# 外围4面
 		_create_penalty_wall(Vector2(249.0, 0.0), Vector2(2.0, 650.0), wall_prefix + "left")    # 左边 x=250
 		_create_penalty_wall(Vector2(511.0, 0.0), Vector2(2.0, 650.0), wall_prefix + "right")   # 右边 x=510
@@ -574,6 +577,8 @@ func _build_penalty_enclosure(team: String) -> void:
 
 func _remove_penalty_enclosure(team: String) -> void:
 	"""移除指定队伍的隔离墙"""
+	if not penalty_walls or not is_instance_valid(penalty_walls):
+		return
 	var wall_prefix: String = "enclosure_%s_" % team
 	var to_remove: Array[Node] = []
 	for child in penalty_walls.get_children():

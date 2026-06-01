@@ -67,7 +67,8 @@ func _on_start_match() -> void:
 
 
 func _on_open_characters() -> void:
-	print("[Main] 角色系统 - 待实现")
+	var char_ui: Control = load("res://scripts/ui/character_system.gd").new()
+	add_child(char_ui)
 
 
 func _on_open_spirits() -> void:
