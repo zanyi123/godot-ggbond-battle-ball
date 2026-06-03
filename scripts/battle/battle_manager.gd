@@ -352,7 +352,8 @@ func _update_message_bubbles(delta: float) -> void:
 
 func _on_player_defeated(player: CharacterBody2D) -> void:
 	"""处理球员被击败事件:移动到外场并设置惩罚状态"""
-	print("[Match] %s 被击败,移动到外场" % (player.char_data.get("name") if player.char_data.has("name") else ""))
+	var pname: String = player.char_data.get("name", "?") if player.char_data else "?"
+	print("[Match] %s (队%s) 被击败,移动到外场" % [pname, player.team])
 
 	# 暂停比赛
 	GameManager.pause_match()
@@ -371,16 +372,18 @@ func _on_player_defeated(player: CharacterBody2D) -> void:
 	while completed_player != player:
 		completed_player = await field_zone.player_transition_completed
 
-	# 设置惩罚状态(限制在外场内)
-	player.set_penalized(true)
-
-	# 动态创建该队伍外场的隔离墙
-	_build_penalty_enclosure(player.team)
+	# 设置惩罚状态(限制在外场内) + 碰撞层
+	# 注：_on_player_transition_completed 也会设置惩罚和建墙
+	# 这里双重保障，确保不遗漏
+	if not player.is_penalized:
+		player.set_penalized(true)
+		_build_penalty_enclosure(player.team)
+		_ensure_all_penalty_enclosures()
 
 	# 恢复比赛
 	GameManager.resume_match()
 
-	print("[Match] %s 已移动到外场并设置惩罚状态" % (player.char_data.get("name") if player.char_data.has("name") else ""))
+	print("[Match] %s (队%s) 已移动到外场并设置惩罚状态" % [pname, player.team])
 
 
 # ===== 违规检测与处理 =====
@@ -473,7 +476,7 @@ func _process(delta: float) -> void:
 	if match_started and comm_system:
 		comm_system.evaluate_ai_messages(delta)
 
-	# 处理传送队列
+	# 处理传送队列（违规传送）
 	if pending_transfers.is_empty():
 		return
 
@@ -484,7 +487,7 @@ func _process(delta: float) -> void:
 		if p and is_instance_valid(p):
 			item["timer"] -= delta
 			if item["timer"] <= 0:
-				# 执行传送
+				# 执行传送（传送完成后 _on_player_transition_completed 会设置惩罚+建墙）
 				field_zone.start_field_transition(p, offset)
 				item["player"] = null  # 标记已完成
 			else:
@@ -493,6 +496,7 @@ func _process(delta: float) -> void:
 	# 所有传送完成后恢复比赛
 	if all_done:
 		pending_transfers.clear()
+		GameManager.resume_match()
 		GameManager.resume_match()
 		print("[Match] 传送完成,比赛恢复")
 
@@ -555,24 +559,38 @@ func _create_penalty_wall(pos: Vector2, size: Vector2, wall_name: String = "Pena
 
 
 func _build_penalty_enclosure(team: String) -> void:
-	"""为指定队伍的外场动态创建完整隔离墙"""
+	"""为指定队伍的外场动态创建完整隔离墙(匹配凹字形)"""
 	var wall_prefix: String = "enclosure_%s_" % team
 	# 先清理该队伍旧的隔离墙
 	_remove_penalty_enclosure(team)
 
+	var wall_count: int = 0
 	if team == "a":
-		# 右外场完整隔离(主体+上臂+下臂的包围盒)
-		# 外围4面
-		_create_penalty_wall(Vector2(249.0, 0.0), Vector2(2.0, 650.0), wall_prefix + "left")    # 左边 x=250
-		_create_penalty_wall(Vector2(511.0, 0.0), Vector2(2.0, 650.0), wall_prefix + "right")   # 右边 x=510
+		# 右外场 凹字形隔离
+		# 外围4面(矩形外框)
+		_create_penalty_wall(Vector2(249.0, 0.0), Vector2(2.0, 650.0), wall_prefix + "left")    # 左边 x=249
+		_create_penalty_wall(Vector2(511.0, 0.0), Vector2(2.0, 650.0), wall_prefix + "right")   # 右边 x=511
 		_create_penalty_wall(Vector2(380.0, -326.0), Vector2(260.0, 2.0), wall_prefix + "top")    # 上边
 		_create_penalty_wall(Vector2(380.0, 325.0), Vector2(260.0, 2.0), wall_prefix + "bot")     # 下边
+		# 缺口密封墙(封堵上下臂之间的内场缺口 x=[250,380] y=[-260,260])
+		_create_penalty_wall(Vector2(381.0, 0.0), Vector2(2.0, 520.0), wall_prefix + "gap_inner")  # 主体内侧 x=381, y=[-260,260]
+		_create_penalty_wall(Vector2(315.0, -261.0), Vector2(130.0, 2.0), wall_prefix + "gap_top")  # 缺口上边 y=-261, x=[250,380]
+		_create_penalty_wall(Vector2(315.0, 261.0), Vector2(130.0, 2.0), wall_prefix + "gap_bot")   # 缺口下边 y=261, x=[250,380]
+		wall_count = 7
 	else:
-		# 左外场完整隔离
-		_create_penalty_wall(Vector2(-511.0, 0.0), Vector2(2.0, 650.0), wall_prefix + "left")   # 左边 x=-510
-		_create_penalty_wall(Vector2(-249.0, 0.0), Vector2(2.0, 650.0), wall_prefix + "right")  # 右边 x=-250
+		# 左外场 凹字形隔离
+		# 外围4面(矩形外框)
+		_create_penalty_wall(Vector2(-511.0, 0.0), Vector2(2.0, 650.0), wall_prefix + "left")   # 左边 x=-511
+		_create_penalty_wall(Vector2(-249.0, 0.0), Vector2(2.0, 650.0), wall_prefix + "right")  # 右边 x=-249
 		_create_penalty_wall(Vector2(-380.0, -326.0), Vector2(260.0, 2.0), wall_prefix + "top")   # 上边
 		_create_penalty_wall(Vector2(-380.0, 325.0), Vector2(260.0, 2.0), wall_prefix + "bot")    # 下边
+		# 缺口密封墙(封堵上下臂之间的内场缺口 x=[-380,-250] y=[-260,260])
+		_create_penalty_wall(Vector2(-381.0, 0.0), Vector2(2.0, 520.0), wall_prefix + "gap_inner")  # 主体内侧 x=-381, y=[-260,260]
+		_create_penalty_wall(Vector2(-315.0, -261.0), Vector2(130.0, 2.0), wall_prefix + "gap_top")  # 缺口上边 y=-261, x=[-380,-250]
+		_create_penalty_wall(Vector2(-315.0, 261.0), Vector2(130.0, 2.0), wall_prefix + "gap_bot")   # 缺口下边 y=261, x=[-380,-250]
+		wall_count = 7
+
+	print("[Match] 队%s 外场隔离墙已建(%d面)" % [team, wall_count])
 
 
 func _remove_penalty_enclosure(team: String) -> void:
@@ -586,12 +604,48 @@ func _remove_penalty_enclosure(team: String) -> void:
 			to_remove.append(child)
 	for child in to_remove:
 		child.queue_free()
+	if to_remove.size() > 0:
+		print("[Match] 队%s 旧隔离墙已清除(%d面)" % [team, to_remove.size()])
+
+
+func _ensure_all_penalty_enclosures() -> void:
+	"""确保所有有被淘汰球员的队伍都有隔离墙（兜底，防止遗漏）"""
+	for team_name: String in ["a", "b"]:
+		var has_defeated: bool = false
+		var players: Array = team_a_players if team_name == "a" else team_b_players
+		for p: CharacterBody2D in players:
+			if p and is_instance_valid(p) and p.is_defeated:
+				has_defeated = true
+				break
+		if has_defeated:
+			# 检查是否已有隔离墙
+			var wall_prefix: String = "enclosure_%s_" % team_name
+			var has_walls: bool = false
+			if penalty_walls and is_instance_valid(penalty_walls):
+				for child in penalty_walls.get_children():
+					if child.name.begins_with(wall_prefix):
+						has_walls = true
+						break
+			if not has_walls:
+				print("[Match] ⚠️ 队%s 有被淘汰球员但缺少隔离墙，补建!" % team_name)
+				_build_penalty_enclosure(team_name)
+				# 补设置惩罚状态
+				for p: CharacterBody2D in players:
+					if p and is_instance_valid(p) and p.is_defeated:
+						if not p.is_penalized:
+							p.set_penalized(true)
+							print("[Match] ⚠️ 补设置 %s 惩罚状态" % (p.char_data.get("name", "?") if p.char_data else "?"))
 
 
 func _on_player_transition_completed(player: CharacterBody2D) -> void:
-	"""球员传送完成,设置惩罚状态"""
+	"""球员传送完成：设置惩罚状态+建墙（违规传送和击败传送都走这里）"""
 	if player and player.has_method("set_penalized"):
-		player.set_penalized(true)
+		if not player.is_penalized:
+			player.set_penalized(true)
+			_build_penalty_enclosure(player.team)
+			_ensure_all_penalty_enclosures()
+	var pname: String = player.char_data.get("name", "?") if player and player.char_data else "?"
+	print("[Match] %s 传送完成" % pname)
 
 
 # ===== 瞄准可视化 =====

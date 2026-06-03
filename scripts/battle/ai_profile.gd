@@ -103,21 +103,21 @@ static func get_role_preset(role_name: String) -> AIProfile:
 			p.prefer_distance_min = 100.0
 			p.prefer_distance_max = 250.0
 			p.random_factor = 12.0      # 较冲动
-			p.pass_angle_error = 8.0    # 传球不太准
-			p.shoot_angle_error = 3.0   # 投球较准
-			p.field_of_view = 160.0     # 窄视野（专注前方）
-			p.vision_range = 300.0      # 看不远
-			p.awareness_accuracy = 0.75 # 感知粗糙
-			p.memory_duration = 1.0     # 记忆短
-			p.awareness_update_interval = 0.35
+			p.pass_angle_error = 5.0    # 传球还行
+			p.shoot_angle_error = 2.0   # 投球很准
+			p.field_of_view = 180.0     # 标准视野
+			p.vision_range = 400.0      # 看得远
+			p.awareness_accuracy = 0.85 # 感知较准
+			p.memory_duration = 1.5     # 记忆中等
+			p.awareness_update_interval = 0.3
 			p.facing_mode_chase = "ball"
 			p.facing_mode_dribble = "goal"
-			p.facing_mode_support = "move"  # 跑位时看移动方向
+			p.facing_mode_support = "move"
 			p.facing_mode_defend = "enemy"
 
 		"defender":
 			p.weight_pass = 30.0        # 爱传球（安全）
-			p.weight_shoot = -15.0      # 不爱投球
+			p.weight_shoot = -10.0      # 不爱投球（但不会拒绝）
 			p.weight_dribble = -25.0    # 不爱带球
 			p.hold_duration_min = 0.5   # 犹豫久
 			p.hold_duration_max = 1.2
@@ -135,7 +135,7 @@ static func get_role_preset(role_name: String) -> AIProfile:
 			p.prefer_distance_max = 300.0
 			p.random_factor = 4.0       # 稳定少失误
 			p.pass_angle_error = 2.0    # 传球准
-			p.shoot_angle_error = 10.0  # 投球差
+			p.shoot_angle_error = 6.0   # 投球偏差但不是离谱
 			p.field_of_view = 200.0     # 宽视野（警惕四周）
 			p.vision_range = 400.0      # 看得远
 			p.awareness_accuracy = 0.92 # 感知精准
@@ -148,7 +148,7 @@ static func get_role_preset(role_name: String) -> AIProfile:
 
 		"supporter":
 			p.weight_pass = 40.0        # 最爱传球
-			p.weight_shoot = -5.0       # 不太投球
+			p.weight_shoot = 0.0        # 中性投球
 			p.weight_dribble = 5.0      # 略微带球
 			p.hold_duration_min = 0.25  # 中等节奏
 			p.hold_duration_max = 0.6
@@ -166,9 +166,9 @@ static func get_role_preset(role_name: String) -> AIProfile:
 			p.prefer_distance_max = 300.0
 			p.random_factor = 8.0       # 中等随机
 			p.pass_angle_error = 3.0    # 传球还行
-			p.shoot_angle_error = 7.0   # 投球一般
+			p.shoot_angle_error = 5.0   # 投球中等偏差
 			p.field_of_view = 180.0     # 标准视野
-			p.vision_range = 360.0      # 看得较远
+			p.vision_range = 380.0      # 看得较远
 			p.awareness_accuracy = 0.88
 			p.memory_duration = 2.0
 			p.awareness_update_interval = 0.22

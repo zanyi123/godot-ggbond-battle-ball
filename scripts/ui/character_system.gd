@@ -21,6 +21,7 @@ const STAT_COLORS: Dictionary = {
 	"speed": Color(0.2, 0.5, 0.95),     # 蓝
 	"attack": Color(0.65, 0.65, 0.65),     # 黑（深灰，深色背景可见）
 	"resilience": Color(0.55, 0.55, 0.55), # 灰
+	"defense_factor": Color(0.6, 0.8, 0.3), # 绿
 }
 
 const STAT_LABELS: Dictionary = {
@@ -29,6 +30,7 @@ const STAT_LABELS: Dictionary = {
 	"speed": "速度",
 	"attack": "攻击",
 	"resilience": "韧性",
+	"defense_factor": "防御因子",
 }
 
 # 属性最大值（用于条形图比例）
@@ -150,9 +152,9 @@ func _build_ui() -> void:
 	add_child(desc_label)
 
 	# 属性条（5个）
-	var stat_keys: Array[String] = ["stamina", "defense", "speed", "attack", "resilience"]
+	var stat_keys: Array[String] = ["stamina", "defense", "speed", "attack", "resilience", "defense_factor"]
 	var stat_y_start: float = 175.0
-	var stat_spacing: float = 52.0
+	var stat_spacing: float = 44.0
 
 	for idx in range(stat_keys.size()):
 		var key: String = stat_keys[idx]
@@ -197,20 +199,20 @@ func _build_ui() -> void:
 
 	# 分隔线
 	var sep := ColorRect.new()
-	sep.position = Vector2(370, 450)
+	sep.position = Vector2(370, 445)
 	sep.size = Vector2(480, 1)
 	sep.color = Color(0.4, 0.4, 0.45)
 	add_child(sep)
 
 	# 天赋
 	talent_title = Label.new()
-	talent_title.position = Vector2(370, 465)
+	talent_title.position = Vector2(370, 460)
 	talent_title.add_theme_font_size_override("font_size", 17)
 	talent_title.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
 	add_child(talent_title)
 
 	talent_desc = Label.new()
-	talent_desc.position = Vector2(370, 492)
+	talent_desc.position = Vector2(370, 487)
 	talent_desc.add_theme_font_size_override("font_size", 14)
 	talent_desc.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
 	talent_desc.size = Vector2(480, 20)
@@ -301,15 +303,20 @@ func _select_character(index: int) -> void:
 	desc_label.text = data.get("description", "")
 
 	# 属性条
-	var stat_keys: Array[String] = ["stamina", "defense", "speed", "attack", "resilience"]
+	var stat_keys: Array[String] = ["stamina", "defense", "speed", "attack", "resilience", "defense_factor"]
 	for key in stat_keys:
 		var val: float = float(data.get(key, 0))
 		var info: Dictionary = stat_bars[key]
 		var fill: ColorRect = info["fill"]
 		var label: Label = info["val_label"]
-		var ratio: float = clampf(val / STAT_MAX, 0.0, 1.0)
+		# 防御因子范围0.1~0.2,按0.25算比例
+		var max_val: float = 0.25 if key == "defense_factor" else STAT_MAX
+		var ratio: float = clampf(val / max_val, 0.0, 1.0)
 		fill.size = Vector2(350.0 * ratio, 18)
-		label.text = str(int(val))
+		if key == "defense_factor":
+			label.text = "%.2f" % val
+		else:
+			label.text = str(int(val))
 
 	# 天赋
 	talent_title.text = "天赋: %s" % data.get("talent_name", "")

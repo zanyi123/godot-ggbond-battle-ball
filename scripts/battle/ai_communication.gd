@@ -249,6 +249,38 @@ func is_dont_pass_active(target: CharacterBody2D) -> bool:
 	return false
 
 
+func has_pass_to_me(team: String) -> bool:
+	"""检查队伍中是否有活跃的'传球给我'消息"""
+	if not ai_manager:
+		return false
+	for ap in ai_manager.ai_players:
+		if ap.team != team:
+			continue
+		if ap.has("last_msg_type") and ap.has("last_msg_time"):
+			if ap.last_msg_type == MsgType.PASS_TO_ME:
+				if elapsed_time - ap.last_msg_time < 3.0:  # 3秒内有效
+					return true
+	return false
+
+
+func get_pass_to_me_sender(team: String) -> CharacterBody2D:
+	"""获取最近发'传球给我'的球员"""
+	if not ai_manager:
+		return null
+	var best_sender: CharacterBody2D = null
+	var best_time: float = -1.0
+	for ap in ai_manager.ai_players:
+		if ap.team != team:
+			continue
+		if ap.has("last_msg_type") and ap.has("last_msg_time"):
+			if ap.last_msg_type == MsgType.PASS_TO_ME:
+				if elapsed_time - ap.last_msg_time < 3.0:
+					if ap.last_msg_time > best_time:
+						best_time = ap.last_msg_time
+						best_sender = ap.player
+	return best_sender
+
+
 func has_defend_alert(team: String) -> bool:
 	"""检查队伍中是否有活跃的防守警报"""
 	if not ai_manager:

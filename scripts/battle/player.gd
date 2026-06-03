@@ -20,6 +20,7 @@ var speed: float = 200.0
 const SPEED_SCALE: float = 3.25
 var attack_power: float = 0.0
 var resilience: float = 50.0
+var defense_factor: float = 0.15  # 防御因子(0.1~0.2)
 var spirit_energy: float = 0.0
 var max_spirit_energy: float = 100.0
 
@@ -32,6 +33,9 @@ var is_charging_throw: bool = false   # 预发球状态
 var charge_start_pos: Vector2 = Vector2.ZERO
 var assigned_role: int = 0  # GameManager.PlayerRole
 var is_penalized: bool = false  # 是否被惩罚(在外场隔离中)
+
+# 击退状态
+var _knockback_timer: float = 0.0  # 击退持续时间
 
 # 冲刺状态
 var is_sprinting: bool = false
@@ -89,6 +93,7 @@ func initialize(data_id: String, team_name: String, controlled: bool) -> void:
 	speed = raw_speed * SPEED_SCALE
 	attack_power = char_data["attack"] if char_data.has("attack") else 50.0
 	resilience = char_data["resilience"] if char_data.has("resilience") else 50.0
+	defense_factor = char_data["defense_factor"] if char_data.has("defense_factor") else 0.15
 	talent_name = char_data["talent_name"] if char_data.has("talent_name") else ""
 	talent_desc = char_data["talent_desc"] if char_data.has("talent_desc") else ""
 
@@ -180,6 +185,15 @@ func _physics_process(delta: float) -> void:
 		if sprint_cooldown < 0.0:
 			sprint_cooldown = 0.0
 
+	# 击退中：只执行移动，不处理输入
+	if _knockback_timer > 0.0:
+		_knockback_timer -= delta
+		if _knockback_timer <= 0.0:
+			_knockback_timer = 0.0
+			velocity = Vector2.ZERO
+		move_and_slide()
+		return
+
 	if not is_player_controlled:
 		return  # AI控制由AI管理器处理
 
@@ -208,49 +222,154 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 
-func take_damage(amount: float, attacker: CharacterBody2D = null) -> float:
-	"""受到伤害,返回实际扣除的体力值"""
+func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
+	"""受到伤害,返回 {damage: int, effect: String}
+	effect: "none" / "knockback1" / "knockback2" / "ball_fly" / "knockback_and_fly"
+
+	非待接球: 新体力 = 当前体力 + 防御抗力 - 攻击（无韧性）
+	待接球:   新体力 = 当前体力 + 防御抗力 - 攻击×(1-衰减率)（韧性生效+效果判定）
+	"""
 	if is_defeated:
-		return 0.0
+		return {"damage": 0, "effect": "none"}
 
-	var actual_damage := amount
+	var defense_resist: float = defense * defense_factor
+	var actual_damage: int = 0
+	var decay_rate: float = 0.0
+	var effect: String = "none"
 
-	# 韧性判定(待接球状态)
 	if is_ready_to_catch:
-		var roll := randf() * 100.0
-		var reduction_chance := resilience  # 韧性越高减伤概率越高
-		if roll < reduction_chance:
-			actual_damage *= (1.0 - resilience / 200.0)  # 减伤比例
-			print("[Player] %s 韧性减伤! %.1f -> %.1f" % [char_data["name"] if char_data.has("name") else "", amount, actual_damage])
-		else:
-			# 低韧性效果:被击退
-			_apply_knockback(attacker)
-	else:
-		# 非待接球状态:球反弹回攻击者
-		pass
+		# === 待接球: 韧性系统生效 ===
+		# 1. 韧性伤害衰减百分比
+		decay_rate = _get_resilience_decay_rate(resilience)
+		var reduced_attack: float = amount * (1.0 - decay_rate)
+		actual_damage = int(max(0, reduced_attack - defense_resist))
 
-	stamina = max(0.0, stamina - actual_damage)
-	stamina_bar.value = stamina
+		# 2. 扣血（取整）
+		stamina = int(max(0, stamina + defense_resist - reduced_attack))
+
+		# 3. 韧性效果判定（与衰减同时发生，三选一）
+		effect = _roll_resilience_effect(resilience)
+		if effect == "knockback1":
+			_apply_knockback(attacker, 100.0)
+		elif effect == "knockback2":
+			_apply_knockback(attacker, 200.0)
+		# ball_fly 和 knockback_and_fly 由 ball.gd 处理
+	else:
+		# === 非待接球: 新体力 = 当前体力 + 防御抗力 - 攻击 ===
+		actual_damage = int(max(0, amount - defense_resist))
+		stamina = int(max(0, stamina + defense_resist - amount))
+
+	# 更新血条
+	if stamina_bar:
+		stamina_bar.value = stamina
 
 	# 检查是否被击败
-	if stamina <= 0.0 and not is_defeated:
+	if stamina <= 0 and not is_defeated:
 		_on_defeated()
 
-	return actual_damage
+	var pname: String = char_data["name"] if char_data.has("name") else "?"
+	if decay_rate > 0.0:
+		print("[Player] %s 待接球受伤 %d(衰减%.0f%% 防御抗力%.1f) 效果=%s 剩余体力%d" % [pname, actual_damage, decay_rate * 100.0, defense_resist, effect, stamina])
+	else:
+		print("[Player] %s 非接球受伤 %d(防御抗力%.1f) 剩余体力%d" % [pname, actual_damage, defense_resist, stamina])
+
+	return {"damage": actual_damage, "effect": effect}
 
 
-func _apply_knockback(attacker: CharacterBody2D) -> void:
+func _get_resilience_decay_rate(rd: float) -> float:
+	"""韧性伤害衰减百分比（查表）"""
+	if rd >= 90.0:
+		return 0.5 * rd / 100.0
+	elif rd >= 80.0:
+		return 0.4 * rd / 100.0
+	elif rd >= 60.0:
+		return 0.3 * rd / 100.0
+	elif rd >= 40.0:
+		return 0.2 * rd / 100.0
+	elif rd >= 30.0:
+		return 0.1 * rd / 100.0
+	else:
+		return 0.0
+
+
+func _roll_resilience_effect(rd: float) -> String:
+	"""韧性效果判定（三选一 + 击退分段）"""
+	# 查效果概率表
+	var p_knockback_and_fly: float
+	var p_ball_fly: float
+	var p_knockback: float
+
+	if rd < 30.0:
+		p_knockback_and_fly = 0.3
+		p_ball_fly = 0.45
+		p_knockback = 0.25
+	elif rd < 70.0:
+		p_knockback_and_fly = 0.2
+		p_ball_fly = 0.4
+		p_knockback = 0.4
+	else:
+		p_knockback_and_fly = 0.1
+		p_ball_fly = 0.4
+		p_knockback = 0.5
+
+	var roll: float = randf()
+
+	if roll < p_knockback_and_fly:
+		return "knockback_and_fly"
+	elif roll < p_knockback_and_fly + p_ball_fly:
+		return "ball_fly"
+	else:
+		# 击退：再分一段/二段
+		var p_phase2: float = _get_phase2_knockback_chance()
+		if randf() < p_phase2:
+			return "knockback2"
+		else:
+			return "knockback1"
+
+
+func _get_phase2_knockback_chance() -> float:
+	"""二段击退概率 = 体力因子 × 剩余元灵能量因子"""
+	# 体力因子
+	var stamina_ratio: float = (stamina / max_stamina) * 100.0
+	var stamina_factor: float
+	if stamina_ratio < 30.0:
+		stamina_factor = 0.6
+	elif stamina_ratio < 60.0:
+		stamina_factor = 0.3
+	else:
+		stamina_factor = 0.1
+
+	# 元灵能量因子
+	var energy_ratio: float = (spirit_energy / max_spirit_energy) * 100.0 if max_spirit_energy > 0.0 else 0.0
+	var energy_factor: float
+	if energy_ratio < 30.0:
+		energy_factor = 0.5
+	elif energy_ratio < 60.0:
+		energy_factor = 0.3
+	else:
+		energy_factor = 0.2
+
+	return stamina_factor * energy_factor
+
+
+func _apply_knockback(attacker: CharacterBody2D, distance: float = 100.0) -> void:
 	"""被击退"""
 	if attacker == null:
 		return
 	var knockback_dir := (global_position - attacker.global_position).normalized()
-	var knockback_force := 300.0 * (1.0 - resilience / 100.0)
-	velocity = knockback_dir * knockback_force
+	var knockback_speed: float = distance * 3.0  # 一段=300,二段=600
+	velocity = knockback_dir * knockback_speed
+	_knockback_timer = 0.25  # 击退持续0.25秒
+	print("[Player] %s 被击退%.0fpx 速度=%.0f" % [char_data.get("name", "?"), distance, knockback_speed])
 
 
 func _on_defeated() -> void:
 	"""被击败:全属性减半,对手得分,发出信号"""
 	is_defeated = true
+
+	# 移除与球的碰撞(layer 1)，球不再击中被击败球员
+	collision_layer = 0
+	collision_mask = 0
 
 	# 属性减半
 	attack_power *= 0.5
@@ -278,14 +397,17 @@ func _on_defeated() -> void:
 func set_penalized(penalized: bool) -> void:
 	"""设置惩罚状态(更新碰撞层)"""
 	is_penalized = penalized
+	var pname: String = char_data["name"] if char_data and char_data.has("name") else "?"
 	if penalized:
-		# 被惩罚时,与隔离墙层碰撞
-		collision_mask |= 1 << 4  # layer 5 = penalty_walls (1 << 4 = 16)
-		print("[Player] %s 被隔离,无法离开外场" % (char_data["name"] if char_data.has("name") else ""))
+		# 恢复球员间碰撞 + 与隔离墙碰撞
+		collision_layer = 1  # layer 1 (球员)
+		collision_mask = 1 | (1 << 4)  # layer 1(球员互碰) + layer 5(隔离墙)
+		print("[Player] %s (队%s) 被隔离 pos=%.0f,%.0f layer=%d mask=%d" % [pname, team, global_position.x, global_position.y, collision_layer, collision_mask])
 	else:
-		# 正常时,不与隔离墙层碰撞
-		collision_mask &= ~(1 << 4)  # 清除 bit 4
-		print("[Player] %s 解除隔离" % (char_data["name"] if char_data.has("name") else ""))
+		# 正常时,恢复标准碰撞
+		collision_layer = 1
+		collision_mask = 1  # layer 1 only
+		print("[Player] %s (队%s) 解除隔离" % [pname, team])
 
 
 func enter_catch_state() -> void:

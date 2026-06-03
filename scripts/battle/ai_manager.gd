@@ -30,17 +30,27 @@ const FIELD_X_MAX: float = 380.0
 const FIELD_Y_MIN: float = -260.0
 const FIELD_Y_MAX: float = 260.0
 
-# 外场边界(左外场 - 队B)
-const LEFT_OUTER_X_MIN: float = -650.0
+# 外场边界(左外场 - 队B) — 与 field_zone.gd LEFT_OUTER 对齐
+const LEFT_OUTER_X_MIN: float = -510.0
 const LEFT_OUTER_X_MAX: float = -250.0
 const LEFT_OUTER_Y_MIN: float = -325.0
 const LEFT_OUTER_Y_MAX: float = 325.0
 
-# 外场边界(右外场 - 队A)
+# 外场边界(右外场 - 队A) — 与 field_zone.gd RIGHT_OUTER 对齐
 const RIGHT_OUTER_X_MIN: float = 250.0
-const RIGHT_OUTER_X_MAX: float = 650.0
+const RIGHT_OUTER_X_MAX: float = 510.0
 const RIGHT_OUTER_Y_MIN: float = -325.0
 const RIGHT_OUTER_Y_MAX: float = 325.0
+
+# 凹字形缺口边界(上下臂之间的内场区域)
+const GAP_Y_MIN: float = -260.0
+const GAP_Y_MAX: float = 260.0
+# 右外场臂范围(缺口x区间)
+const RIGHT_ARM_X_MIN: float = 250.0
+const RIGHT_ARM_X_MAX: float = 380.0
+# 左外场臂范围(缺口x区间)
+const LEFT_ARM_X_MIN: float = -380.0
+const LEFT_ARM_X_MAX: float = -250.0
 
 # 球门位置
 const GOAL_A: Vector2 = Vector2(300.0, 0.0)
@@ -363,14 +373,25 @@ func _decide(ap: Dictionary) -> void:
 				p.enter_catch_state()
 			return
 	
-	# === 通信系统：防守警报 ===
+	# === 通信系统：响应玩家指令 ===
 	if battle_manager and battle_manager.comm_system:
+		# 防守警报：对手持球时全员准备接球
 		if battle_manager.comm_system.has_defend_alert(team):
 			if not ball_node.owner_player or ball_node.owner_player.team != team:
 				ap.state = State.READY_CATCH
 				ap.target_pos = p.global_position
 				if p.has_method("enter_catch_state"):
 					p.enter_catch_state()
+				return
+		
+		# 传球给我：持球的AI队友优先传球给发指令者
+		if battle_manager.comm_system.has_pass_to_me(team) and p.is_carrying_ball:
+			var pass_target: CharacterBody2D = battle_manager.comm_system.get_pass_to_me_sender(team)
+			if pass_target and is_instance_valid(pass_target):
+				ap.state = State.PASS
+				ap.target_pos = pass_target.global_position
+				ap.hold_timer = 0.0
+				print("[AI] %s 响应'传我'指令" % _pname(p))
 				return
 
 	# === 状态防抖：如果在当前位置附近已到达目标，不要重复切换 ===
@@ -417,8 +438,13 @@ func _decide(ap: Dictionary) -> void:
 				p.exit_catch_state()
 		return
 
-	# 球在队友手里：按角色分化跑位
-	_decide_teammate_has_ball(ap)
+	# 球有人拿着：区分队友还是对手
+	if ball_node.owner_player.team == team:
+		# 球在队友手里：按角色分化跑位
+		_decide_teammate_has_ball(ap)
+	else:
+		# 球在对手手里：防守站位+冲刺保护倾向
+		_decide_enemy_has_ball(ap)
 	if p.has_method("exit_catch_state"):
 		p.exit_catch_state()
 
@@ -477,6 +503,52 @@ func _decide_teammate_has_ball(ap: Dictionary) -> void:
 			# 主攻手：跑到前方等传球，准备进攻
 			ap.state = State.SUPPORT
 			ap.target_pos = _get_attack_wait_pos(ap)
+
+
+func _decide_enemy_has_ball(ap: Dictionary) -> void:
+	"""对手持球时：保持阵型站位，有冲刺保护/拦截倾向"""
+	var p: CharacterBody2D = ap.player
+	var team: String = ap.team
+	var profile: AIProfile = ap.profile
+	var my_pos: Vector2 = p.global_position
+	var ball_pos: Vector2 = ball_node.global_position
+	var enemy_carrier: CharacterBody2D = ball_node.owner_player
+	var dist_to_ball: float = my_pos.distance_to(ball_pos)
+
+	# === 角色分化拦截：近距离时冲刺逼抢 ===
+	# 主攻手/辅助手：如果离对手持球者近，有冲刺逼抢倾向
+	if profile.role != "defender":
+		if dist_to_ball < profile.aggro_range * 0.8:
+			# 检查是否是最接近对手持球者的己方球员
+			if _am_i_closest_to_pos(ap, team, enemy_carrier.global_position):
+				ap.state = State.CHASE_BALL
+				var chase_pos: Vector2
+				if profile.weakness_overextend:
+					chase_pos = enemy_carrier.global_position
+				else:
+					chase_pos = _clamp_to_half_field(enemy_carrier.global_position, team)
+				ap.target_pos = chase_pos
+				return
+
+	# === 防御手：如果对手逼近，上前保护 ===
+	if profile.role == "defender":
+		# 对手持球者在己方半场→上前保护
+		var enemy_in_my_half: bool = false
+		if team == "a" and enemy_carrier.global_position.x < 0:
+			enemy_in_my_half = true
+		elif team == "b" and enemy_carrier.global_position.x > 0:
+			enemy_in_my_half = true
+		if enemy_in_my_half and dist_to_ball < profile.aggro_range:
+			# 冲向对手持球者（保持一定距离，不贴身）
+			var dir_to_enemy: Vector2 = (enemy_carrier.global_position - my_pos).normalized()
+			var press_pos: Vector2 = enemy_carrier.global_position - dir_to_enemy * 60.0
+			ap.state = State.DEFEND
+			ap.target_pos = _clamp_to_half_field(press_pos, team)
+			return
+
+	# === 默认：回到阵型站位（保持原有场上位置） ===
+	ap.state = State.DEFEND
+	ap.target_pos = _get_formation_hold_pos(ap)
 
 
 func _get_protect_pos(ap: Dictionary) -> Vector2:
@@ -659,7 +731,8 @@ func _decide_carrying(ap: Dictionary) -> void:
 	# === 贴中线且看不到任何目标：朝敌方半场盲投 ===
 	if at_boundary and shoot_target == null and pass_target == null:
 		ap.state = State.ATTACK
-		ap.target_pos = my_pos + forward * 300.0 + Vector2(0, randf() * 100.0 - 50.0)
+		var blind_target: Vector2 = my_pos + forward * 300.0 + Vector2(0, randf() * 100.0 - 50.0)
+		ap.target_pos = _clamp_to_field(blind_target)
 		ap.hold_timer = 0.0
 		ap.hold_duration = randf_range(profile.hold_duration_min, profile.hold_duration_max)
 		print("[AI] %s 贴中线无目标，盲投" % _pname(p))
@@ -671,7 +744,8 @@ func _decide_carrying(ap: Dictionary) -> void:
 		if pass_dist < 80.0:
 			# 队友就在旁边，朝敌人方向盲投
 			ap.state = State.ATTACK
-			ap.target_pos = my_pos + forward * 300.0 + Vector2(0, randf() * 100.0 - 50.0)
+			var blind_target2: Vector2 = my_pos + forward * 300.0 + Vector2(0, randf() * 100.0 - 50.0)
+			ap.target_pos = _clamp_to_field(blind_target2)
 			ap.hold_timer = 0.0
 			print("[AI] %s 贴中线队友太近，盲投" % _pname(p))
 			return
@@ -756,7 +830,9 @@ func _decide_penalty_move(ap: Dictionary) -> void:
 			else:
 				var fwd: Vector2 = Vector2(1, 0) if team == "a" else Vector2(-1, 0)
 				ap.state = State.ATTACK
-				ap.target_pos = my_pos - fwd * 200.0
+				# 无目标时朝内场方向投（不是朝外场围墙）
+				var fallback: Vector2 = Vector2(-190.0, 0.0) if team == "a" else Vector2(190.0, 0.0)
+				ap.target_pos = fallback
 			return
 
 		# 观察期
@@ -781,7 +857,12 @@ func _decide_penalty_move(ap: Dictionary) -> void:
 			ap.target_pos = pass_target.global_position
 		else:
 			ap.state = State.ATTACK
-			ap.target_pos = shoot_target.global_position if shoot_target else Vector2.ZERO
+			if shoot_target:
+				ap.target_pos = shoot_target.global_position
+			else:
+				# 外场无目标：朝内场中心投
+				var fallback: Vector2 = Vector2(-190.0, 0.0) if team == "a" else Vector2(190.0, 0.0)
+				ap.target_pos = fallback
 		return
 
 	# === 无球 ===
@@ -789,7 +870,9 @@ func _decide_penalty_move(ap: Dictionary) -> void:
 	var ball_active: bool = ball_node.is_active
 	var dist_to_ball: float = my_pos.distance_to(ball_pos)
 
-	# 球飞向外场：根据角色判断行为
+	# === 球飞向外场：根据角色判断行为 ===
+	# 外场球员接球范围扩大（外场离内场远）
+	var outer_aggro: float = profile.aggro_range * 1.5  # 外场追球范围1.5倍
 	if ball_active:
 		var ball_dir: Vector2 = ball_node.ball_direction
 		if ball_dir == Vector2.ZERO:
@@ -804,18 +887,21 @@ func _decide_penalty_move(ap: Dictionary) -> void:
 					p.enter_catch_state()
 				return
 
-		# 主攻手/其他：看球是否经过外场附近，追球
-		for i in range(20):
+		# 所有角色：看球是否飞向外场方向，预测落点拦截
+		for i in range(30):  # 增加预测步数
 			var predicted_pos: Vector2 = ball_pos + ball_dir * (i * 30.0)
-			if predicted_pos.distance_to(my_pos) < 150.0:
+			if predicted_pos.distance_to(my_pos) < outer_aggro:
 				var intercept_pos: Vector2 = ball_pos + ball_dir * 60.0
 				ap.state = State.PENALTY_MOVE
 				ap.target_pos = _clamp_to_outer_field(intercept_pos, team)
 				return
+			# 球飞出场地范围就停止预测
+			if abs(predicted_pos.x) > 600.0 or abs(predicted_pos.y) > 400.0:
+				break
 
-	# 球落地没人拿且在外场附近
+	# 球落地没人拿且在外场附近（扩大追球范围）
 	if not ball_node.owner_player:
-		if dist_to_ball < profile.aggro_range:
+		if dist_to_ball < outer_aggro:
 			ap.state = State.GOTO_BALL
 			ap.target_pos = _clamp_to_outer_field(ball_pos, team)
 			return
@@ -824,23 +910,23 @@ func _decide_penalty_move(ap: Dictionary) -> void:
 	var outer_base: Vector2
 	match profile.role:
 		"defender":
-			# 防御手：外场中心偏后，观察内场
+			# 防御手：外场主体中心偏后，观察内场
 			if team == "a":
-				outer_base = Vector2(550.0, 0.0)
+				outer_base = Vector2(460.0, 0.0)
 			else:
-				outer_base = Vector2(-550.0, 0.0)
+				outer_base = Vector2(-460.0, 0.0)
 		"supporter":
-			# 辅助手：外场中心偏侧，保持宽度
+			# 辅助手：外场主体偏侧，保持宽度
 			if team == "a":
 				outer_base = Vector2(450.0, 100.0) if (ap.index % 2 == 0) else Vector2(450.0, -100.0)
 			else:
 				outer_base = Vector2(-450.0, 100.0) if (ap.index % 2 == 0) else Vector2(-450.0, -100.0)
 		_:
-			# 主攻手：外场靠近内场边界（准备回场）
+			# 主攻手：外场主体前侧(靠近主体内壁)
 			if team == "a":
-				outer_base = Vector2(350.0, 0.0)
+				outer_base = Vector2(400.0, 0.0)
 			else:
-				outer_base = Vector2(-350.0, 0.0)
+				outer_base = Vector2(-400.0, 0.0)
 
 	# 球吸引偏移
 	var ball_pull: Vector2 = Vector2.ZERO
@@ -857,6 +943,14 @@ func _decide_penalty_move(ap: Dictionary) -> void:
 
 	var smart_pos: Vector2 = outer_base + ball_pull
 	var random_offset: Vector2 = Vector2(randf_range(-30.0, 30.0), randf_range(-40.0, 40.0))
+
+	# 避让玩家控制球员（外场空间小，不要挡路）
+	if input_manager and input_manager.controlled_player:
+		var ctrl_p: CharacterBody2D = input_manager.controlled_player
+		if ctrl_p.team == ap.team and ctrl_p != p:
+			var to_ctrl: Vector2 = ctrl_p.global_position - smart_pos
+			if to_ctrl.length() < 80.0 and to_ctrl.length() > 0.0:
+				smart_pos -= to_ctrl.normalized() * (80.0 - to_ctrl.length()) * 0.8
 
 	ap.state = State.PENALTY_MOVE
 	ap.target_pos = _clamp_to_outer_field(smart_pos + random_offset, team)
@@ -947,22 +1041,32 @@ func _eval_shoot(ap: Dictionary, target: CharacterBody2D, dist_to_goal: float) -
 	var dist: float = p.global_position.distance_to(target.global_position)
 	var score: float = 0.0
 
+	# 距离评分（鼓励AI主动投球，远距离也有价值）
 	if dist < 150.0:
-		score += 40.0
+		score += 45.0  # 近距离高价值
 	elif dist < 250.0:
-		score += 25.0
+		score += 30.0
 	elif dist < 350.0:
-		score += 15.0  # 远距离也能打，只是分低
+		score += 20.0
 	else:
-		score += 5.0
+		score += 10.0  # 远距离也能打
 
+	# 目标状态评分
 	if not target.is_ready_to_catch:
-		score += 20.0  # 目标没防备，更好打
+		score += 25.0  # 目标没防备，更好打
 	else:
-		score -= 15.0  # 目标在待接球，有韧性减伤风险
+		score -= 10.0  # 目标在待接球，有韧性减伤风险
 
+	# 接近中线时投球更有价值（不能再带球了）
 	if dist_to_goal < 200.0:
 		score += 15.0
+
+	# 角色修正：主攻手投球加分
+	match ap.profile.role:
+		"attacker":
+			score += 10.0  # 主攻手更敢投
+		"defender":
+			score -= 5.0   # 防御手不太投
 
 	return score
 
@@ -988,6 +1092,12 @@ func _eval_dribble(ap: Dictionary, dist_to_goal: float, enemy_near: bool) -> flo
 
 func _move(ap: Dictionary, delta: float) -> void:
 	var p: CharacterBody2D = ap.player
+
+	# 击退中：不覆盖velocity，只执行move_and_slide
+	if p._knockback_timer > 0.0:
+		p.move_and_slide()
+		return
+
 	var profile: AIProfile = ap.profile
 	# 目标位置先限制到合法范围
 	var raw_target: Vector2 = ap.target_pos
@@ -1113,7 +1223,19 @@ func _move(ap: Dictionary, delta: float) -> void:
 					var random_offset: Vector2 = Vector2(randf_range(-80.0, 80.0), randf_range(-120.0, 120.0))
 					ap.target_pos = _clamp_to_outer_field(base_pos + random_offset, ap.team)
 			else:
-				p.velocity = (target - p.global_position).normalized() * profile.speed_move  # 外场与内场同速
+				var move_dir: Vector2 = (target - p.global_position).normalized()
+				# 外场AI避让玩家控制球员
+				if input_manager and input_manager.controlled_player:
+					var ctrl_p: CharacterBody2D = input_manager.controlled_player
+					if ctrl_p.team == ap.team and ctrl_p != p:
+						var to_ctrl: Vector2 = ctrl_p.global_position - p.global_position
+						var ctrl_dist: float = to_ctrl.length()
+						if ctrl_dist < 70.0 and ctrl_dist > 0.0:
+							# 玩家太近：添加避让力（反向推开）
+							var avoid_dir: Vector2 = -to_ctrl.normalized()
+							var avoid_strength: float = (70.0 - ctrl_dist) / 70.0  # 越近越强
+							move_dir = (move_dir + avoid_dir * avoid_strength * 2.0).normalized()
+				p.velocity = move_dir * profile.speed_move
 				p.move_and_slide()
 
 		State.READY_CATCH:
@@ -1159,11 +1281,19 @@ func _do_shoot(ap: Dictionary) -> void:
 		return
 
 	var target_pos: Vector2 = ap.target_pos
+	var my_pos: Vector2 = p.global_position
 	var shoot_dir: Vector2
+	var shoot_dist: float = 500.0  # 默认飞行距离
+
 	if target_pos != Vector2.ZERO:
-		shoot_dir = (target_pos - p.global_position).normalized()
+		var to_target: Vector2 = target_pos - my_pos
+		shoot_dir = to_target.normalized()
+		shoot_dist = clampf(to_target.length() + 80.0, 200.0, 600.0)  # 目标距离+余量，上限600
 	else:
-		shoot_dir = Vector2(1, 0) if p.team == "a" else Vector2(-1, 0)
+		# 无目标：朝对方半场中心方向投
+		var fallback_target: Vector2 = Vector2(-190.0, 0.0) if p.team == "a" else Vector2(190.0, 0.0)
+		shoot_dir = (fallback_target - my_pos).normalized()
+		shoot_dist = 400.0
 
 	# 投球方向偏差
 	var error: float = ap.profile.shoot_angle_error
@@ -1171,11 +1301,11 @@ func _do_shoot(ap: Dictionary) -> void:
 		shoot_dir = shoot_dir.rotated(deg_to_rad(randf_range(-error, error)))
 
 	p.set_carrying_ball(false)
-	ball_node.launch(p.global_position, shoot_dir, p.attack_power, 600.0, p, [] as Array[Dictionary])
+	ball_node.launch(p.global_position, shoot_dir, p.attack_power, shoot_dist, p, [] as Array[Dictionary])
 
 	ap.state = State.DEFEND
 	ap.target_pos = ap.home_pos
-	print("[AI] %s 投球!" % _pname(p))
+	print("[AI] %s 投球! 目标距离=%.0f 飞行距离=%.0f" % [_pname(p), my_pos.distance_to(target_pos), shoot_dist])
 
 
 func _try_pickup_ball(ap: Dictionary) -> void:
@@ -1191,6 +1321,49 @@ func _try_pickup_ball(ap: Dictionary) -> void:
 	ap.total_carry_time = 0.0
 	ap.stuck_timer = 0.0
 	ap.last_pos = ap.player.global_position
+
+
+func _get_formation_hold_pos(ap: Dictionary) -> Vector2:
+	"""获取阵型站位（防守时保持站位用）"""
+	var team: String = ap.team
+	var profile: AIProfile = ap.profile
+
+	# 获取阵型偏移
+	var formation: Dictionary = AIProfile.get_formation_positions(profile.team_strategy_name)
+	var role_name: String = profile.role
+	var formation_pos: Vector2 = formation.get(role_name, Vector2.ZERO)
+	if team == "b":
+		formation_pos.x = -formation_pos.x
+
+	# 己方半场中心 + 阵型偏移
+	var half_center: Vector2 = Vector2(-190.0, 0.0) if team == "a" else Vector2(190.0, 0.0)
+	var base_pos: Vector2 = half_center + formation_pos
+
+	# 球位置微弱吸引（防守时只微微偏向球的方向）
+	var ball_pos: Vector2 = ball_node.global_position
+	var ball_in_my_half: bool = (team == "a" and ball_pos.x < 0) or (team == "b" and ball_pos.x > 0)
+	if ball_in_my_half:
+		var ball_pull: Vector2 = (ball_pos - base_pos).normalized() * 20.0 * profile.ball_attract_weight
+		base_pos += ball_pull
+
+	return _clamp_to_half_field(base_pos, team)
+
+
+func _am_i_closest_to_pos(ap: Dictionary, team: String, target_pos: Vector2) -> bool:
+	"""判断自己是否是己方离目标位置最近的AI球员"""
+	var my_pos: Vector2 = ap.player.global_position
+	var my_dist: float = my_pos.distance_to(target_pos)
+	for other in ai_players:
+		if other.team != team:
+			continue
+		if other.player == ap.player:
+			continue
+		if not _is_valid(other):
+			continue
+		var other_dist: float = other.player.global_position.distance_to(target_pos)
+		if other_dist < my_dist:
+			return false
+	return true
 
 
 # ==============================
@@ -1305,7 +1478,7 @@ func _am_i_closest_to_ball(ap: Dictionary, team: String) -> bool:
 
 
 func _find_nearest_enemy(ap: Dictionary) -> CharacterBody2D:
-	"""基于感知系统找最近敌人(含 predictable_target 弱点处理)"""
+	"""基于感知系统找最近敌人，视野外全局兜底"""
 	# 弱点:predictable_target
 	if ap.profile.weakness == "predictable_target":
 		var last: CharacterBody2D = ap.last_shoot_target
@@ -1313,6 +1486,7 @@ func _find_nearest_enemy(ap: Dictionary) -> CharacterBody2D:
 			if randf() < 0.7:
 				return last
 
+	# 优先：视野感知内的敌人
 	var known_enemies: Array[Dictionary] = _get_known_enemies(ap)
 	var nearest: CharacterBody2D = null
 	var nearest_dist: float = INF
@@ -1324,10 +1498,27 @@ func _find_nearest_enemy(ap: Dictionary) -> CharacterBody2D:
 			nearest_dist = dist
 			nearest = e["ref"]
 
-	# 更新记录
 	if nearest:
 		ap.last_shoot_target = nearest
+		return nearest
 
+	# 兜底：视野内没有敌人，从全局找最近的活跃敌人
+	var enemy_team: String = "b" if ap.team == "a" else "a"
+	for other_ap in ai_players:
+		if other_ap.team != enemy_team:
+			continue
+		var other: CharacterBody2D = other_ap.player
+		if not other or not is_instance_valid(other):
+			continue
+		if other.is_defeated:
+			continue
+		var dist: float = my_pos.distance_to(other.global_position)
+		if dist < nearest_dist:
+			nearest_dist = dist
+			nearest = other
+
+	if nearest:
+		ap.last_shoot_target = nearest
 	return nearest
 
 
@@ -1391,16 +1582,43 @@ func _force_redecide_if_at_boundary(ap: Dictionary) -> void:
 
 
 func _clamp_to_outer_field(pos: Vector2, team: String) -> Vector2:
+	"""将目标位置限制在凹字形外场内，避免落入臂间缺口(内场)"""
+	var result := _clamp_to_outer_field_impl(pos, team)
+	return result
+
+
+func _clamp_to_outer_field_impl(pos: Vector2, team: String) -> Vector2:
 	if team == "a":
-		return Vector2(
-			clampf(pos.x, RIGHT_OUTER_X_MIN, RIGHT_OUTER_X_MAX),
-			clampf(pos.y, RIGHT_OUTER_Y_MIN, RIGHT_OUTER_Y_MAX)
-		)
+		var cx: float = clampf(pos.x, RIGHT_OUTER_X_MIN, RIGHT_OUTER_X_MAX)
+		var cy: float = clampf(pos.y, RIGHT_OUTER_Y_MIN, RIGHT_OUTER_Y_MAX)
+		# 检查是否落入缺口(臂x区间 × 内场y区间)
+		if cx >= RIGHT_ARM_X_MIN and cx <= RIGHT_ARM_X_MAX and cy > GAP_Y_MIN and cy < GAP_Y_MAX:
+			# 推到缺口最近的边界：主体侧(x=380+) 或 臂y边界
+			var dist_to_body: float = RIGHT_ARM_X_MAX - cx  # 到主体的距离
+			var dist_to_top: float = cy - GAP_Y_MIN  # 到上臂的距离
+			var dist_to_bot: float = GAP_Y_MAX - cy  # 到下臂的距离
+			if dist_to_body <= dist_to_top and dist_to_body <= dist_to_bot:
+				cx = RIGHT_ARM_X_MAX + 1.0  # 推入主体
+			elif dist_to_top <= dist_to_bot:
+				cy = GAP_Y_MIN  # 推入上臂
+			else:
+				cy = GAP_Y_MAX  # 推入下臂
+		return Vector2(cx, cy)
 	else:
-		return Vector2(
-			clampf(pos.x, LEFT_OUTER_X_MIN, LEFT_OUTER_X_MAX),
-			clampf(pos.y, LEFT_OUTER_Y_MIN, LEFT_OUTER_Y_MAX)
-		)
+		var cx: float = clampf(pos.x, LEFT_OUTER_X_MIN, LEFT_OUTER_X_MAX)
+		var cy: float = clampf(pos.y, LEFT_OUTER_Y_MIN, LEFT_OUTER_Y_MAX)
+		# 检查是否落入缺口
+		if cx >= LEFT_ARM_X_MIN and cx <= LEFT_ARM_X_MAX and cy > GAP_Y_MIN and cy < GAP_Y_MAX:
+			var dist_to_body: float = cx - LEFT_ARM_X_MIN  # 到主体的距离
+			var dist_to_top: float = cy - GAP_Y_MIN
+			var dist_to_bot: float = GAP_Y_MAX - cy
+			if dist_to_body <= dist_to_top and dist_to_body <= dist_to_bot:
+				cx = LEFT_ARM_X_MIN - 1.0  # 推入主体
+			elif dist_to_top <= dist_to_bot:
+				cy = GAP_Y_MIN  # 推入上臂
+			else:
+				cy = GAP_Y_MAX  # 推入下臂
+		return Vector2(cx, cy)
 
 
 func _clamp_player_position(p: CharacterBody2D) -> void:
@@ -1411,16 +1629,8 @@ func _clamp_player_position(p: CharacterBody2D) -> void:
 	var is_penalized: bool = penalized_val != null and penalized_val
 
 	if is_penalized:
-		if p.team == "a":
-			clamped = Vector2(
-				clampf(pos.x, RIGHT_OUTER_X_MIN, RIGHT_OUTER_X_MAX),
-				clampf(pos.y, RIGHT_OUTER_Y_MIN, RIGHT_OUTER_Y_MAX)
-			)
-		else:
-			clamped = Vector2(
-				clampf(pos.x, LEFT_OUTER_X_MIN, LEFT_OUTER_X_MAX),
-				clampf(pos.y, LEFT_OUTER_Y_MIN, LEFT_OUTER_Y_MAX)
-			)
+		# 使用凹字形感知的外场钳制
+		clamped = _clamp_to_outer_field(pos, p.team)
 	else:
 		clamped = Vector2(
 			clampf(pos.x, FIELD_X_MIN, FIELD_X_MAX),
