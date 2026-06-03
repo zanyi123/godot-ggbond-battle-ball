@@ -1098,6 +1098,12 @@ func _move(ap: Dictionary, delta: float) -> void:
 		p.move_and_slide()
 		return
 
+	# 僵直中：无法移动
+	if p._stagger_timer > 0.0:
+		p.velocity = Vector2.ZERO
+		p.move_and_slide()
+		return
+
 	var profile: AIProfile = ap.profile
 	# 目标位置先限制到合法范围
 	var raw_target: Vector2 = ap.target_pos

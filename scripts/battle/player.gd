@@ -36,6 +36,7 @@ var is_penalized: bool = false  # 是否被惩罚(在外场隔离中)
 
 # 击退状态
 var _knockback_timer: float = 0.0  # 击退持续时间
+var _stagger_timer: float = 0.0  # 僵直持续时间（被击中后无法移动）
 
 # 冲刺状态
 var is_sprinting: bool = false
@@ -127,29 +128,7 @@ func _setup_visuals() -> void:
 	avatar_label.size = Vector2(56, 56)
 	add_child(avatar_label)
 
-	# 体力条
-	stamina_bar = ProgressBar.new()
-	stamina_bar.position = Vector2(-28, -44)
-	stamina_bar.size = Vector2(56, 8)
-	stamina_bar.max_value = max_stamina
-	stamina_bar.value = stamina
-	stamina_bar.show_percentage = false
-	var style_green := StyleBoxFlat.new()
-	style_green.bg_color = Color.GREEN
-	stamina_bar.add_theme_stylebox_override("fill", style_green)
-	add_child(stamina_bar)
-
-	# 元灵能量条
-	energy_bar = ProgressBar.new()
-	energy_bar.position = Vector2(-28, -36)
-	energy_bar.size = Vector2(56, 5)
-	energy_bar.max_value = max_spirit_energy
-	energy_bar.value = spirit_energy
-	energy_bar.show_percentage = false
-	var style_blue := StyleBoxFlat.new()
-	style_blue.bg_color = Color.CYAN
-	energy_bar.add_theme_stylebox_override("fill", style_blue)
-	add_child(energy_bar)
+	# 体力条和能量条不再显示在球员头上，只在下方球员栏显示
 
 	# 状态指示器
 	state_indicator = ColorRect.new()
@@ -191,6 +170,15 @@ func _physics_process(delta: float) -> void:
 		if _knockback_timer <= 0.0:
 			_knockback_timer = 0.0
 			velocity = Vector2.ZERO
+		move_and_slide()
+		return
+
+	# 僵直中：无法移动（站着不动）
+	if _stagger_timer > 0.0:
+		_stagger_timer -= delta
+		if _stagger_timer <= 0.0:
+			_stagger_timer = 0.0
+		velocity = Vector2.ZERO
 		move_and_slide()
 		return
 
@@ -247,21 +235,33 @@ func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
 		# 2. 扣血（取整）
 		stamina = int(max(0, stamina + defense_resist - reduced_attack))
 
-		# 3. 韧性效果判定（与衰减同时发生，三选一）
+		# 3. 僵直时间（与韧性反比，四段）
+		var base_stagger: float = _get_stagger_by_resilience(resilience)
+
+		# 4. 韧性效果判定（与衰减同时发生，三选一）
 		effect = _roll_resilience_effect(resilience)
 		if effect == "knockback1":
 			_apply_knockback(attacker, 100.0)
+			_stagger_timer = max(base_stagger, _knockback_timer)
 		elif effect == "knockback2":
 			_apply_knockback(attacker, 200.0)
-		# ball_fly 和 knockback_and_fly 由 ball.gd 处理
+			_stagger_timer = max(base_stagger, _knockback_timer)
+		elif effect == "ball_fly" or effect == "knockback_and_fly":
+			if effect == "knockback_and_fly":
+				_apply_knockback(attacker, 100.0)
+				_stagger_timer = max(base_stagger, _knockback_timer)
+			else:
+				_stagger_timer = max(base_stagger, 0.5)  # 弹飞球飞行约0.5s
+		else:
+			_stagger_timer = base_stagger
 	else:
 		# === 非待接球: 新体力 = 当前体力 + 防御抗力 - 攻击 ===
 		actual_damage = int(max(0, amount - defense_resist))
 		stamina = int(max(0, stamina + defense_resist - amount))
+		# 非待接球无韧性保护，但僵直仍按韧性查表
+		_stagger_timer = _get_stagger_by_resilience(resilience)
 
-	# 更新血条
-	if stamina_bar:
-		stamina_bar.value = stamina
+	# 体力条由下方球员栏更新，此处不处理
 
 	# 检查是否被击败
 	if stamina <= 0 and not is_defeated:
@@ -290,6 +290,23 @@ func _get_resilience_decay_rate(rd: float) -> float:
 		return 0.1 * rd / 100.0
 	else:
 		return 0.0
+
+
+func _get_stagger_by_resilience(rd: float) -> float:
+	"""僵直时间与韧性反比（四段，最小0.3s）
+	韧性 0-25 → 0.7s
+	韧性 26-50 → 0.5s
+	韧性 51-75 → 0.4s
+	韧性 76-100 → 0.3s
+	"""
+	if rd >= 76.0:
+		return 0.3
+	elif rd >= 51.0:
+		return 0.4
+	elif rd >= 26.0:
+		return 0.5
+	else:
+		return 0.7
 
 
 func _roll_resilience_effect(rd: float) -> String:
@@ -463,7 +480,7 @@ func use_skill(slot_index: int) -> void:
 
 	# 消耗能量
 	spirit_energy -= cost
-	energy_bar.value = spirit_energy
+	# 能量条由下方球员栏更新，此处不处理
 
 	# 设置CD
 	skill_cooldowns[skill_id] = float(skill_data["cooldown"] if skill_data.has("cooldown") else 5.0)

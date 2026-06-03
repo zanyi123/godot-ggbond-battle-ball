@@ -218,6 +218,13 @@ func _setup_ui() -> void:
 	hud.set_script(hud_script)
 	ui_layer.add_child(hud)
 
+	# 绑定球员引用到HUD
+	var team_a_arr: Array[CharacterBody2D] = []
+	team_a_arr.assign(team_a_players)
+	var team_b_arr: Array[CharacterBody2D] = []
+	team_b_arr.assign(team_b_players)
+	hud.setup_players(team_a_arr, team_b_arr)
+
 	# 通信系统在 _setup_ai_manager 之后创建,这里先保存HUD引用
 	# HUD的comm_system连接在 _setup_comm_system 中完成
 
@@ -561,7 +568,7 @@ func _create_penalty_wall(pos: Vector2, size: Vector2, wall_name: String = "Pena
 func _build_penalty_enclosure(team: String) -> void:
 	"""为指定队伍的外场动态创建完整隔离墙(匹配凹字形)"""
 	var wall_prefix: String = "enclosure_%s_" % team
-	# 先清理该队伍旧的隔离墙
+	#  先清理该队伍旧的隔离 墙
 	_remove_penalty_enclosure(team)
 
 	var wall_count: int = 0
@@ -975,6 +982,11 @@ func _setup_preparation_ui() -> void:
 	if cursor_ring and is_instance_valid(cursor_ring):
 		cursor_ring.visible = false
 
+	# 隐藏比赛HUD（备战期间不显示）
+	var hud_node = ui_layer.get_node_or_null("HUD") if ui_layer else null
+	if hud_node:
+		hud_node.visible = false
+
 	# 显示备战界面
 	preparation_ui.visible = true
 
@@ -1028,6 +1040,14 @@ func _on_prep_match_started() -> void:
 			player.visible = true
 	if penalty_walls:
 		penalty_walls.visible = true
+
+	# 隐藏备战界面
+	preparation_ui.visible = false
+
+	# 显示比赛HUD
+	var hud_node = ui_layer.get_node_or_null("HUD") if ui_layer else null
+	if hud_node:
+		hud_node.visible = true
 
 	# 解锁
 	match_started = true

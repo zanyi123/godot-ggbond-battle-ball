@@ -71,8 +71,33 @@ func _on_open_characters() -> void:
 	add_child(char_ui)
 
 
+var spirit_ui: Control = null
+
+
 func _on_open_spirits() -> void:
-	print("[Main] 元灵系统 - 待实现")
+	# 已打开且可见 → 隐藏
+	if spirit_ui and is_instance_valid(spirit_ui) and spirit_ui.visible:
+		spirit_ui.visible = false
+		return
+
+	# 已打开但隐藏 → 显示
+	if spirit_ui and is_instance_valid(spirit_ui):
+		spirit_ui.visible = true
+		return
+
+	# 首次打开
+	var script := load("res://scripts/systems/spirit_system/spirit_ui.gd")
+	spirit_ui = Control.new()
+	spirit_ui.name = "SpiritUI"
+	spirit_ui.set_script(script)
+	spirit_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(spirit_ui)
+
+	# 关闭信号：隐藏面板
+	if spirit_ui.has_signal("close_requested"):
+		spirit_ui.close_requested.connect(func(): spirit_ui.visible = false)
+
+	print("[Main] 元灵系统已打开")
 
 
 func _on_open_base() -> void:
