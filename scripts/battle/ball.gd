@@ -207,6 +207,29 @@ func _on_body_entered(body: Node2D) -> void:
 	var effect: String = result.get("effect", "none")
 	ball_hit_player.emit(player, actual_damage)
 
+	# === AOE范围伤害：以被击中球员为圆心，对范围内敌方球员造成伤害 ===
+	if tag_effect_handler and tag_effect_handler.has_ball_aoe():
+		var aoe_radius: float = tag_effect_handler.get_ball_aoe_radius()
+		var aoe_pct: float = tag_effect_handler.get_ball_aoe_damage_pct()
+		var aoe_damage: float = ball_damage * aoe_pct
+		var hit_count: int = 0
+		if attacker_player and is_instance_valid(attacker_player):
+			var enemy_team: String = "b" if attacker_player.team == "a" else "a"
+			for p in get_tree().get_nodes_in_group("players") if get_tree() else []:
+				if p == player:
+					continue
+				if not p is CharacterBody2D:
+					continue
+				if p.team != enemy_team:
+					continue
+				if p.is_defeated:
+					continue
+				var dist: float = player.global_position.distance_to(p.global_position)
+				if dist <= aoe_radius:
+					p.take_damage(aoe_damage, attacker_player)
+					hit_count += 1
+		print("[Ball] AOE范围伤害: 半径=%.0f 范围伤害=%.1f 命中%d人" % [aoe_radius, aoe_damage, hit_count])
+
 	# === 穿透：击中后不停止，继续飞行 ===
 	var is_penetrating: bool = tag_effect_handler and tag_effect_handler.is_ball_penetrating()
 
@@ -298,7 +321,12 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	if tag_effect_handler:
 		ball_damage = tag_effect_handler.get_modified_ball_damage(ball_damage)
 		ball_speed = tag_effect_handler.get_modified_ball_speed(ball_speed)
-		max_flight_distance = tag_effect_handler.get_modified_ball_range(max_flight_distance)
+
+		# 精准锁定：修正发球方向指向最近敌人
+		if tag_effect_handler.is_ball_lockon() and tag_effect_handler._ball_mods.has("lockon_target"):
+			var lockon_target: Node = tag_effect_handler._ball_mods.get("lockon_target")
+			if lockon_target and is_instance_valid(lockon_target) and not lockon_target.is_defeated:
+				ball_direction = (lockon_target.global_position - from).normalized()
 
 	var attack_style := StyleBoxFlat.new()
 	attack_style.bg_color = Color(1, 0.3, 0.3)
