@@ -116,6 +116,10 @@ func trigger_skill(player_id: int, skill_id: String, target_data: Dictionary = {
     # 发送技能触发信号
     skill_triggered.emit(skill_id, player_id, target_data)
 
+    # 先重置球修饰符（清空上一次技能的残留）
+    if _effect_handler:
+        _effect_handler.reset_ball_mods()
+
     # 执行技能标签效果
     _execute_skill_tags(skill_id, player_id, target_data)
 

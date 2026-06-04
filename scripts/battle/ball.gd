@@ -304,12 +304,8 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	if not tag_effect_handler:
 		tag_effect_handler = _get_tag_effect_handler()
 
-	# 应用标签修饰符
-	if tag_effect_handler:
-		tag_effect_handler.reset_ball_mods()
-
-		# 精准锁定：修正发球方向指向最近敌人
-		# （标签已在触发时标记，这里读取）
+	# 不在这里reset_ball_mods，因为技能标签在投球前已经执行过了
+	# reset在 skill_trigger.trigger_skill() 开头完成
 
 	# 应用旧式技能
 	for skill in skills:
