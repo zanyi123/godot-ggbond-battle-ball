@@ -125,20 +125,29 @@ func trigger_skill(player_id: int, skill_id: String, target_data: Dictionary = {
 
     return true
 
+## 技能数据缓存
+var _skills_cache: Dictionary = {}  # {skill_id: skill_data}
+var _skills_loaded: bool = false
+
+## 加载技能数据到缓存
+func _load_skills_data() -> void:
+    if _skills_loaded:
+        return
+    var file := FileAccess.open("res://data/spirits/skills.json", FileAccess.READ)
+    if file:
+        var json := JSON.new()
+        if json.parse(file.get_as_text()) == OK:
+            var skills_array: Array = json.data.get("skills", []) if json.data is Dictionary else []
+            for s in skills_array:
+                _skills_cache[s.get("id", "")] = s
+        file.close()
+    _skills_loaded = true
+
 ## 获取技能数据
 func _get_skill_data(skill_id: String) -> Dictionary:
-    # TODO: 从技能数据文件加载
-    # 目前先硬编码猛虎金刚闪
-    if skill_id == "skill_jingang_1":
-        return {
-            "id": "skill_jingang_1",
-            "name": "猛虎金刚闪",
-            "element": "金刚",
-            "type": "active",
-            "energy_cost": 30,
-            "cooldown": 8.0,
-            "tags": ["ball_dmg_up", "ball_range_up"]
-        }
+    _load_skills_data()
+    if _skills_cache.has(skill_id):
+        return _skills_cache[skill_id]
     return {}
 
 ## 执行技能标签效果
@@ -169,11 +178,19 @@ func _execute_skill_tags(skill_id: String, player_id: int, target_data: Dictiona
 
 ## 构建标签参数
 func _build_tag_params(tag_data: Dictionary, skill_data: Dictionary, player_id: int, target_data: Dictionary) -> Dictionary:
-    var params = {}
+    var params: Dictionary = {}
 
-    # 从技能数据中获取默认参数
-    # TODO: 根据标签ID构建具体参数
-    # 目前先返回空字典，具体参数待标签实现时完善
+    # 从技能的 tag_params 中读取该标签的参数
+    var tag_id: String = tag_data.get("id", "")
+    var all_tag_params: Dictionary = skill_data.get("tag_params", {})
+    if all_tag_params.has(tag_id):
+        params = all_tag_params[tag_id].duplicate()
+
+    # 注入运行时上下文（标签函数可直接使用）
+    params["_caster_id"] = player_id
+    params["_skill_id"] = skill_data.get("id", "")
+    params["_element"] = skill_data.get("element", "")
+    params["_target_data"] = target_data
 
     return params
 

@@ -69,9 +69,34 @@ func _physics_process(delta: float) -> void:
 			global_position = owner_player.global_position + Vector2(0, -40)
 		return
 
+	# === 追踪：向目标转向 ===
+	if tag_effect_handler and tag_effect_handler.is_ball_tracking():
+		var target: Node = tag_effect_handler.get_tracking_target()
+		if target and is_instance_valid(target) and not target.is_defeated:
+			var desired_dir := (target.global_position - global_position).normalized()
+			var turn_speed: float = tag_effect_handler.get_tracking_turn_speed()
+			ball_direction = ball_direction.move_toward(desired_dir, turn_speed * delta).normalized()
+		else:
+			tag_effect_handler._ball_mods.tracking_target = null
+
+	# === 回旋：飞到一半距离时返回 ===
+	if tag_effect_handler and tag_effect_handler.is_ball_boomerang():
+		var trigger_ratio: float = tag_effect_handler._ball_mods.boomerang_dist
+		if trigger_ratio <= 0.0:
+			trigger_ratio = 0.5
+		if not tag_effect_handler._ball_mods.boomerang_triggered and flight_distance >= max_flight_distance * trigger_ratio:
+			var return_dir := tag_effect_handler.trigger_boomerang(ball_direction)
+			if return_dir != Vector2.ZERO:
+				ball_direction = return_dir
+
+	# 非直行时才允许弧线
+	var allow_arc: bool = true
+	if tag_effect_handler and tag_effect_handler._ball_mods.lock_straight:
+		allow_arc = false
+
 	var move_vector: Vector2 = ball_direction * ball_speed * delta
 
-	if trajectory_type == "arc":
+	if trajectory_type == "arc" and allow_arc:
 		ball_direction = ball_direction.rotated(deg_to_rad(30) * delta)
 
 	position += move_vector
@@ -176,14 +201,20 @@ func _on_body_entered(body: Node2D) -> void:
 		_catch_ball(player)
 		return
 
-	# === 对方球员 → 击中造成伤害（待接球走韧性系统，非待接球全额伤害） ===
+	# === 对方球员 → 击中造成伤害 ===
 	var result: Dictionary = player.take_damage(ball_damage, attacker_player)
 	var actual_damage: int = result.get("damage", 0)
 	var effect: String = result.get("effect", "none")
 	ball_hit_player.emit(player, actual_damage)
 
+	# === 穿透：击中后不停止，继续飞行 ===
+	var is_penetrating: bool = tag_effect_handler and tag_effect_handler.is_ball_penetrating()
+
 	# 被击败:球回到攻击者手上
 	if player.is_defeated:
+		if is_penetrating:
+			print("[Ball] 穿透击中 %s(被击败),球继续飞行" % _pname(player))
+			return  # 穿透球继续飞
 		is_active = false
 		if attacker_player and is_instance_valid(attacker_player):
 			return_to_player(attacker_player)
@@ -192,14 +223,17 @@ func _on_body_entered(body: Node2D) -> void:
 
 	# === 韧性效果响应 ===
 	if effect == "ball_fly" or effect == "knockback_and_fly":
-		# 球弹飞:保持原速,随机方向
 		var random_angle: float = randf_range(-90.0, 90.0)
 		ball_direction = ball_direction.rotated(deg_to_rad(random_angle))
 		flight_distance = 0.0
 		max_flight_distance = 600.0
-		# 球继续飞行,不回攻击者,落地后最近球员拾球
 		print("[Ball] %s 韧性弹飞! 方向偏转%.0f度" % [_pname(player), random_angle])
-		return  # 球继续飞行
+		return
+
+	# 穿透：球不回攻击者，继续飞行
+	if is_penetrating:
+		print("[Ball] 穿透击中 %s,球继续飞行" % _pname(player))
+		return
 
 	# 无弹飞效果:球回到攻击者手上
 	if attacker_player and is_instance_valid(attacker_player):
@@ -229,6 +263,9 @@ func _on_ball_stopped() -> void:
 		_return_to_nearest_team_player("b")
 
 
+## 标签效果处理器引用
+var tag_effect_handler: SpiritTagEffectHandler = null
+
 func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, attacker: CharacterBody2D, skills: Array[Dictionary] = []) -> void:
 	global_position = from
 	ball_direction = direction.normalized()
@@ -240,10 +277,28 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	flight_distance = 0.0
 	owner_player = null
 
+	# 获取标签效果处理器
+	if not tag_effect_handler:
+		tag_effect_handler = _get_tag_effect_handler()
+
+	# 应用标签修饰符
+	if tag_effect_handler:
+		tag_effect_handler.reset_ball_mods()
+
+		# 精准锁定：修正发球方向指向最近敌人
+		# （标签已在触发时标记，这里读取）
+
+	# 应用旧式技能
 	for skill in skills:
 		var tag: String = skill.get("tag") if skill.has("tag") else ""
 		if tag == "on_ball":
 			_apply_ball_skill(skill)
+
+	# 标签修饰符应用到球属性
+	if tag_effect_handler:
+		ball_damage = tag_effect_handler.get_modified_ball_damage(ball_damage)
+		ball_speed = tag_effect_handler.get_modified_ball_speed(ball_speed)
+		max_flight_distance = tag_effect_handler.get_modified_ball_range(max_flight_distance)
 
 	var attack_style := StyleBoxFlat.new()
 	attack_style.bg_color = Color(1, 0.3, 0.3)
@@ -251,7 +306,20 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	ball_visual.add_theme_stylebox_override("normal", attack_style)
 
 	visible = true
-	print("[Ball] 发球! 伤害:%.1f" % ball_damage)
+	print("[Ball] 发球! 伤害:%.1f 速度:%.1f 距离:%.1f" % [ball_damage, ball_speed, max_flight_distance])
+
+
+func _get_tag_effect_handler() -> SpiritTagEffectHandler:
+	var tree := get_tree()
+	if tree:
+		for node in tree.get_nodes_in_group("spirit_system"):
+			if node is SpiritTagEffectHandler:
+				return node
+		# 备用：遍历根节点
+		for node in tree.root.get_children():
+			if node is SpiritSystemManager:
+				return node.tag_effect_handler
+	return null
 
 
 func return_to_player(player: CharacterBody2D) -> void:

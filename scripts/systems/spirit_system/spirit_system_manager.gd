@@ -33,6 +33,7 @@ func _ready() -> void:
 
     # 连接效果处理器信号
     if tag_effect_handler:
+        tag_effect_handler.add_to_group("spirit_system")
         tag_effect_handler.effect_applied.connect(_on_effect_applied_handler)
         tag_effect_handler.effect_finished.connect(_on_effect_finished_handler)
 
