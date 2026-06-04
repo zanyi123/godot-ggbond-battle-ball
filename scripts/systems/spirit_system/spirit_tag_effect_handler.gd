@@ -124,23 +124,35 @@ func apply_tag_effect(tag_id: String, params: Dictionary, caster_id: int) -> Dic
 
 	# === 对球效果 ===
 	match tag_id:
-		"ball_dmg_up":
-			_apply_ball_dmg_up(params)
+		"ball_dmg_up_pct":
+			_apply_ball_dmg_up_pct(params)
 			success = true
-		"ball_dmg_down":
-			_apply_ball_dmg_down(params)
+		"ball_dmg_down_pct":
+			_apply_ball_dmg_down_pct(params)
 			success = true
-		"ball_speed_up":
-			_apply_ball_speed_up(params)
+		"ball_dmg_up_flat":
+			_apply_ball_dmg_up_flat(params)
 			success = true
-		"ball_speed_down":
-			_apply_ball_speed_down(params)
+		"ball_dmg_down_flat":
+			_apply_ball_dmg_down_flat(params)
+			success = true
+		"ball_speed_up_pct":
+			_apply_ball_speed_up_pct(params)
+			success = true
+		"ball_speed_down_pct":
+			_apply_ball_speed_down_pct(params)
+			success = true
+		"ball_speed_up_flat":
+			_apply_ball_speed_up_flat(params)
+			success = true
+		"ball_speed_down_flat":
+			_apply_ball_speed_down_flat(params)
 			success = true
 		"ball_tracking":
 			_apply_ball_tracking(params, caster_id)
 			success = true
 		"ball_avoid":
-			success = true  # 避障待场地系统
+			success = true
 		"ball_boomerang":
 			_apply_ball_boomerang(params)
 			success = true
@@ -254,49 +266,59 @@ func _get_nearest_enemy(caster: CharacterBody2D) -> CharacterBody2D:
 	return nearest
 
 
-## ==================== 对球效果实现 (13个) ====================
+## ==================== 对球效果实现 (17个) ====================
 
-## BALL-01 增伤 — params: {value_type, value}
-func _apply_ball_dmg_up(params: Dictionary) -> void:
+## BALL-01 增伤(%) — params: {value}
+func _apply_ball_dmg_up_pct(params: Dictionary) -> void:
 	var val: float = float(params.get("value", 0))
-	var vtype: String = str(params.get("value_type", "percentage"))
-	if vtype == "percentage":
-		_ball_mods.dmg_mult += val / 100.0
-	else:
-		_ball_mods.dmg_flat += val
-	print("[TagEffect] 增伤: type=%s val=%.1f → mult=%.2f flat=%.1f" % [vtype, val, _ball_mods.dmg_mult, _ball_mods.dmg_flat])
+	_ball_mods.dmg_mult += val / 100.0
+	print("[TagEffect] 增伤(%%): +%.0f%% → mult=%.2f" % [val, _ball_mods.dmg_mult])
 
-## BALL-02 减伤
-func _apply_ball_dmg_down(params: Dictionary) -> void:
+## BALL-02 减伤(%) — params: {value}
+func _apply_ball_dmg_down_pct(params: Dictionary) -> void:
 	var val: float = float(params.get("value", 0))
-	var vtype: String = str(params.get("value_type", "percentage"))
-	if vtype == "percentage":
-		_ball_mods.dmg_mult -= val / 100.0
-	else:
-		_ball_mods.dmg_flat -= val
+	_ball_mods.dmg_mult -= val / 100.0
 	_ball_mods.dmg_mult = max(0.0, _ball_mods.dmg_mult)
-	print("[TagEffect] 减伤: → mult=%.2f flat=%.1f" % [_ball_mods.dmg_mult, _ball_mods.dmg_flat])
+	print("[TagEffect] 减伤(%%): -%.0f%% → mult=%.2f" % [val, _ball_mods.dmg_mult])
 
-## BALL-03 加速 — params: {multiplier, fixed_value}
-func _apply_ball_speed_up(params: Dictionary) -> void:
+## BALL-03 增伤(固定) — params: {value}
+func _apply_ball_dmg_up_flat(params: Dictionary) -> void:
+	var val: float = float(params.get("value", 0))
+	_ball_mods.dmg_flat += val
+	print("[TagEffect] 增伤(固定): +%.1f → flat=%.1f" % [val, _ball_mods.dmg_flat])
+
+## BALL-04 减伤(固定) — params: {value}
+func _apply_ball_dmg_down_flat(params: Dictionary) -> void:
+	var val: float = float(params.get("value", 0))
+	_ball_mods.dmg_flat -= val
+	print("[TagEffect] 减伤(固定): -%.1f → flat=%.1f" % [val, _ball_mods.dmg_flat])
+
+## BALL-05 加速(%) — params: {multiplier}
+func _apply_ball_speed_up_pct(params: Dictionary) -> void:
 	var mult: float = float(params.get("multiplier", 0))
-	var fixed: float = float(params.get("fixed_value", 0))
 	if mult > 0:
 		_ball_mods.speed_mult *= mult
-	if fixed != 0:
-		_ball_mods.speed_flat += fixed
-	print("[TagEffect] 球加速: → mult=%.2f flat=%.1f" % [_ball_mods.speed_mult, _ball_mods.speed_flat])
+	print("[TagEffect] 球加速(%%): ×%.2f → mult=%.2f" % [mult, _ball_mods.speed_mult])
 
-## BALL-04 减速
-func _apply_ball_speed_down(params: Dictionary) -> void:
+## BALL-06 减速(%) — params: {multiplier}
+func _apply_ball_speed_down_pct(params: Dictionary) -> void:
 	var mult: float = float(params.get("multiplier", 0))
-	var fixed: float = float(params.get("fixed_value", 0))
 	if mult > 0:
 		_ball_mods.speed_mult /= mult
-	if fixed != 0:
-		_ball_mods.speed_flat -= fixed
 	_ball_mods.speed_mult = max(0.1, _ball_mods.speed_mult)
-	print("[TagEffect] 球减速: → mult=%.2f flat=%.1f" % [_ball_mods.speed_mult, _ball_mods.speed_flat])
+	print("[TagEffect] 球减速(%%): ÷%.2f → mult=%.2f" % [mult, _ball_mods.speed_mult])
+
+## BALL-07 加速(固定) — params: {value}
+func _apply_ball_speed_up_flat(params: Dictionary) -> void:
+	var val: float = float(params.get("value", 0))
+	_ball_mods.speed_flat += val
+	print("[TagEffect] 球加速(固定): +%.1f → flat=%.1f" % [val, _ball_mods.speed_flat])
+
+## BALL-08 减速(固定) — params: {value}
+func _apply_ball_speed_down_flat(params: Dictionary) -> void:
+	var val: float = float(params.get("value", 0))
+	_ball_mods.speed_flat -= val
+	print("[TagEffect] 球减速(固定): -%.1f → flat=%.1f" % [val, _ball_mods.speed_flat])
 
 ## BALL-05 追踪 — 持续转向目标
 func _apply_ball_tracking(params: Dictionary, caster_id: int) -> void:
