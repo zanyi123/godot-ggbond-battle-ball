@@ -51,11 +51,20 @@ func _ready() -> void:
 	btn_base.size = Vector2(350, 55)
 	btn_base.pressed.connect(_on_open_base)
 	add_child(btn_base)
-	
+
+	# 开发者工具按钮
+	var btn_dev := Button.new()
+	btn_dev.text = "快捷设置（开发者）"
+	btn_dev.position = Vector2(545, 620)
+	btn_dev.size = Vector2(350, 55)
+	btn_dev.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
+	btn_dev.pressed.connect(_on_open_dev_settings)
+	add_child(btn_dev)
+
 	# 交易按钮
 	var btn_trade := Button.new()
 	btn_trade.text = "交易"
-	btn_trade.position = Vector2(545, 620)
+	btn_trade.position = Vector2(545, 695)
 	btn_trade.size = Vector2(350, 55)
 	btn_trade.pressed.connect(_on_open_trade)
 	add_child(btn_trade)
@@ -102,6 +111,14 @@ func _on_open_spirits() -> void:
 
 func _on_open_base() -> void:
 	print("[Main] 基地 - 待实现")
+
+
+func _on_open_dev_settings() -> void:
+	var dev_panel: Control = load("res://scripts/dev_tools/dev_settings_main.gd").new()
+	dev_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dev_panel.closed.connect(dev_panel.queue_free)
+	add_child(dev_panel)
+	print("[Main] 快捷设置系统已打开")
 
 
 func _on_open_trade() -> void:

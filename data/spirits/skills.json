@@ -7,163 +7,23 @@
       "type": "active",
       "unlock_level": 1,
       "unlock_cost": 0,
+      "energy_cost": 30,
+      "cooldown": 8.0,
       "description": "金刚元灵奥义，凝聚金刚之力猛虎般冲击前方，造成大范围伤害",
       "detail": "伤害范围：前方扇形120度\n基础伤害：攻击力×1.5\n元灵能量消耗：30\n冷却时间：8秒",
-      "icon_color": "#FFD700"
-    },
-    {
-      "id": "skill_jingang_2",
-      "name": "金钟罩",
-      "element": "金刚",
-      "type": "active",
-      "unlock_level": 3,
-      "unlock_cost": 5,
-      "description": "短时间形成金刚护盾，大幅减免受到的伤害",
-      "detail": "护盾值：最大体力×20%\n持续时间：3秒\n元灵能量消耗：20\n冷却时间：12秒",
-      "icon_color": "#DAA520"
-    },
-    {
-      "id": "skill_jingang_3",
-      "name": "金刚体魄",
-      "element": "金刚",
-      "type": "passive",
-      "unlock_level": 5,
-      "unlock_cost": 10,
-      "description": "永久增强体魄，提升韧性和防御",
-      "detail": "韧性+10\n防御+5\n被动效果，无需激活",
-      "icon_color": "#B8860B"
-    },
-    {
-      "id": "skill_dadi_1",
-      "name": "岩石壁垒",
-      "element": "大地",
-      "type": "active",
-      "unlock_level": 1,
-      "unlock_cost": 0,
-      "description": "在前方召唤岩石墙壁，阻挡球的飞行路线",
-      "detail": "墙壁宽度：200px\n持续时间：4秒\n元灵能量消耗：25\n冷却时间：15秒",
-      "icon_color": "#8B4513"
-    },
-    {
-      "id": "skill_dadi_2",
-      "name": "磐石之身",
-      "element": "大地",
-      "type": "passive",
-      "unlock_level": 4,
-      "unlock_cost": 8,
-      "description": "受到击退效果时，减少击退距离",
-      "detail": "击退距离减少30%\n被动效果，无需激活",
-      "icon_color": "#A0522D"
-    },
-    {
-      "id": "skill_leihuo_1",
-      "name": "闪电投球",
-      "element": "雷火",
-      "type": "active",
-      "unlock_level": 1,
-      "unlock_cost": 0,
-      "description": "注入雷火之力投球，球速大幅提升",
-      "detail": "球速×1.8\n伤害+30%\n元灵能量消耗：35\n冷却时间：10秒",
-      "icon_color": "#FF4500"
-    },
-    {
-      "id": "skill_leihuo_2",
-      "name": "火焰轨迹",
-      "element": "雷火",
-      "type": "active",
-      "unlock_level": 3,
-      "unlock_cost": 5,
-      "description": "球飞行时留下火焰轨迹，触碰的敌方球员受到持续伤害",
-      "detail": "轨迹持续伤害：攻击力×0.3/秒\n轨迹持续时间：3秒\n元灵能量消耗：25\n冷却时间：12秒",
-      "icon_color": "#FF6347"
-    },
-    {
-      "id": "skill_leihuo_3",
-      "name": "雷霆之怒",
-      "element": "雷火",
-      "type": "passive",
-      "unlock_level": 6,
-      "unlock_cost": 12,
-      "description": "体力低于30%时，攻击力大幅提升",
-      "detail": "攻击力+25%\n体力<30%时自动触发\n被动效果，无需激活",
-      "icon_color": "#DC143C"
-    },
-    {
-      "id": "skill_bingxue_1",
-      "name": "冰冻射线",
-      "element": "冰雪",
-      "type": "active",
-      "unlock_level": 1,
-      "unlock_cost": 0,
-      "description": "向前方发射冰冻射线，命中敌方球员使其减速",
-      "detail": "减速50%\n持续时间：2秒\n元灵能量消耗：20\n冷却时间：8秒",
-      "icon_color": "#87CEEB"
-    },
-    {
-      "id": "skill_bingxue_2",
-      "name": "冰霜护甲",
-      "element": "冰雪",
-      "type": "passive",
-      "unlock_level": 4,
-      "unlock_cost": 8,
-      "description": "被球击中时，有概率冻结球使其停止飞行",
-      "detail": "冻结概率：15%\n冻结后球停在原地\n被动效果，无需激活",
-      "icon_color": "#ADD8E6"
-    },
-    {
-      "id": "skill_caomu_1",
-      "name": "生命之泉",
-      "element": "草木",
-      "type": "active",
-      "unlock_level": 1,
-      "unlock_cost": 0,
-      "description": "恢复自身或附近队友的体力",
-      "detail": "恢复量：最大体力×15%\n范围：200px\n元灵能量消耗：30\n冷却时间：15秒",
-      "icon_color": "#32CD32"
-    },
-    {
-      "id": "skill_caomu_2",
-      "name": "藤蔓缠绕",
-      "element": "草木",
-      "type": "active",
-      "unlock_level": 3,
-      "unlock_cost": 5,
-      "description": "释放藤蔓缠绕最近敌方球员，使其短暂无法移动",
-      "detail": "定身时间：1.5秒\n范围：300px内最近敌人\n元灵能量消耗：25\n冷却时间：12秒",
-      "icon_color": "#228B22"
-    },
-    {
-      "id": "skill_caomu_3",
-      "name": "自然恢复",
-      "element": "草木",
-      "type": "passive",
-      "unlock_level": 5,
-      "unlock_cost": 10,
-      "description": "站立不动时缓慢恢复体力",
-      "detail": "恢复速度：最大体力×2%/秒\n需站立不动1秒后开始\n被动效果，无需激活",
-      "icon_color": "#006400"
-    },
-    {
-      "id": "skill_menghuan_1",
-      "name": "幻影分身",
-      "element": "梦幻",
-      "type": "active",
-      "unlock_level": 1,
-      "unlock_cost": 0,
-      "description": "创造一个幻影分身，迷惑敌方球员",
-      "detail": "分身持续时间：3秒\n分身会模仿投球动作\n元灵能量消耗：20\n冷却时间：10秒",
-      "icon_color": "#DA70D6"
-    },
-    {
-      "id": "skill_menghuan_2",
-      "name": "迷幻之眼",
-      "element": "梦幻",
-      "type": "passive",
-      "unlock_level": 4,
-      "unlock_cost": 8,
-      "description": "被敌方AI锁定为目标时，有一定概率使AI丢失目标",
-      "detail": "丢失概率：10%\n每次被锁定时判定\n被动效果，无需激活",
-      "icon_color": "#9932CC"
+      "icon_color": "#FFD700",
+      "tags": ["ball_dmg_up", "ball_range_up"],
+      "tag_params": {
+        "ball_dmg_up": {
+          "value_type": "percentage",
+          "value": 50,
+          "duration": 0
+        },
+        "ball_range_up": {
+          "multiplier": 1.2,
+          "duration": 0
+        }
+      }
     }
   ]
 }
