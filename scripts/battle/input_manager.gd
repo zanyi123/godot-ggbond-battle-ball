@@ -12,6 +12,9 @@ var match_started: bool = false
 # 发球预瞄
 var is_aiming: bool = false
 
+# 技能状态管理器
+var skill_state_manager: SkillStateManager = null
+
 # 鼠标位置（世界坐标）
 var mouse_world_pos: Vector2 = Vector2.ZERO
 
@@ -30,6 +33,7 @@ signal quick_command_requested(command: int)
 signal aim_info_updated(aim_info: Dictionary)
 signal cursor_info_updated(cursor_info: Dictionary)
 signal player_facing_updated(player: CharacterBody2D, facing_direction: Vector2)
+signal skill_cancel_requested(player_id: int)
 
 
 func _input(event: InputEvent) -> void:
@@ -37,7 +41,7 @@ func _input(event: InputEvent) -> void:
 		return
 	if controlled_player == null:
 		return
-	
+
 	# === 球员切换（点击头像/Tab） ===
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_1:
@@ -48,11 +52,14 @@ func _input(event: InputEvent) -> void:
 			player_switch_requested.emit(2)
 		# 技能快捷键
 		elif event.keycode == KEY_4:
-			skill_requested.emit(0)
+			_handle_skill_key_press(0)
 		elif event.keycode == KEY_5:
-			skill_requested.emit(1)
+			_handle_skill_key_press(1)
 		elif event.keycode == KEY_6:
-			skill_requested.emit(2)
+			_handle_skill_key_press(2)
+		# C键取消技能
+		elif event.keycode == KEY_C:
+			_handle_skill_cancel()
 		# 快捷指令
 		elif event.keycode == KEY_7:
 			quick_command_requested.emit(0)  # 注意防守
@@ -155,6 +162,8 @@ func set_controlled_player(player: CharacterBody2D) -> void:
 	controlled_player = player
 	if controlled_player:
 		controlled_player.is_player_controlled = true
+		# 初始化技能状态管理器
+		_init_skill_state_manager()
 
 
 func get_aim_info() -> Dictionary:
@@ -177,7 +186,7 @@ func get_aim_info() -> Dictionary:
 	}
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	"""每帧更新鼠标世界坐标和朝向"""
 	if not match_started:
 		return
@@ -190,6 +199,8 @@ func _process(_delta: float) -> void:
 		var camera := viewport.get_camera_2d()
 		if camera:
 			mouse_world_pos = camera.get_global_mouse_position()
+		else:
+			mouse_world_pos = viewport.get_mouse_position()
 	
 	# 更新球员朝向
 	controlled_player.facing_direction = (mouse_world_pos - controlled_player.global_position).normalized()
@@ -199,7 +210,7 @@ func _process(_delta: float) -> void:
 	aim_info_updated.emit(get_aim_info())
 	
 	# 更新鼠标圆环动画
-	cursor_ring_timer += _delta * CURSOR_RING_ANIMATION_SPEED
+	cursor_ring_timer += delta * CURSOR_RING_ANIMATION_SPEED
 	if cursor_ring_timer >= PI * 2:
 		cursor_ring_timer = 0.0
 	
@@ -215,9 +226,100 @@ func get_movement_direction(input_dir: Vector2) -> Vector2:
 	"""根据输入方向和鼠标朝向计算实际移动方向"""
 	if controlled_player == null:
 		return input_dir
-	
+
 	# W键：朝向鼠标方向移动
 	if input_dir.length() > 0 and Input.is_key_pressed(KEY_W):
 		return controlled_player.facing_direction
-	
+
 	return input_dir
+
+
+## ==================== 技能系统处理 ====================
+
+func _init_skill_state_manager() -> void:
+	"""初始化技能状态管理器"""
+	if skill_state_manager == null:
+		skill_state_manager = SkillStateManager.new()
+		add_child(skill_state_manager)
+
+		# 连接信号
+		skill_state_manager.skill_activated.connect(_on_skill_activated)
+		skill_state_manager.skill_cancelled.connect(_on_skill_cancelled)
+		skill_state_manager.skill_released.connect(_on_skill_released)
+
+		# 设置玩家技能
+		if controlled_player and controlled_player.has_method("get_equipped_skills"):
+			var skill_ids = controlled_player.get_equipped_skills()
+			var player_id = controlled_player.get_instance_id()
+			skill_state_manager.setup_player_skills(player_id, skill_ids)
+			print("[InputManager] 已设置玩家技能: %d个" % skill_ids.size())
+
+
+func _handle_skill_key_press(slot: int) -> void:
+	"""处理技能键按下（检测双击）"""
+	if not controlled_player:
+		return
+
+	if skill_state_manager == null:
+		# 降级：直接发送技能请求
+		skill_requested.emit(slot)
+		return
+
+	var player_id = controlled_player.get_instance_id()
+	var auto_release = skill_state_manager.on_skill_key_pressed(player_id, slot)
+
+	if auto_release:
+		# 双击：自动释放
+		_release_active_skill(player_id)
+	else:
+		# 单击：激活或取消
+		pass
+
+
+func _handle_skill_cancel() -> void:
+	"""处理C键取消技能"""
+	if not controlled_player:
+		return
+
+	if skill_state_manager:
+		var player_id = controlled_player.get_instance_id()
+		var cancelled = skill_state_manager.cancel_active_skill(player_id)
+		if cancelled:
+			print("[InputManager] C键取消技能")
+		skill_cancel_requested.emit(player_id)
+
+
+func _on_skill_activated(skill_id: String, player_id: int) -> void:
+	"""技能已激活回调"""
+	print("[InputManager] 技能已激活: %s (玩家:%d)" % [skill_id, player_id])
+	# TODO: 通知UI显示激活状态
+
+
+func _on_skill_cancelled(skill_id: String, player_id: int) -> void:
+	"""技能已取消回调"""
+	print("[InputManager] 技能已取消: %s (玩家:%d)" % [skill_id, player_id])
+	# TODO: 通知UI清除激活状态
+
+
+func _on_skill_released(skill_id: String, player_id: int) -> void:
+	"""技能已释放回调"""
+	print("[InputManager] 技能已释放: %s (玩家:%d)" % [skill_id, player_id])
+	# 通知玩家执行技能
+	if controlled_player and controlled_player.get_instance_id() == player_id:
+		if controlled_player.has_method("use_skill_by_id"):
+			controlled_player.use_skill_by_id(skill_id)
+
+
+func _release_active_skill(player_id: int) -> void:
+	"""释放当前激活的技能"""
+	var active_skill = skill_state_manager.get_active_skill(player_id)
+	if not active_skill.is_empty():
+		var slot = active_skill.slot
+		skill_state_manager._release_skill(player_id, slot)
+
+
+## 清理
+func cleanup() -> void:
+	if skill_state_manager and controlled_player:
+		var player_id = controlled_player.get_instance_id()
+		skill_state_manager.cleanup_player(player_id)

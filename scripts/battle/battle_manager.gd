@@ -25,6 +25,9 @@ var input_mgr: Node  # InputManager
 var ai_mgr: Node     # AIManager
 var comm_system: Node  # AICommunication
 var preparation_ui: Control  # 备战界面
+var field_physics: Node  # FieldPhysicsManager
+var obstacle_manager: Node  # ObstacleManager
+var spirit_system: Node  # SpiritSystemManager
 
 # 消息气泡显示
 var message_bubbles: Array[Dictionary] = []  # [{label, timer, player}]
@@ -61,6 +64,9 @@ func _ready() -> void:
 	_setup_ai_manager()
 	_setup_comm_system()
 	_setup_preparation_ui()
+	_setup_field_physics_manager()
+	_setup_obstacle_manager()
+	_setup_spirit_system()
 
 	GameManager.phase_changed.connect(_on_phase_changed)
 	GameManager.match_paused.connect(_on_match_paused)
@@ -142,6 +148,7 @@ func _setup_input_manager() -> void:
 	input_mgr.catch_state_entered.connect(_on_catch_entered)
 	input_mgr.catch_state_exited.connect(_on_catch_exited)
 	input_mgr.skill_requested.connect(_on_skill_requested)
+	input_mgr.skill_cancel_requested.connect(_on_skill_cancel_requested)
 	input_mgr.quick_command_requested.connect(_on_quick_command)
 
 
@@ -277,6 +284,14 @@ func _on_skill_requested(slot: int) -> void:
 	var player: CharacterBody2D = input_mgr.controlled_player
 	if player:
 		player.use_skill(slot)
+
+
+func _on_skill_cancel_requested(player_id: int) -> void:
+	"""C键取消技能请求"""
+	var player: CharacterBody2D = input_mgr.controlled_player
+	if player and player.get_instance_id() == player_id:
+		player.clear_active_skill()
+		print("[BattleManager] 玩家技能已取消")
 
 
 func _on_quick_command(command: int) -> void:
@@ -968,8 +983,114 @@ func _setup_preparation_ui() -> void:
 	if ball_node:
 		ball_node.visible = false
 	for player: CharacterBody2D in team_a_players + team_b_players:
+		player.visible = false
+
+	# 显示备战界面时暂停比赛处理
+	set_process(false)
+
+
+## 场地物理管理器
+func _setup_field_physics_manager() -> void:
+	"""创建场地物理管理器
+	
+	管理场地的全局物理属性：
+	- 摩擦系数 μ（影响球员击退距离）
+	- 弹性系数 e（影响球碰撞反弹）
+	"""
+	var physics_script := load("res://scripts/battle/field_physics_manager.gd")
+	field_physics = Node.new()
+	field_physics.name = "FieldPhysicsManager"
+	field_physics.set_script(physics_script)
+	add_child(field_physics)
+	
+	# 连接信号（可选，用于调试/通知）
+	if field_physics.has_signal("friction_changed"):
+		field_physics.friction_changed.connect(_on_friction_changed)
+	if field_physics.has_signal("bounciness_changed"):
+		field_physics.bounciness_changed.connect(_on_bounciness_changed)
+	
+	print("[BattleManager] 场地物理管理器已创建: 默认 μ=1.0, e=0.0")
+
+
+func _on_friction_changed(new_friction: float, source: String) -> void:
+	"""摩擦系数改变回调"""
+	print("[BattleManager] 场地摩擦改变: μ=%.2f (来源: %s)" % [new_friction, source])
+
+
+func _on_bounciness_changed(new_bounciness: float, source: String) -> void:
+	"""弹性系数改变回调"""
+	print("[BattleManager] 场地弹性改变: e=%.2f (来源: %s)" % [new_bounciness, source])
+
+
+## 障碍物管理器
+func _setup_obstacle_manager() -> void:
+	"""创建障碍物管理器"""
+	var obs_script := load("res://scripts/battle/obstacle_manager.gd")
+	obstacle_manager = Node.new()
+	obstacle_manager.name = "ObstacleManager"
+	obstacle_manager.set_script(obs_script)
+	add_child(obstacle_manager)
+	print("[BattleManager] 障碍物管理器已创建")
+
+
+func _setup_spirit_system() -> void:
+	"""创建元灵技能系统管理器并连接链路"""
+	var ss_script := load("res://scripts/systems/spirit_system/spirit_system_manager.gd")
+	spirit_system = Node.new()
+	spirit_system.name = "SpiritSystemManager"
+	spirit_system.set_script(ss_script)
+	add_child(spirit_system)
+
+	# 等待下一帧确保子节点初始化完成
+	# 延迟初始化，确保子节点 _ready 完成
+	call_deferred("_deferred_init_spirit_system")
+
+	print("[BattleManager] 元灵技能系统已创建")
+
+
+func _deferred_init_spirit_system() -> void:
+	"""延迟初始化：确保 SpiritSystemManager 子节点 _ready 完成"""
+	if not spirit_system or not is_instance_valid(spirit_system):
+		return
+
+	var all_players: Array[Node] = []
+	for p in team_a_players + team_b_players:
+		if p and is_instance_valid(p):
+			all_players.append(p)
+	spirit_system.initialize(self, all_players, ball_node)
+
+	for player: CharacterBody2D in team_a_players + team_b_players:
 		if player and is_instance_valid(player):
-			player.visible = false
+			var skill_ids: Array[String] = player.get_equipped_skills()
+			var pid: int = player.get_instance_id()
+			spirit_system.set_player_skills(pid, skill_ids)
+
+			if not player.skill_used.is_connected(_on_player_skill_used):
+				player.skill_used.connect(_on_player_skill_used)
+
+	print("[BattleManager] 元灵技能系统初始化完成")
+
+
+func _on_player_skill_used(skill_id: String, skill_data: Dictionary) -> void:
+	"""球员使用技能 → 转发到 SpiritSystemManager"""
+	var caster: CharacterBody2D = input_mgr.controlled_player
+	if not caster:
+		return
+	var player_id: int = caster.get_instance_id()
+	if spirit_system and spirit_system.has_method("use_skill"):
+		spirit_system.use_skill(player_id, skill_id)
+
+
+func _show_preparation_ui() -> void:
+	"""显示备战界面，隐藏比赛场地"""
+	# 隐藏比赛场地(只显示备战窗口)
+	if field_zone:
+		field_zone.visible = false
+	if ball_node:
+		ball_node.visible = false
+	for p: CharacterBody2D in team_a_players + team_b_players:
+		if p and is_instance_valid(p):
+			p.visible = false
 	if penalty_walls:
 		penalty_walls.visible = false
 	# 隐藏瞄准线等视觉元素
@@ -1018,12 +1139,21 @@ func _on_player_substituted(index: int, new_char_id: String) -> void:
 
 
 func _on_spirit_changed(index: int, spirit_id: String) -> void:
-	"""元灵切换"""
+	"""元灵切换 → 更新 spirit_system 技能注册"""
 	print("[Match] 位置%d切换元灵为 %s" % [index, spirit_id])
 
-	# TODO: 实现元灵切换逻辑
-	# 1. 应用元灵属性到球员
-	# 2. 更新备战界面
+	if index < 0 or index >= team_a_players.size():
+		return
+	var player: CharacterBody2D = team_a_players[index]
+	if not player or not is_instance_valid(player):
+		return
+
+	# 更新 spirit_system 中该球员的技能注册
+	if spirit_system and spirit_system.has_method("set_player_skills"):
+		var pid: int = player.get_instance_id()
+		var skill_ids: Array[String] = player.get_equipped_skills()
+		spirit_system.set_player_skills(pid, skill_ids)
+		print("[BattleManager] 元灵切换后更新技能: %s" % str(skill_ids))
 
 
 func _on_prep_match_started() -> void:

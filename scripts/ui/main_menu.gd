@@ -76,7 +76,8 @@ func _on_start_match() -> void:
 
 
 func _on_open_characters() -> void:
-	var char_ui: Control = load("res://scripts/ui/character_system.gd").new()
+	var CharacterSystemClass = load("res://scripts/ui/character_system.gd")
+	var char_ui: Control = CharacterSystemClass.new()
 	add_child(char_ui)
 
 
@@ -114,7 +115,8 @@ func _on_open_base() -> void:
 
 
 func _on_open_dev_settings() -> void:
-	var dev_panel: Control = load("res://scripts/dev_tools/dev_settings_main.gd").new()
+	var DevSettingsClass = load("res://scripts/dev_tools/dev_settings_main.gd")
+	var dev_panel: Control = DevSettingsClass.new()
 	dev_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dev_panel.closed.connect(dev_panel.queue_free)
 	add_child(dev_panel)

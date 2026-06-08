@@ -801,6 +801,14 @@ func _open_skill_edit_panel(skill_id: String) -> void:
 	var selected_tags: Array = skill_data.get("tags", []).duplicate(true)
 	var tag_params_data: Dictionary = skill_data.get("tag_params", {}).duplicate(true)
 
+	# 标签参数输入区容器（选中标签后动态填充）
+	var tag_params_container := VBoxContainer.new()
+	tag_params_container.name = "TagParamsContainer"
+	tag_params_container.add_theme_constant_override("separation", 4)
+
+	# 标签参数填写区放在标签按钮前面（点击标签后参数在上面展开）
+	popup_vbox.add_child(tag_params_container)
+
 	# 按category分组
 	var categories: Dictionary = {}
 	for tag in all_tags:
@@ -835,8 +843,12 @@ func _open_skill_edit_panel(skill_id: String) -> void:
 				tag_btn.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
 
 			# 点击切换选中状态
-			tag_btn.pressed.connect(_on_tag_toggle.bind(tag_btn, tag_id, selected_tags))
+			tag_btn.pressed.connect(_on_tag_toggle.bind(tag_btn, tag_id, selected_tags, tag_params_container, tag_params_data, all_tags))
 			tag_grid.add_child(tag_btn)
+
+	# 初始化已选中标签的参数框
+	for tag_id in selected_tags:
+		_add_tag_param_fields(tag_id, tag_params_container, tag_params_data, all_tags)
 
 	# 分隔线
 	var sep_confirm := HSeparator.new()
@@ -879,13 +891,248 @@ func _open_skill_edit_panel(skill_id: String) -> void:
 	popup_vbox.add_child(confirm_row)
 
 
-func _on_tag_toggle(btn: Button, tag_id: String, selected_tags: Array) -> void:
+func _on_tag_toggle(btn: Button, tag_id: String, selected_tags: Array, container: VBoxContainer, tag_params_data: Dictionary, tags_source: Array) -> void:
 	if tag_id in selected_tags:
 		selected_tags.erase(tag_id)
 		btn.add_theme_color_override("font_color", Color.WHITE)
+		_remove_tag_param_fields(tag_id, container)
 	else:
 		selected_tags.append(tag_id)
 		btn.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
+		_add_tag_param_fields(tag_id, container, tag_params_data, tags_source)
+
+
+func _add_tag_param_fields(tag_id: String, container: VBoxContainer, tag_params_data: Dictionary, tags_source: Array) -> void:
+	"""为选中的标签添加参数填写框"""
+	# 查找标签数据
+	var tag_data: Dictionary = {}
+	for t in tags_source:
+		if str(t.get("id", "")) == tag_id:
+			tag_data = t
+			break
+	if tag_data.is_empty():
+		print("[DevSpirit] _add_tag_param_fields: 找不到标签数据 id=%s tags_source.size=%d" % [tag_id, tags_source.size()])
+		return
+
+	var param_names: Array = tag_data.get("params", [])
+	if param_names.is_empty():
+		return
+
+	# 已有则跳过
+	if container.has_node("ParamSection_" + tag_id):
+		return
+
+	print("[DevSpirit] 创建参数填写区: tag=%s params=%s" % [tag_id, param_names])
+
+	# 创建参数区块
+	var section := VBoxContainer.new()
+	section.name = "ParamSection_" + tag_id
+	section.add_theme_constant_override("separation", 2)
+
+	# 标题：标签名
+	var header := Label.new()
+	header.text = "▼ " + str(tag_data.get("name", tag_id)) + " 参数"
+	header.add_theme_font_size_override("font_size", 14)
+	header.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
+	section.add_child(header)
+
+	# 获取已保存的参数值
+	var saved_params: Dictionary = tag_params_data.get(tag_id, {})
+
+	# 参数中文备注映射
+	var param_labels: Dictionary = {
+		"shape": "形状",
+		"width": "矩形宽度",
+		"height": "矩形高度",
+		"radius": "半径(圆/月牙)",
+		"arc_angle": "月牙弧度角(度)",
+		"hp": "防御生命值",
+		"attack_consume_rate": "攻击消耗速率(/s)",
+		"speed_consume_rate": "球速消耗速率(px/s)",
+		"max_count": "最多同时存在数",
+		"duration": "持续秒数",
+		"mouse_ops": "鼠标操作次数",
+		"clear_count": "一次清除几个",
+		"friction": "摩擦系数(0.3~2.0)",
+		"bounciness": "弹性系数(0~1)",
+		"value": "数值",
+		"multiplier": "倍率",
+		"position": "坐标 x,y",
+		"size": "尺寸 宽,高",
+		"boost_multiplier": "加速倍率",
+		"slow_multiplier": "减速倍率",
+		"damage_value": "伤害值",
+		"damage_pct": "伤害比例(0~1)",
+		"turn_speed": "转向速度",
+		"return_distance": "返回距离比(0~1)",
+		"zone_type": "区域类型",
+		"zone_id": "区域ID",
+		"target": "目标(self/ally/enemy)",
+		"target_id": "目标ID",
+		"target_position": "目标坐标 x,y",
+		"skill_id": "技能ID",
+		"bonus_uses": "增加使用次数",
+		"illusion_type": "幻象类型",
+		"illusion_id": "幻象ID",
+	}
+
+	for param_name in param_names:
+		var pname: String = str(param_name)
+		var display_name: String = param_labels.get(pname, pname)
+
+		var row := HBoxContainer.new()
+		row.custom_minimum_size = Vector2(0, 28)
+
+		var lbl := Label.new()
+		lbl.text = display_name + ":"
+		lbl.custom_minimum_size = Vector2(160, 24)
+		lbl.add_theme_font_size_override("font_size", 13)
+		lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+		row.add_child(lbl)
+
+		# shape 参数用下拉选择
+		if pname == "shape":
+			var option := OptionButton.new()
+			option.name = "Input_shape"
+			option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			option.add_theme_font_size_override("font_size", 13)
+			option.add_item("矩形(rect)", 0)
+			option.add_item("圆形(circle)", 1)
+			option.add_item("月牙(crescent)", 2)
+			# 已保存的值
+			var saved_val = saved_params.get("shape", _get_param_default(tag_id, "shape"))
+			match str(saved_val):
+				"circle": option.selected = 1
+				"crescent": option.selected = 2
+				_: option.selected = 0
+			row.add_child(option)
+		else:
+			var input := LineEdit.new()
+			input.name = "Input_" + pname
+			input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			input.add_theme_font_size_override("font_size", 13)
+			# 填入已保存的值
+			if saved_params.has(pname):
+				var val = saved_params[pname]
+				if val is float:
+					input.text = str(snapped(val, 0.01))
+				else:
+					input.text = str(val)
+			else:
+				input.text = _get_param_default(tag_id, pname)
+			input.placeholder_text = _get_param_hint(tag_id, pname)
+			row.add_child(input)
+
+		section.add_child(row)
+
+	container.add_child(section)
+
+
+func _remove_tag_param_fields(tag_id: String, container: VBoxContainer) -> void:
+	"""移除标签的参数填写框"""
+	var section = container.get_node_or_null("ParamSection_" + tag_id)
+	if section:
+		container.remove_child(section)
+		section.queue_free()
+
+
+func _get_param_default(tag_id: String, param_name: String) -> String:
+	"""获取参数默认值"""
+	var defaults: Dictionary = {
+		"field_obs_add": {
+			"shape": "rect",
+			"width": "80",
+			"height": "30",
+			"radius": "40",
+			"arc_angle": "120",
+			"hp": "50",
+			"attack_consume_rate": "20",
+			"speed_consume_rate": "20",
+			"max_count": "3",
+			"duration": "15",
+			"mouse_ops": "3",
+		},
+		"field_obs_clear": {
+			"clear_count": "2",
+			"mouse_ops": "2",
+		},
+		"field_terra_change": {
+			"friction": "1",
+			"bounciness": "0",
+			"duration": "10",
+		},
+		"field_zone_boost": {
+			"position": "0,0",
+			"size": "200,200",
+			"boost_multiplier": "1.5",
+			"duration": "10",
+		},
+		"field_zone_slow": {
+			"position": "0,0",
+			"size": "200,200",
+			"slow_multiplier": "0.5",
+			"duration": "10",
+		},
+		"field_zone_danger": {
+			"position": "0,0",
+			"size": "200,200",
+			"damage_value": "10",
+			"duration": "10",
+		},
+		"field_zone_safe": {
+			"position": "0,0",
+			"size": "200,200",
+			"duration": "10",
+		},
+		"ball_dmg_up_pct": {"value": "50"},
+		"ball_dmg_down_pct": {"value": "30"},
+		"ball_dmg_up_flat": {"value": "10"},
+		"ball_dmg_down_flat": {"value": "5"},
+		"ball_speed_up_pct": {"multiplier": "1.8"},
+		"ball_speed_down_pct": {"multiplier": "2.0"},
+		"ball_speed_up_flat": {"value": "100"},
+		"ball_speed_down_flat": {"value": "50"},
+		"ball_range_up": {"radius": "80", "damage_pct": "0.5"},
+		"ball_range_down": {"multiplier": "0.5"},
+		"ball_tracking": {"turn_speed": "3"},
+		"ball_boomerang": {"return_distance": "0.5"},
+	}
+	if defaults.has(tag_id) and defaults[tag_id].has(param_name):
+		return defaults[tag_id][param_name]
+	return ""
+
+
+func _get_param_hint(tag_id: String, param_name: String) -> String:
+	"""获取参数输入提示"""
+	var hints: Dictionary = {
+		"shape": "rect / circle / crescent",
+		"width": "矩形宽度",
+		"height": "矩形高度",
+		"radius": "半径(AOE/圆形/月牙)",
+		"arc_angle": "月牙弧度角(度)",
+		"hp": "防御生命值",
+		"attack_consume_rate": "球攻击力消耗速率(/s)",
+		"speed_consume_rate": "球速消耗速率(px/s)",
+		"max_count": "最多同时存在数",
+		"duration": "持续秒数",
+		"mouse_ops": "鼠标操作次数",
+		"clear_count": "一次清除几个",
+		"friction": "摩擦系数(0.3~2.0)",
+		"bounciness": "弹性系数(0~1)",
+		"value": "数值",
+		"multiplier": "倍率",
+		"position": "x,y",
+		"size": "宽,高",
+		"boost_multiplier": "加速倍率",
+		"slow_multiplier": "减速倍率",
+		"damage_value": "伤害值",
+		"damage_pct": "伤害比例(0~1)",
+		"turn_speed": "转向速度",
+		"return_distance": "返回距离比(0~1)",
+	}
+	if hints.has(param_name):
+		return hints[param_name]
+	return ""
 
 
 func _on_skill_confirm(
@@ -908,7 +1155,42 @@ func _on_skill_confirm(
 	skill_data["type"] = "active" if type_option.selected == 0 else "passive"
 	skill_data["icon_color"] = ic_edit.text
 	skill_data["tags"] = selected_tags.duplicate()
-	skill_data["tag_params"] = tag_params_data.duplicate()
+
+	# 收集标签参数（从UI输入框读取）
+	var collected_params: Dictionary = {}
+	if skill_edit_panel:
+		var popup_scroll = skill_edit_panel.get_child(1)  # ScrollContainer
+		if popup_scroll:
+			var popup_vbox = popup_scroll.get_child(0)  # VBoxContainer
+			if popup_vbox:
+				var params_container = popup_vbox.get_node_or_null("TagParamsContainer")
+				if params_container:
+					for section in params_container.get_children():
+						if section.name.begins_with("ParamSection_"):
+							var tid: String = section.name.substr(13)  # 去掉 "ParamSection_"
+							var section_params: Dictionary = {}
+							for child in section.get_children():
+								if child is HBoxContainer:
+									for sub in child.get_children():
+										if sub is OptionButton and sub.name.begins_with("Input_"):
+											var pkey_ob: String = sub.name.substr(6)
+											var shape_list: Array = ["rect", "circle", "crescent"]
+											var ob_idx: int = sub.selected
+											if ob_idx >= 0 and ob_idx < shape_list.size():
+												section_params[pkey_ob] = shape_list[ob_idx]
+										elif sub is LineEdit and sub.name.begins_with("Input_"):
+											var pkey: String = sub.name.substr(6)  # 去掉 "Input_"
+											var pval: String = sub.text.strip_edges()
+											if pval != "":
+												# 尝试转数字
+												if pval.is_valid_float():
+													section_params[pkey] = float(pval)
+												else:
+													section_params[pkey] = pval
+							if section_params.size() > 0:
+								collected_params[tid] = section_params
+
+	skill_data["tag_params"] = collected_params
 
 	# 数值
 	for key in skill_sliders:

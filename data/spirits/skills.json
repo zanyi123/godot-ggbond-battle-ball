@@ -1,27 +1,49 @@
 {
-  "skills": [
-    {
-      "id": "skill_jingang_1",
-      "name": "猛虎金刚闪",
-      "element": "金刚",
-      "type": "active",
-      "unlock_level": 1,
-      "unlock_cost": 0,
-      "energy_cost": 30,
-      "cooldown": 8.0,
-      "description": "金刚元灵奥义，凝聚金刚之力猛虎般冲击前方，造成大范围伤害",
-      "detail": "伤害范围：前方扇形120度\n基础伤害：攻击力×1.5\n元灵能量消耗：30\n冷却时间：8秒",
-      "icon_color": "#FFD700",
-      "tags": ["ball_dmg_up_pct", "ball_range_up"],
-      "tag_params": {
-        "ball_dmg_up_pct": {
-          "value": 50
-        },
-        "ball_range_up": {
-          "radius": 80,
-          "damage_pct": 0.5
-        }
-      }
-    }
-  ]
+	"skills": [
+		{
+			"cooldown": 8.0,
+			"description": "金刚元灵奥义，凝聚金刚之力猛虎般冲击前方，造成大范围伤害",
+			"detail": "伤害范围：前方扇形120度\n基础伤害：攻击力×1.5\n元灵能量消耗：30\n冷却时间：8秒",
+			"element": "金刚",
+			"energy_cost": 30.0,
+			"icon_color": "#FFD700",
+			"id": "skill_jingang_1",
+			"name": "猛虎金刚闪",
+			"tag_params": {
+				"ball_dmg_up_pct": {
+					"value": 50.0
+				},
+				"ball_range_up": {
+					"damage_pct": 0.5,
+					"radius": 80.0
+				}
+			},
+			"tags": [
+				"ball_dmg_up_pct",
+				"ball_range_up"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"cooldown": 10.0,
+			"description": "新建技能",
+			"detail": "技能详细说明",
+			"element": "大地",
+			"energy_cost": 20,
+			"icon_color": "#FFFFFF",
+			"id": "skill_大地_1",
+			"name": "岩石墙",
+			"tag_params": {
+
+			},
+			"tags": [
+				"field_obs_add"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
+		}
+	]
 }

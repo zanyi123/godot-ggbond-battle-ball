@@ -73,7 +73,8 @@ func _build_ui() -> void:
 
 func _open_player_panel() -> void:
 	_clear_current_panel()
-	var panel: Control = load("res://scripts/dev_tools/dev_player_panel.gd").new()
+	var DevPlayerPanelClass = load("res://scripts/dev_tools/dev_player_panel.gd")
+	var panel: Control = DevPlayerPanelClass.new()
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	panel.closed.connect(_on_sub_panel_closed)
 	add_child(panel)
@@ -82,7 +83,8 @@ func _open_player_panel() -> void:
 
 func _open_spirit_panel() -> void:
 	_clear_current_panel()
-	var panel: Control = load("res://scripts/dev_tools/dev_spirit_panel.gd").new()
+	var DevSpiritPanelClass = load("res://scripts/dev_tools/dev_spirit_panel.gd")
+	var panel: Control = DevSpiritPanelClass.new()
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	panel.closed.connect(_on_sub_panel_closed)
 	add_child(panel)

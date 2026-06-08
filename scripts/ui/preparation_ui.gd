@@ -112,6 +112,12 @@ func _build_player_card(index: int, x: float, y: float) -> void:
 	var card := Panel.new()
 	card.position = Vector2(x, y)
 	card.size = Vector2(370, 160)
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color(0.15, 0.15, 0.22, 0.95)
+	card_style.border_color = Color(0.3, 0.7, 1.0, 0.5)
+	card_style.set_border_width_all(2)
+	card_style.set_corner_radius_all(8)
+	card.add_theme_stylebox_override("panel", card_style)
 	add_child(card)
 	
 	# 位置标签
@@ -222,6 +228,13 @@ func _build_spirit_card(index: int, x: float, y: float) -> void:
 	var card := Panel.new()
 	card.position = Vector2(x, y)
 	card.size = Vector2(370, 140)
+	# 卡片样式：深色背景+亮边框
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color(0.15, 0.15, 0.22, 0.95)
+	card_style.border_color = Color(1.0, 0.6, 0.2, 0.6)
+	card_style.set_border_width_all(2)
+	card_style.set_corner_radius_all(8)
+	card.add_theme_stylebox_override("panel", card_style)
 	add_child(card)
 	
 	# 位置标签
@@ -247,25 +260,30 @@ func _build_spirit_card(index: int, x: float, y: float) -> void:
 	attr_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
 	card.add_child(attr_label)
 	
-	# 更换按钮
+	# 更换按钮（加大尺寸和高亮）
 	var change_btn := Button.new()
 	change_btn.text = "更换元灵"
-	change_btn.position = Vector2(10, 85)
-	change_btn.size = Vector2(100, 30)
+	change_btn.position = Vector2(10, 88)
+	change_btn.size = Vector2(140, 38)
+	change_btn.add_theme_font_size_override("font_size", 16)
 	change_btn.pressed.connect(_on_change_spirit.bind(index))
 	card.add_child(change_btn)
 	
-	# 元灵图标占位
-	var icon_rect := ColorRect.new()
-	icon_rect.position = Vector2(280, 15)
-	icon_rect.size = Vector2(70, 70)
-	icon_rect.color = Color(0.3, 0.3, 0.4)
-	card.add_child(icon_rect)
+	# 元灵图标（用Panel显示元素颜色圆形）
+	var icon_panel := Panel.new()
+	icon_panel.position = Vector2(280, 15)
+	icon_panel.size = Vector2(70, 70)
+	var icon_style := StyleBoxFlat.new()
+	icon_style.bg_color = Color(0.3, 0.3, 0.4)
+	icon_style.set_corner_radius_all(35)
+	icon_panel.add_theme_stylebox_override("panel", icon_style)
+	card.add_child(icon_panel)
 	
 	var icon_label := Label.new()
-	icon_label.text = "元灵\n图标"
-	icon_label.position = Vector2(285, 25)
-	icon_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	icon_label.text = "未\n装备"
+	icon_label.position = Vector2(285, 28)
+	icon_label.add_theme_font_size_override("font_size", 12)
+	icon_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
 	card.add_child(icon_label)
 	
 	spirit_widgets.append({
@@ -273,7 +291,8 @@ func _build_spirit_card(index: int, x: float, y: float) -> void:
 		"current_label": current_label,
 		"attr_label": attr_label,
 		"change_btn": change_btn,
-		"icon_rect": icon_rect
+		"icon_panel": icon_panel,
+		"icon_label": icon_label
 	})
 
 
@@ -417,9 +436,224 @@ func _on_substitute_player(index: int) -> void:
 
 
 func _on_change_spirit(index: int) -> void:
-	"""更换元灵"""
+	"""更换元灵：弹出元灵选择弹窗"""
 	print("[备战] 位置%d更换元灵" % (index + 1))
-	spirit_changed.emit(index, "")
+	_open_spirit_select_popup(index)
+
+
+var _spirit_popup_player_index: int = -1
+var _spirit_popup: Control = null
+
+
+func _open_spirit_select_popup(player_index: int) -> void:
+	"""打开元灵选择弹窗"""
+	_close_spirit_popup()
+	_spirit_popup_player_index = player_index
+
+	# 先加载元灵数据
+	var spirits: Array = []
+	if DataManager:
+		spirits = DataManager.spirits
+
+	var popup := Control.new()
+	popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	popup.name = "SpiritSelectPopup"
+	add_child(popup)
+	_spirit_popup = popup
+
+	# 半透明遮罩
+	var overlay := ColorRect.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.color = Color(0, 0, 0, 0.6)
+	overlay.gui_input.connect(_on_spirit_popup_bg_input)
+	popup.add_child(overlay)
+
+	# 弹窗面板（根据元灵数量调整高度）
+	var popup_h: float = 160.0 + spirits.size() * 120.0 + 60.0
+	var panel := Panel.new()
+	panel.offset_left = 150
+	panel.offset_top = 50
+	panel.offset_right = 1050
+	panel.offset_bottom = min(popup_h + 50, 700)
+	popup.add_child(panel)
+
+	# 滚动容器
+	var scroll := ScrollContainer.new()
+	scroll.offset_left = 160
+	scroll.offset_top = 90
+	scroll.offset_right = 1040
+	scroll.offset_bottom = min(popup_h + 40, 690)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	popup.add_child(scroll)
+
+	var vbox := VBoxContainer.new()
+	vbox.custom_minimum_size = Vector2(860, 0)
+	vbox.add_theme_constant_override("separation", 8)
+	scroll.add_child(vbox)
+
+	# 元灵卡片列表（spirits已在上部加载）
+
+	var element_colors: Dictionary = {
+		"金刚": Color(0.85, 0.75, 0.3),
+		"大地": Color(0.7, 0.55, 0.35),
+		"雷火": Color(1.0, 0.4, 0.2),
+		"冰雪": Color(0.4, 0.8, 1.0),
+		"草木": Color(0.3, 0.8, 0.3),
+		"梦幻": Color(0.7, 0.5, 0.9),
+	}
+
+	for i in range(spirits.size()):
+		var s: Dictionary = spirits[i]
+		var s_name: String = str(s.get("name", "?"))
+		var s_elem: String = str(s.get("element", "?"))
+		var s_desc: String = str(s.get("description", ""))
+		var s_skills: Array = s.get("skills", [])
+		var elem_color: Color = element_colors.get(s_elem, Color(0.6, 0.6, 0.6))
+
+		# 卡片容器
+		var card := Panel.new()
+		card.custom_minimum_size = Vector2(850, 100)
+		vbox.add_child(card)
+
+		# 左侧：元素颜色圆形头像
+		var avatar := Panel.new()
+		avatar.size = Vector2(60, 60)
+		avatar.position = Vector2(10, 20)
+		var avatar_style := StyleBoxFlat.new()
+		avatar_style.bg_color = elem_color
+		avatar_style.set_corner_radius_all(30)
+		avatar.add_theme_stylebox_override("panel", avatar_style)
+		card.add_child(avatar)
+
+		var avatar_text := Label.new()
+		avatar_text.text = s_elem
+		avatar_text.position = Vector2(14, 35)
+		avatar_text.add_theme_font_size_override("font_size", 13)
+		avatar_text.add_theme_color_override("font_color", Color.WHITE)
+		card.add_child(avatar_text)
+
+		# 中间：名称 + 描述 + 技能列表
+		var name_lbl := Label.new()
+		name_lbl.text = s_name + "  [" + s_elem + "]"
+		name_lbl.position = Vector2(80, 8)
+		name_lbl.add_theme_font_size_override("font_size", 16)
+		name_lbl.add_theme_color_override("font_color", elem_color)
+		card.add_child(name_lbl)
+
+		var desc_lbl := Label.new()
+		desc_lbl.text = s_desc
+		desc_lbl.position = Vector2(80, 30)
+		desc_lbl.size = Vector2(500, 20)
+		desc_lbl.add_theme_font_size_override("font_size", 12)
+		desc_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+		card.add_child(desc_lbl)
+
+		# 技能列表
+		var skill_names: String = ""
+		for sid in s_skills:
+			var sd: Dictionary = DataManager.get_skill_by_id(str(sid))
+			if not sd.is_empty():
+				if skill_names != "":
+					skill_names += " | "
+				skill_names += str(sd.get("name", str(sid)))
+			else:
+				if skill_names != "":
+					skill_names += " | "
+				skill_names += str(sid)
+		var skills_lbl := Label.new()
+		skills_lbl.text = "技能: " + (skill_names if skill_names != "" else "无")
+		skills_lbl.position = Vector2(80, 52)
+		skills_lbl.size = Vector2(500, 18)
+		skills_lbl.add_theme_font_size_override("font_size", 12)
+		skills_lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
+		card.add_child(skills_lbl)
+
+		# 右侧：选择按钮
+		var sel_btn := Button.new()
+		sel_btn.text = "选择"
+		sel_btn.position = Vector2(760, 35)
+		sel_btn.size = Vector2(80, 32)
+		sel_btn.add_theme_font_size_override("font_size", 14)
+		sel_btn.pressed.connect(_on_spirit_selected.bind(s))
+		card.add_child(sel_btn)
+
+	# 关闭按钮
+	var close_btn := Button.new()
+	close_btn.text = "关闭"
+	close_btn.position = Vector2(560, min(popup_h + 30, 670))
+	close_btn.size = Vector2(80, 30)
+	close_btn.pressed.connect(_close_spirit_popup)
+	popup.add_child(close_btn)
+
+
+func _on_spirit_selected(spirit_data: Dictionary) -> void:
+	"""选中元灵：更新球员并刷新UI"""
+	var idx: int = _spirit_popup_player_index
+	if idx < 0 or idx >= team_a_players.size():
+		_close_spirit_popup()
+		return
+
+	var player: CharacterBody2D = team_a_players[idx]
+	if not player or not is_instance_valid(player):
+		_close_spirit_popup()
+		return
+
+	player.equip_spirit(spirit_data)
+	_update_spirit_widget(idx, spirit_data)
+	spirit_changed.emit(idx, str(spirit_data.get("id", "")))
+	print("[备战] 位置%d 装备元灵: %s" % [idx + 1, spirit_data.get("name", "?")])
+	_close_spirit_popup()
+
+
+func _update_spirit_widget(index: int, spirit_data: Dictionary) -> void:
+	"""更新元灵卡片显示"""
+	if index >= spirit_widgets.size():
+		return
+	var w: Dictionary = spirit_widgets[index]
+	w.current_label.text = "当前: " + str(spirit_data.get("name", "?")) + " [" + str(spirit_data.get("element", "?")) + "]"
+	var skills: Array = spirit_data.get("skills", [])
+	var skill_names: String = ""
+	for sid in skills:
+		var sd: Dictionary = DataManager.get_skill_by_id(str(sid))
+		if not sd.is_empty():
+			if skill_names != "":
+				skill_names += ", "
+			skill_names += str(sd.get("name", str(sid)))
+	w.attr_label.text = "技能: " + (skill_names if skill_names != "" else "无")
+
+	# 更新图标颜色和文字
+	var s_elem: String = str(spirit_data.get("element", "?"))
+	var element_colors: Dictionary = {
+		"金刚": Color(0.85, 0.75, 0.3),
+		"大地": Color(0.7, 0.55, 0.35),
+		"雷火": Color(1.0, 0.4, 0.2),
+		"冰雪": Color(0.4, 0.8, 1.0),
+		"草木": Color(0.3, 0.8, 0.3),
+		"梦幻": Color(0.7, 0.5, 0.9),
+	}
+	var elem_color: Color = element_colors.get(s_elem, Color(0.6, 0.6, 0.6))
+	if w.icon_panel:
+		var new_style := StyleBoxFlat.new()
+		new_style.bg_color = elem_color
+		new_style.set_corner_radius_all(35)
+		w.icon_panel.add_theme_stylebox_override("panel", new_style)
+	if w.icon_label:
+		w.icon_label.text = s_elem + "\n元灵"
+		w.icon_label.position = Vector2(287, 28)
+
+
+func _on_spirit_popup_bg_input(event: InputEvent) -> void:
+	"""点击遮罩关闭弹窗"""
+	if event is InputEventMouseButton and event.pressed:
+		_close_spirit_popup()
+
+
+func _close_spirit_popup() -> void:
+	"""关闭元灵选择弹窗"""
+	if _spirit_popup and is_instance_valid(_spirit_popup):
+		_spirit_popup.queue_free()
+	_spirit_popup = null
+	_spirit_popup_player_index = -1
 
 
 func _on_start_match() -> void:

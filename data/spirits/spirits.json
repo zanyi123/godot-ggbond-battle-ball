@@ -1,64 +1,86 @@
 {
-  "spirits": [
-    {
-      "id": "spirit_jingang",
-      "name": "阿五",
-      "element": "金刚",
-      "level": 1,
-      "max_level": 10,
-      "description": "金刚元灵，刚猛无比，擅长近战爆发",
-      "icon_color": "#FFD700",
-      "skills": ["skill_jingang_1", "skill_jingang_2", "skill_jingang_3"]
-    },
-    {
-      "id": "spirit_dadi",
-      "name": "岩灵",
-      "element": "大地",
-      "level": 1,
-      "max_level": 10,
-      "description": "大地元灵，坚如磐石，擅长防御护盾",
-      "icon_color": "#8B4513",
-      "skills": ["skill_dadi_1", "skill_dadi_2"]
-    },
-    {
-      "id": "spirit_leihuo",
-      "name": "炎雷",
-      "element": "雷火",
-      "level": 1,
-      "max_level": 10,
-      "description": "雷火元灵，迅如闪电，擅长远程打击",
-      "icon_color": "#FF4500",
-      "skills": ["skill_leihuo_1", "skill_leihuo_2", "skill_leihuo_3"]
-    },
-    {
-      "id": "spirit_bingxue",
-      "name": "霜灵",
-      "element": "冰雪",
-      "level": 1,
-      "max_level": 10,
-      "description": "冰雪元灵，冰封千里，擅长控制减速",
-      "icon_color": "#87CEEB",
-      "skills": ["skill_bingxue_1", "skill_bingxue_2"]
-    },
-    {
-      "id": "spirit_caomu",
-      "name": "藤灵",
-      "element": "草木",
-      "level": 1,
-      "max_level": 10,
-      "description": "草木元灵，生生不息，擅长恢复辅助",
-      "icon_color": "#32CD32",
-      "skills": ["skill_caomu_1", "skill_caomu_2", "skill_caomu_3"]
-    },
-    {
-      "id": "spirit_menghuan",
-      "name": "幻灵",
-      "element": "梦幻",
-      "level": 1,
-      "max_level": 10,
-      "description": "梦幻元灵，虚实难辨，擅长幻术干扰",
-      "icon_color": "#DA70D6",
-      "skills": ["skill_menghuan_1", "skill_menghuan_2"]
-    }
-  ]
+	"spirits": [
+		{
+			"description": "金刚元灵，刚猛无比，擅长近战爆发",
+			"element": "金刚",
+			"icon_color": "#FFD700",
+			"id": "spirit_jingang",
+			"level": 1.0,
+			"max_level": 10.0,
+			"name": "阿五",
+			"skills": [
+				"skill_jingang_1",
+				"skill_jingang_2",
+				"skill_jingang_3"
+			]
+		},
+		{
+			"description": "大地元灵，坚如磐石，擅长防御护盾",
+			"element": "大地",
+			"icon_color": "#8B4513",
+			"id": "spirit_dadi",
+			"level": 1.0,
+			"max_level": 10.0,
+			"name": "岩灵",
+			"skills": [
+				"skill_dadi_1",
+				"skill_dadi_2",
+				"skill_大地_1"
+			]
+		},
+		{
+			"description": "雷火元灵，迅如闪电，擅长远程打击",
+			"element": "雷火",
+			"icon_color": "#FF4500",
+			"id": "spirit_leihuo",
+			"level": 1.0,
+			"max_level": 10.0,
+			"name": "炎雷",
+			"skills": [
+				"skill_leihuo_1",
+				"skill_leihuo_2",
+				"skill_leihuo_3"
+			]
+		},
+		{
+			"description": "冰雪元灵，冰封千里，擅长控制减速",
+			"element": "冰雪",
+			"icon_color": "#87CEEB",
+			"id": "spirit_bingxue",
+			"level": 1.0,
+			"max_level": 10.0,
+			"name": "霜灵",
+			"skills": [
+				"skill_bingxue_1",
+				"skill_bingxue_2"
+			]
+		},
+		{
+			"description": "草木元灵，生生不息，擅长恢复辅助",
+			"element": "草木",
+			"icon_color": "#32CD32",
+			"id": "spirit_caomu",
+			"level": 1.0,
+			"max_level": 10.0,
+			"name": "藤灵",
+			"skills": [
+				"skill_caomu_1",
+				"skill_caomu_2",
+				"skill_caomu_3"
+			]
+		},
+		{
+			"description": "梦幻元灵，虚实难辨，擅长幻术干扰",
+			"element": "梦幻",
+			"icon_color": "#DA70D6",
+			"id": "spirit_menghuan",
+			"level": 1.0,
+			"max_level": 10.0,
+			"name": "幻灵",
+			"skills": [
+				"skill_menghuan_1",
+				"skill_menghuan_2"
+			]
+		}
+	]
 }

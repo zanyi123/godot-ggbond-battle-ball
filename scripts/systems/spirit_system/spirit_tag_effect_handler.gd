@@ -23,7 +23,10 @@ var _ball_mods: Dictionary = {
 	"dmg_flat": 0.0,        # 伤害固定加减
 	"speed_mult": 1.0,      # 速度倍率
 	"speed_flat": 0.0,      # 速度固定加减
+	"range_mult": 1.0,      # 飞行距离倍率
+	"range_flat": 0.0,      # 飞行距离固定加减
 	"penetrate": false,      # 穿透
+	"armor": 0.0,           # 护甲值（抵消伤害）
 	"tracking_target": null, # 追踪目标节点
 	"tracking_turn_speed": 0.0,
 	"boomerang": false,      # 回旋
@@ -31,10 +34,10 @@ var _ball_mods: Dictionary = {
 	"boomerang_return_dir": Vector2.ZERO,
 	"boomerang_dist": 0.0,
 	"lock_straight": false,  # 直行（禁用其他轨迹）
-	"aoe_radius": 0.0,       # AOE范围伤害半径（0=无AOE）
-	"aoe_damage_pct": 0.5,   # AOE伤害占原伤害比例
-	"lockon": false,         # 精准锁定
-	"spread": false,          # 扩散
+	"spread_done": false,    # 扩散已触发
+	"aoe_radius": 0.0,       # AOE半径
+	"aoe_damage_pct": 0.5,   # AOE伤害百分比
+	"lockon_target": null,   # 精准锁定目标
 }
 
 
@@ -49,42 +52,29 @@ func reset_ball_mods() -> void:
 	_ball_mods = {
 		"dmg_mult": 1.0, "dmg_flat": 0.0,
 		"speed_mult": 1.0, "speed_flat": 0.0,
-		"penetrate": false,
+		"range_mult": 1.0, "range_flat": 0.0,
+		"penetrate": false, "armor": 0.0,
 		"tracking_target": null, "tracking_turn_speed": 0.0,
 		"boomerang": false, "boomerang_triggered": false,
 		"boomerang_return_dir": Vector2.ZERO, "boomerang_dist": 0.0,
-		"lock_straight": false,
+		"lock_straight": false, "spread_done": false,
 		"aoe_radius": 0.0, "aoe_damage_pct": 0.5,
-		"lockon": false, "spread": false,
+		"lockon_target": null,
 	}
 
 ## 获取修饰后的球伤害
 func get_modified_ball_damage(base_damage: float) -> float:
-	return max(0.0, (base_damage + _ball_mods.dmg_flat) * _ball_mods.dmg_mult)
+	var result: float = (base_damage + _ball_mods.dmg_flat) * _ball_mods.dmg_mult
+	result = max(0.0, result - _ball_mods.armor)
+	return result
 
 ## 获取修饰后的球速度
 func get_modified_ball_speed(base_speed: float) -> float:
 	return (base_speed + _ball_mods.speed_flat) * _ball_mods.speed_mult
 
-## 是否有AOE范围伤害
-func has_ball_aoe() -> bool:
-	return _ball_mods.aoe_radius > 0.0
-
-## 获取AOE半径
-func get_ball_aoe_radius() -> float:
-	return _ball_mods.aoe_radius
-
-## 获取AOE伤害比例
-func get_ball_aoe_damage_pct() -> float:
-	return _ball_mods.aoe_damage_pct
-
-## 是否精准锁定
-func is_ball_lockon() -> bool:
-	return _ball_mods.lockon
-
-## 是否扩散
-func is_ball_spread() -> bool:
-	return _ball_mods.spread
+## 获取修饰后的飞行距离
+func get_modified_ball_range(base_range: float) -> float:
+	return (base_range + _ball_mods.range_flat) * _ball_mods.range_mult
 
 ## 球是否穿透
 func is_ball_penetrating() -> bool:
@@ -106,6 +96,18 @@ func get_tracking_target() -> Node:
 func get_tracking_turn_speed() -> float:
 	return _ball_mods.tracking_turn_speed
 
+## 球是否有AOE范围伤害
+func has_ball_aoe() -> bool:
+	return _ball_mods.has("aoe_radius") and _ball_mods.aoe_radius > 0.0
+
+## 获取AOE半径
+func get_ball_aoe_radius() -> float:
+	return _ball_mods.get("aoe_radius", 0.0)
+
+## 获取AOE伤害百分比
+func get_ball_aoe_damage_pct() -> float:
+	return _ball_mods.get("aoe_damage_pct", 0.5)
+
 ## 球回旋触发（ball.gd 飞到一半距离时调用）
 func trigger_boomerang(current_dir: Vector2) -> Vector2:
 	if _ball_mods.boomerang_triggered:
@@ -124,55 +126,52 @@ func apply_tag_effect(tag_id: String, params: Dictionary, caster_id: int) -> Dic
 
 	# === 对球效果 ===
 	match tag_id:
-		"ball_dmg_up_pct":
-			_apply_ball_dmg_up_pct(params)
+		"ball_dmg_up":
+			_apply_ball_dmg_up(params)
 			success = true
-		"ball_dmg_down_pct":
-			_apply_ball_dmg_down_pct(params)
-			success = true
-		"ball_dmg_up_flat":
-			_apply_ball_dmg_up_flat(params)
-			success = true
-		"ball_dmg_down_flat":
-			_apply_ball_dmg_down_flat(params)
-			success = true
-		"ball_speed_up_pct":
-			_apply_ball_speed_up_pct(params)
-			success = true
-		"ball_speed_down_pct":
-			_apply_ball_speed_down_pct(params)
-			success = true
-		"ball_speed_up_flat":
-			_apply_ball_speed_up_flat(params)
-			success = true
-		"ball_speed_down_flat":
-			_apply_ball_speed_down_flat(params)
-			success = true
-		"ball_tracking":
-			_apply_ball_tracking(params, caster_id)
-			success = true
-		"ball_avoid":
-			success = true
-		"ball_boomerang":
-			_apply_ball_boomerang(params)
-			success = true
-		"ball_straight":
-			_apply_ball_straight(params)
-			success = true
-		"ball_lockon":
-			_apply_ball_lockon(params, caster_id)
-			success = true
-		"ball_spread":
-			_apply_ball_spread(params)
+		"ball_dmg_down":
+			_apply_ball_dmg_down(params)
 			success = true
 		"ball_penetrate":
 			_apply_ball_penetrate(params)
+			success = true
+		"ball_armor":
+			_apply_ball_armor(params)
+			success = true
+		"ball_speed_up":
+			_apply_ball_speed_up(params)
+			success = true
+		"ball_speed_down":
+			_apply_ball_speed_down(params)
 			success = true
 		"ball_range_up":
 			_apply_ball_range_up(params)
 			success = true
 		"ball_range_down":
 			_apply_ball_range_down(params)
+			success = true
+		"ball_lockon":
+			_apply_ball_lockon(params, caster_id)
+			success = true
+		"ball_spread":
+			success = true  # 扩散在球碰撞时处理
+		"ball_tracking":
+			_apply_ball_tracking(params, caster_id)
+			success = true
+		"ball_avoid":
+			success = true  # 避障待场地系统
+		"ball_boomerang":
+			_apply_ball_boomerang(params)
+			success = true
+		"ball_straight":
+			_apply_ball_straight(params)
+			success = true
+		# 对场地标签
+		"field_obs_add":
+			_apply_field_obs_add(params)
+			success = true
+		"field_obs_clear":
+			_apply_field_obs_clear(params)
 			success = true
 		# 对场地/球员标签暂不实现
 		_:
@@ -266,127 +265,181 @@ func _get_nearest_enemy(caster: CharacterBody2D) -> CharacterBody2D:
 	return nearest
 
 
-## ==================== 对球效果实现 (17个) ====================
+## ==================== 对球效果实现 (14个) ====================
 
-## BALL-01 增伤(%) — params: {value}
-func _apply_ball_dmg_up_pct(params: Dictionary) -> void:
+## 01 增伤 — params: {value_type, value, duration}
+func _apply_ball_dmg_up(params: Dictionary) -> void:
 	var val: float = float(params.get("value", 0))
-	_ball_mods.dmg_mult += val / 100.0
-	print("[TagEffect] 增伤(%%): +%.0f%% → mult=%.2f" % [val, _ball_mods.dmg_mult])
+	var vtype: String = str(params.get("value_type", "percentage"))
+	var dur: float = float(params.get("duration", 0))
 
-## BALL-02 减伤(%) — params: {value}
-func _apply_ball_dmg_down_pct(params: Dictionary) -> void:
+	if vtype == "percentage":
+		_ball_mods.dmg_mult += val / 100.0
+	else:
+		_ball_mods.dmg_flat += val
+	print("[TagEffect] 增伤: type=%s val=%.1f mult=%.2f flat=%.1f" % [vtype, val, _ball_mods.dmg_mult, _ball_mods.dmg_flat])
+
+## 02 减伤
+func _apply_ball_dmg_down(params: Dictionary) -> void:
 	var val: float = float(params.get("value", 0))
-	_ball_mods.dmg_mult -= val / 100.0
+	var vtype: String = str(params.get("value_type", "percentage"))
+
+	if vtype == "percentage":
+		_ball_mods.dmg_mult -= val / 100.0
+	else:
+		_ball_mods.dmg_flat -= val
 	_ball_mods.dmg_mult = max(0.0, _ball_mods.dmg_mult)
-	print("[TagEffect] 减伤(%%): -%.0f%% → mult=%.2f" % [val, _ball_mods.dmg_mult])
+	print("[TagEffect] 减伤: mult=%.2f flat=%.1f" % [_ball_mods.dmg_mult, _ball_mods.dmg_flat])
 
-## BALL-03 增伤(固定) — params: {value}
-func _apply_ball_dmg_up_flat(params: Dictionary) -> void:
+## 03 穿透 — params: {duration}
+func _apply_ball_penetrate(params: Dictionary) -> void:
+	_ball_mods.penetrate = true
+	print("[TagEffect] 穿透: 启用")
+
+## 04 护甲 — params: {value_type, value, duration}
+func _apply_ball_armor(params: Dictionary) -> void:
 	var val: float = float(params.get("value", 0))
-	_ball_mods.dmg_flat += val
-	print("[TagEffect] 增伤(固定): +%.1f → flat=%.1f" % [val, _ball_mods.dmg_flat])
+	_ball_mods.armor += val
+	print("[TagEffect] 护甲: armor=%.1f" % _ball_mods.armor)
 
-## BALL-04 减伤(固定) — params: {value}
-func _apply_ball_dmg_down_flat(params: Dictionary) -> void:
-	var val: float = float(params.get("value", 0))
-	_ball_mods.dmg_flat -= val
-	print("[TagEffect] 减伤(固定): -%.1f → flat=%.1f" % [val, _ball_mods.dmg_flat])
-
-## BALL-05 加速(%) — params: {multiplier}
-func _apply_ball_speed_up_pct(params: Dictionary) -> void:
+## 05 加速 — params: {multiplier, fixed_value, duration}
+func _apply_ball_speed_up(params: Dictionary) -> void:
 	var mult: float = float(params.get("multiplier", 0))
+	var fixed: float = float(params.get("fixed_value", 0))
+
 	if mult > 0:
 		_ball_mods.speed_mult *= mult
-	print("[TagEffect] 球加速(%%): ×%.2f → mult=%.2f" % [mult, _ball_mods.speed_mult])
+	if fixed != 0:
+		_ball_mods.speed_flat += fixed
+	print("[TagEffect] 球加速: mult=%.2f flat=%.1f" % [_ball_mods.speed_mult, _ball_mods.speed_flat])
 
-## BALL-06 减速(%) — params: {multiplier}
-func _apply_ball_speed_down_pct(params: Dictionary) -> void:
+## 06 减速
+func _apply_ball_speed_down(params: Dictionary) -> void:
 	var mult: float = float(params.get("multiplier", 0))
+	var fixed: float = float(params.get("fixed_value", 0))
+
 	if mult > 0:
 		_ball_mods.speed_mult /= mult
+	if fixed != 0:
+		_ball_mods.speed_flat -= fixed
 	_ball_mods.speed_mult = max(0.1, _ball_mods.speed_mult)
-	print("[TagEffect] 球减速(%%): ÷%.2f → mult=%.2f" % [mult, _ball_mods.speed_mult])
+	print("[TagEffect] 球减速: mult=%.2f flat=%.1f" % [_ball_mods.speed_mult, _ball_mods.speed_flat])
 
-## BALL-07 加速(固定) — params: {value}
-func _apply_ball_speed_up_flat(params: Dictionary) -> void:
-	var val: float = float(params.get("value", 0))
-	_ball_mods.speed_flat += val
-	print("[TagEffect] 球加速(固定): +%.1f → flat=%.1f" % [val, _ball_mods.speed_flat])
+## 07 范围扩大 — params: {multiplier, duration}
+func _apply_ball_range_up(params: Dictionary) -> void:
+	var mult: float = float(params.get("multiplier", 0))
+	if mult > 0:
+		_ball_mods.range_mult *= mult
+	print("[TagEffect] 范围扩大: mult=%.2f" % _ball_mods.range_mult)
 
-## BALL-08 减速(固定) — params: {value}
-func _apply_ball_speed_down_flat(params: Dictionary) -> void:
-	var val: float = float(params.get("value", 0))
-	_ball_mods.speed_flat -= val
-	print("[TagEffect] 球减速(固定): -%.1f → flat=%.1f" % [val, _ball_mods.speed_flat])
+## 08 范围缩小
+func _apply_ball_range_down(params: Dictionary) -> void:
+	var mult: float = float(params.get("multiplier", 0))
+	if mult > 0:
+		_ball_mods.range_mult /= mult
+	_ball_mods.range_mult = max(0.1, _ball_mods.range_mult)
+	print("[TagEffect] 范围缩小: mult=%.2f" % _ball_mods.range_mult)
 
-## BALL-05 追踪 — 持续转向目标
+## 09 精准锁定 — 锁定最近敌人方向
+func _apply_ball_lockon(params: Dictionary, caster_id: int) -> void:
+	# 锁定在发球时处理：设置 ball_direction 指向最近敌人
+	var caster := _get_caster(caster_id)
+	if caster:
+		var target := _get_nearest_enemy(caster)
+		if target:
+			_ball_mods.lockon_target = target
+			print("[TagEffect] 精准锁定: 目标=%s" % target.char_data.get("name", "?"))
+		else:
+			print("[TagEffect] 精准锁定: 无目标")
+	else:
+		print("[TagEffect] 精准锁定: 找不到施法者")
+
+## 10 扩散效果 — 碰撞时分裂
+## 扩散标记已设，ball.gd 碰撞时检查 _ball_mods.spread_done
+
+## 11 追踪 — 持续追踪目标
 func _apply_ball_tracking(params: Dictionary, caster_id: int) -> void:
 	var caster := _get_caster(caster_id)
 	if not caster:
+		print("[TagEffect] 追踪: 找不到施法者")
 		return
 	var target := _get_nearest_enemy(caster)
 	if target:
 		_ball_mods.tracking_target = target
 		_ball_mods.tracking_turn_speed = float(params.get("turn_speed", 3.0))
 		print("[TagEffect] 追踪: 目标=%s 转速=%.1f" % [target.char_data.get("name", "?"), _ball_mods.tracking_turn_speed])
+	else:
+		print("[TagEffect] 追踪: 无目标")
 
-## BALL-06 避障 — 待场地系统
+## 12 避障 — 待场地系统实现
+## 标记已存在，ball.gd 可检查 _ball_mods["avoid"]
 
-## BALL-07 回旋 — 飞到一半返回
+## 13 回旋 — 飞到一半距离时返回
 func _apply_ball_boomerang(params: Dictionary) -> void:
 	_ball_mods.boomerang = true
 	_ball_mods.boomerang_dist = float(params.get("return_distance", 0.5))
-	print("[TagEffect] 回旋: 返回点=%.0f%%" % (_ball_mods.boomerang_dist * 100))
+	print("[TagEffect] 回旋: 启用 返回点=%.0f%%" % (_ball_mods.boomerang_dist * 100))
 
-## BALL-08 直行 — 禁用所有轨迹修改
+## 14 直行 — 禁用所有轨迹修改
 func _apply_ball_straight(params: Dictionary) -> void:
 	_ball_mods.lock_straight = true
+	# 清除追踪和回旋
 	_ball_mods.tracking_target = null
 	_ball_mods.boomerang = false
-	print("[TagEffect] 直行: 禁用追踪/回旋")
-
-## BALL-09 精准锁定 — 发球时自动瞄准最近敌人
-func _apply_ball_lockon(params: Dictionary, caster_id: int) -> void:
-	_ball_mods.lockon = true
-	var caster := _get_caster(caster_id)
-	if caster:
-		var target := _get_nearest_enemy(caster)
-		if target:
-			_ball_mods["lockon_target"] = target
-			print("[TagEffect] 精准锁定: 目标=%s" % target.char_data.get("name", "?"))
-			return
-	print("[TagEffect] 精准锁定: 标记（无目标）")
-
-## BALL-10 扩散 — 碰撞时分裂
-func _apply_ball_spread(params: Dictionary) -> void:
-	_ball_mods.spread = true
-	print("[TagEffect] 扩散: 启用")
-
-## BALL-11 穿透 — 击中后不停止
-func _apply_ball_penetrate(params: Dictionary) -> void:
-	_ball_mods.penetrate = true
-	print("[TagEffect] 穿透: 启用")
-
-## BALL-13 范围扩大 — 球命中敌人时以该球员为圆心造成AOE伤害
-func _apply_ball_range_up(params: Dictionary) -> void:
-	_ball_mods.aoe_radius = float(params.get("radius", 80.0))
-	_ball_mods.aoe_damage_pct = float(params.get("damage_pct", 0.5))
-	print("[TagEffect] 范围扩大: AOE半径=%.0f 伤害比例=%.0f%%" % [_ball_mods.aoe_radius, _ball_mods.aoe_damage_pct * 100])
-
-## BALL-14 范围缩小 — 减小AOE半径
-func _apply_ball_range_down(params: Dictionary) -> void:
-	var mult: float = float(params.get("multiplier", 0.5))
-	if mult > 0:
-		_ball_mods.aoe_radius *= mult
-	print("[TagEffect] 范围缩小: AOE半径=%.0f" % _ball_mods.aoe_radius)
+	print("[TagEffect] 直行: 启用，禁用追踪/回旋")
 
 
 ## ==================== 对场地效果 (预留) ====================
 
 func _apply_field_obs_add(params: Dictionary) -> void:
-	pass
+	"""创造障碍标签：进入鼠标放置模式"""
+	var manager = _get_obstacle_manager()
+	if not manager:
+		push_error("[TagEffectHandler] 找不到 ObstacleManager")
+		return
+
+	# 补充元素颜色
+	if not params.has("element_color"):
+		var element: String = params.get("element", "")
+		params["element_color"] = _get_element_color(element)
+
+	# 补充来源技能
+	if not params.has("source_skill"):
+		params["source_skill"] = params.get("skill_id", "")
+
+	# 补充释放球员位置（月牙朝向用）
+	var caster_node = _get_caster(params.get("caster_id", 0))
+	if caster_node:
+		params["caster_position"] = caster_node.global_position
+
+	var mouse_ops: int = int(params.get("mouse_ops", 1))
+	manager.start_placing(params, mouse_ops)
+
+	print("[TagEffectHandler] 创造障碍: shape=%s hp=%.0f atk_consume=%.0f/s spd_consume=%.0fpx/s mouse_ops=%d" % [
+		params.get("shape", "rect"), params.get("hp", 50.0),
+		params.get("attack_consume_rate", 20.0), params.get("speed_consume_rate", 20.0),
+		mouse_ops
+	])
+
+
 func _apply_field_obs_clear(params: Dictionary) -> void:
+	"""清除障碍标签：进入鼠标清除模式"""
+	var manager = _get_obstacle_manager()
+	if not manager:
+		push_error("[TagEffectHandler] 找不到 ObstacleManager")
+		return
+
+	var clear_count: int = int(params.get("clear_count", 1))
+	var mouse_ops: int = int(params.get("mouse_ops", 1))
+	manager.start_clearing(clear_count, mouse_ops)
+
+	print("[TagEffectHandler] 清除障碍: clear_count=%d mouse_ops=%d" % [
+		clear_count, mouse_ops
+	])
+	pass
+func _apply_field_obs_move(params: Dictionary) -> void:
+	pass
+func _apply_field_obs_lock(params: Dictionary) -> void:
 	pass
 func _apply_field_terra_change(params: Dictionary) -> void:
 	pass
@@ -436,6 +489,10 @@ func _apply_player_stealth(params: Dictionary) -> void:
 	pass
 func _apply_player_reveal(params: Dictionary) -> void:
 	pass
+func _apply_player_clone(params: Dictionary) -> void:
+	pass
+func _apply_player_clone_clear(params: Dictionary) -> void:
+	pass
 func _apply_player_hp_heal(params: Dictionary) -> void:
 	pass
 func _apply_player_hp_damage(params: Dictionary) -> void:
@@ -482,7 +539,31 @@ func _apply_player_silence(params: Dictionary) -> void:
 	pass
 func _apply_player_disarm(params: Dictionary) -> void:
 	pass
+func _apply_player_undisarm(params: Dictionary) -> void:
+	pass
 func _apply_player_teleport(params: Dictionary) -> void:
 	pass
 func _apply_player_return(params: Dictionary) -> void:
 	pass
+
+
+## ==================== 辅助方法 ====================
+
+func _get_obstacle_manager() -> Node:
+	"""获取障碍物管理器"""
+	if battle_manager and battle_manager.has_node("ObstacleManager"):
+		return battle_manager.get_node("ObstacleManager")
+	return null
+
+
+func _get_element_color(element: String) -> Color:
+	"""获取元素颜色"""
+	var colors: Dictionary = {
+		"金刚": Color(0.85, 0.75, 0.3),
+		"大地": Color(0.7, 0.55, 0.35),
+		"雷火": Color(1.0, 0.4, 0.2),
+		"冰雪": Color(0.4, 0.8, 1.0),
+		"草木": Color(0.3, 0.8, 0.3),
+		"梦幻": Color(0.7, 0.5, 0.9),
+	}
+	return colors.get(element, Color(1.0, 1.0, 0.5))

@@ -35,7 +35,10 @@ var assigned_role: int = 0  # GameManager.PlayerRole
 var is_penalized: bool = false  # 是否被惩罚(在外场隔离中)
 
 # 击退状态
-var _knockback_timer: float = 0.0  # 击退持续时间
+var _knockback_timer: float = 0.0  # 击退剩余时间
+var _knockback_duration: float = 0.0  # 击退总持续时间
+var _knockback_start_velocity: float = 0.0  # 击退初始速度
+var knockback_dir: Vector2 = Vector2.ZERO  # 击退方向
 var _stagger_timer: float = 0.0  # 僵直持续时间（被击中后无法移动）
 
 # 冲刺状态
@@ -97,6 +100,11 @@ func initialize(data_id: String, team_name: String, controlled: bool) -> void:
 	defense_factor = char_data["defense_factor"] if char_data.has("defense_factor") else 0.15
 	talent_name = char_data["talent_name"] if char_data.has("talent_name") else ""
 	talent_desc = char_data["talent_desc"] if char_data.has("talent_desc") else ""
+
+	# 加载元灵偏好 → 获取元灵技能
+	var spirit_pref: String = str(char_data.get("spirit_preference", ""))
+	if spirit_pref != "":
+		load_spirit_by_element(spirit_pref)
 
 	_setup_visuals()
 
@@ -164,13 +172,25 @@ func _physics_process(delta: float) -> void:
 		if sprint_cooldown < 0.0:
 			sprint_cooldown = 0.0
 
-	# 击退中：只执行移动，不处理输入
+	# 击退中：匀减速到0（不处理输入）
 	if _knockback_timer > 0.0:
 		_knockback_timer -= delta
+		
+		# 匀减速：速度线性衰减到0
+		if _knockback_duration > 0.0:
+			var progress: float = 1.0 - (_knockback_timer / _knockback_duration)
+			var current_speed: float = _knockback_start_velocity * (1.0 - progress)
+			velocity = knockback_dir * current_speed
+		else:
+			velocity = Vector2.ZERO
+		
+		move_and_slide()
+		
+		# 击退结束
 		if _knockback_timer <= 0.0:
 			_knockback_timer = 0.0
 			velocity = Vector2.ZERO
-		move_and_slide()
+			knockback_dir = Vector2.ZERO
 		return
 
 	# 僵直中：无法移动（站着不动）
@@ -369,15 +389,95 @@ func _get_phase2_knockback_chance() -> float:
 	return stamina_factor * energy_factor
 
 
+## 获取场地摩擦系数
+func _get_field_friction() -> float:
+	"""获取当前场地摩擦系数 μ
+	
+	从场地物理管理器读取摩擦系数，用于击退距离计算
+	
+	查找顺序：
+	1. 尝试绝对路径 /root/BattleManager
+	2. 尝试绝对路径 /root/BattleArena
+	3. 尝试场景树查找
+	"""
+	# 方法1：尝试绝对路径 /root/BattleManager
+	var battle_manager = get_node_or_null("/root/BattleManager")
+	if not battle_manager:
+		# 方法2：尝试绝对路径 /root/BattleArena
+		battle_manager = get_node_or_null("/root/BattleArena")
+	
+	if not battle_manager:
+		# 方法3：场景树查找（向上遍历）
+		var parent = get_parent()
+		while parent:
+			if parent.has_method("has_method") and parent.has_method("get_node"):
+				if parent.get_node_or_null("FieldPhysicsManager"):
+					battle_manager = parent
+					break
+			parent = parent.get_parent()
+	
+	if battle_manager:
+		var field_physics = battle_manager.get_node_or_null("FieldPhysicsManager")
+		if field_physics and field_physics.has_method("get_friction"):
+			return field_physics.get_friction()
+		else:
+			print("[Player] 警告：找到 BattleManager 但找不到 FieldPhysicsManager")
+	else:
+		print("[Player] 警告：找不到 BattleManager/BattleArena")
+	
+	return 1.0  # 默认标准地面
+
+
+## 击退系统（物理化）
 func _apply_knockback(attacker: CharacterBody2D, distance: float = 100.0) -> void:
-	"""被击退"""
+	"""被击退（物理化版本）
+	
+	参数：
+	- attacker: 攻击者
+	- distance: 基准距离（100=一段, 200=二段）
+	
+	物理逻辑：
+	1. 读取场地摩擦系数 μ
+	2. 根据 μ 和基准距离计算实际击退距离：d = distance / μ
+	3. 根据距离和僵直时间计算初始速度：v = 2 × d / t
+	4. 匀减速动画：速度线性衰减到0
+	"""
 	if attacker == null:
 		return
-	var knockback_dir := (global_position - attacker.global_position).normalized()
-	var knockback_speed: float = distance * 3.0  # 一段=300,二段=600
-	velocity = knockback_dir * knockback_speed
-	_knockback_timer = 0.25  # 击退持续0.25秒
-	print("[Player] %s 被击退%.0fpx 速度=%.0f" % [char_data.get("name", "?"), distance, knockback_speed])
+	
+	# 1. 确定击退类型
+	var knockback_type: String = "knockback1" if distance <= 150.0 else "knockback2"
+	
+	# 2. 获取僵直时间（已由韧性系统计算，从 _stagger_timer 获取）
+	var stagger_duration: float = _get_stagger_by_resilience(resilience)
+	
+	# 3. 读取场地摩擦系数
+	var mu: float = _get_field_friction()
+	
+	# 4. 物理计算（使用 KnockbackPhysics 模块）
+	var result: Dictionary = KnockbackPhysics.calculate_knockback(
+		knockback_type,   # 击退类型
+		mu,              # 摩擦系数
+		stagger_duration, # 僵直时间
+		1.0,             # 技能倍率（默认1.0）
+		0.0,             # 技能固定加成
+		400.0,           # 球速
+		false            # 不启用球速加成
+	)
+	
+	# 5. 应用击退
+	knockback_dir = (global_position - attacker.global_position).normalized()
+	velocity = knockback_dir * result.initial_velocity
+	
+	# 6. 设置击退计时器（用于匀减速动画）
+	_knockback_timer = result.duration
+	_knockback_duration = result.duration
+	_knockback_start_velocity = result.initial_velocity
+	
+	var pname: String = char_data.get("name", "?")
+	print("[Player] %s 击退! μ=%.2f 僵直%.2fs 距离%.0fpx 初速%.0f" % [
+		pname, mu, result.duration, result.distance, result.initial_velocity
+	])
 
 
 func _on_defeated() -> void:
@@ -443,8 +543,12 @@ func set_carrying_ball(carrying: bool) -> void:
 	is_carrying_ball = carrying
 	if carrying:
 		state_indicator.color = Color.GREEN
+		# 持球时显示已激活技能的光环
+		_update_ball_skill_aura()
 	elif not is_ready_to_catch:
 		state_indicator.color = Color.TRANSPARENT
+		# 不持球时清除光环
+		_clear_ball_skill_aura()
 
 
 func can_be_scored_against() -> bool:
@@ -461,9 +565,9 @@ func use_skill(slot_index: int) -> void:
 	if skill_data.is_empty():
 		return
 
-	# 检查解锁
-	if not (skill_data.get("unlocked") if skill_data.has("unlocked") else false):
-		print("[Player] 技能未解锁: %s" % (skill_data.get("name") if skill_data.has("name") else ""))
+	# 检查解锁（没有 unlocked 字段默认为已解锁）
+	if skill_data.has("unlocked") and not skill_data["unlocked"]:
+		print("[Player] 技能未解锁: %s" % (skill_data.get("name", "")))
 		return
 
 	# 检查CD
@@ -508,3 +612,106 @@ func start_sprint() -> bool:
 func show_message_bubble(text: String, duration: float = 0.5) -> void:
 	"""在球员头顶显示消息气泡"""
 	message_bubble_requested.emit(text, duration)
+
+
+## ==================== 技能光环系统（球）====================
+
+var _active_skill_id: String = ""
+
+
+func set_active_skill(skill_id: String) -> void:
+	"""设置当前激活的技能（外部调用）"""
+	_active_skill_id = skill_id
+	if is_carrying_ball:
+		_update_ball_skill_aura()
+
+
+func clear_active_skill() -> void:
+	"""清除当前激活的技能（外部调用）"""
+	_active_skill_id = ""
+	_clear_ball_skill_aura()
+
+
+func get_active_skill_id() -> String:
+	"""获取当前激活的技能ID"""
+	return _active_skill_id
+
+
+func _update_ball_skill_aura() -> void:
+	"""更新球的技能光环显示"""
+	if _active_skill_id.is_empty() or not is_carrying_ball:
+		return
+
+	var ball_node = _get_ball_node()
+	if ball_node and ball_node.has_method("set_active_skill"):
+		var skill_data = DataManager.get_skill_by_id(_active_skill_id)
+		if not skill_data.is_empty():
+			ball_node.set_active_skill(skill_data)
+			print("[Player] 显示球技能光环: %s" % _active_skill_id)
+
+
+func _clear_ball_skill_aura() -> void:
+	"""清除球的技能光环"""
+	var ball_node = _get_ball_node()
+	if ball_node and ball_node.has_method("cancel_active_skill"):
+		ball_node.cancel_active_skill()
+
+
+func _get_ball_node() -> Node:
+	"""获取球节点"""
+	var tree = get_tree()
+	if tree:
+		var ball_nodes = tree.get_nodes_in_group("ball")
+		if not ball_nodes.is_empty():
+			return ball_nodes[0]
+	return null
+
+
+## 通过技能ID使用技能（供外部调用）
+func use_skill_by_id(skill_id: String) -> void:
+	"""通过技能ID使用技能"""
+	for i in range(equipped_skills.size()):
+		if str(equipped_skills[i]) == skill_id:
+			use_skill(i)
+			return
+	print("[Player] 未找到技能ID: %s" % skill_id)
+
+
+## 获取装备的技能ID列表
+func get_equipped_skills() -> Array[String]:
+	"""返回装备的技能ID列表"""
+	var result: Array[String] = []
+	for skill_id in equipped_skills:
+		result.append(str(skill_id))
+	return result
+
+
+func load_spirit_by_element(element: String) -> void:
+	"""根据元素类型加载元灵及其技能"""
+	if not DataManager:
+		return
+	var spirit_data: Dictionary = {}
+	if DataManager.has_method("get_spirit_by_element"):
+		spirit_data = DataManager.get_spirit_by_element(element)
+	if spirit_data.is_empty():
+		# 备用：遍历所有元灵
+		for s in DataManager.spirits:
+			if str(s.get("element", "")) == element:
+				spirit_data = s
+				break
+	if not spirit_data.is_empty():
+		equip_spirit(spirit_data)
+
+
+func equip_spirit(spirit_data: Dictionary) -> void:
+	"""装备元灵，加载其技能到 equipped_skills"""
+	spirit_id = str(spirit_data.get("id", ""))
+	equipped_skills.clear()
+	var skill_ids = spirit_data.get("skills", [])
+	for sid in skill_ids:
+		equipped_skills.append(sid)
+	# 初始化技能冷却
+	skill_cooldowns.clear()
+	for sid in equipped_skills:
+		skill_cooldowns[str(sid)] = 0.0
+	print("[Player] %s 装备元灵: %s 技能=%s" % [char_data.get("name", "?"), spirit_data.get("name", "?"), str(skill_ids)])

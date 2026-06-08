@@ -16,8 +16,8 @@ func _ready() -> void:
 
 func load_all_data() -> void:
 	characters = _load_json_array("res://data/characters/characters.json")
-	spirits = _load_json_array("res://data/spirits/spirits.json")
-	skills = _load_json_array("res://data/skills/skills.json")
+	spirits = _load_spirits_array()
+	skills = _load_spirits_skills()
 	elements = _load_json_dict("res://data/spirits/elements.json")
 	data_loaded.emit()
 	print("[DataManager] 数据加载完成: %d 角色, %d 元灵, %d 技能" % [characters.size(), spirits.size(), skills.size()])
@@ -59,6 +59,30 @@ func _load_json_dict(path: String) -> Dictionary:
 	if result is Dictionary:
 		return result
 	return {}
+
+
+func _load_spirits_skills() -> Array[Dictionary]:
+	"""从 spirits/skills.json 加载技能（支持 {skills:[...]} 格式）"""
+	var result = _load_json_raw("res://data/spirits/skills.json")
+	if result is Dictionary and result.has("skills"):
+		var typed_array: Array[Dictionary] = []
+		for item in result["skills"]:
+			if item is Dictionary:
+				typed_array.append(item)
+		return typed_array
+	return []
+
+
+func _load_spirits_array() -> Array[Dictionary]:
+	"""从 spirits/spirits.json 加载元灵（支持 {spirits:[...]} 格式）"""
+	var result = _load_json_raw("res://data/spirits/spirits.json")
+	if result is Dictionary and result.has("spirits"):
+		var typed_array: Array[Dictionary] = []
+		for item in result["spirits"]:
+			if item is Dictionary:
+				typed_array.append(item)
+		return typed_array
+	return []
 
 
 # ===== 查询方法 =====
