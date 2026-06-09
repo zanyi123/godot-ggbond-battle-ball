@@ -108,6 +108,13 @@ func _on_left_click_release() -> void:
 		var power := clampf(distance / 500.0, 0.1, 1.0)  # 最大力度对应500像素距离
 		
 		if distance > 20.0:  # 最小距离阈值
+			# 缴械检查
+			if controlled_player.is_disarmed():
+				print("[InputMgr] %s 被缴械，无法投球" % controlled_player._pname())
+				throw_cancelled.emit()
+				aim_info_updated.emit({"aiming": false})
+				is_aiming = false
+				return
 			throw_requested.emit(direction, power)
 		else:
 			throw_cancelled.emit()

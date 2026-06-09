@@ -71,6 +71,33 @@ var energy_bar: ProgressBar
 var state_indicator: ColorRect  # 状态指示(待接球/预发球等)
 var facing_direction: Vector2 = Vector2.ZERO  # 由 register_player 或输入设置
 
+# ==================== Buff 栈系统 ====================
+# buff 字典结构: { "buff_id": { "tag_id": str, "stat": str, "mult": float, "flat": float, "duration": float, "remaining": float } }
+var _buffs: Dictionary = {}
+var _buff_counter: int = 0
+
+# 状态标记（由 buff 系统控制）
+var _is_invincible: bool = false      # 无敌
+var _is_vulnerable: bool = false      # 易伤（受伤增加）
+var _vulnerable_mult: float = 1.0     # 易伤倍率
+var _is_stealthed: bool = false      # 隐身
+var _is_stunned: bool = false        # 眩晕
+var _is_rooted: bool = false         # 定身
+var _is_silenced: bool = false       # 沉默（无法使用技能）
+var _is_disarmed: bool = false       # 缴械（无法投球）
+var _is_cc_immune: bool = false      # 免疫控制
+
+# 元灵系统 buff
+var _skill_cost_mult: float = 1.0     # 技能消耗倍率
+var _skill_cd_mult: float = 1.0       # 技能CD倍率
+var _skill_uses_bonus: int = 0        # 技能使用次数加成
+var _next_skill_double: bool = false  # 下次技能效果翻倍
+var _next_skill_half: bool = false    # 下次技能效果减半
+
+# 持续回血/掉血
+var _hp_regen_rate: float = 0.0       # 每秒回血
+var _hp_dot_rate: float = 0.0         # 每秒掉血
+
 
 func _ready() -> void:
 	_setup_visuals()
@@ -172,6 +199,9 @@ func _physics_process(delta: float) -> void:
 		if sprint_cooldown < 0.0:
 			sprint_cooldown = 0.0
 
+	# === Buff 栈 tick ===
+	_process_buffs(delta)
+
 	# 击退中：匀减速到0（不处理输入）
 	if _knockback_timer > 0.0:
 		_knockback_timer -= delta
@@ -193,6 +223,12 @@ func _physics_process(delta: float) -> void:
 			knockback_dir = Vector2.ZERO
 		return
 
+	# 控制状态检查
+	if _is_stunned or _is_rooted:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+
 	# 僵直中：无法移动（站着不动）
 	if _stagger_timer > 0.0:
 		_stagger_timer -= delta
@@ -205,8 +241,8 @@ func _physics_process(delta: float) -> void:
 	if not is_player_controlled:
 		return  # AI控制由AI管理器处理
 
-	# 计算实际移动速度（含冲刺加成）
-	var move_speed: float = speed
+	# 计算实际移动速度（含冲刺加成 + buff修正）
+	var move_speed: float = get_effective_speed()
 	if is_sprinting:
 		move_speed += SPRINT_SPEED_BONUS
 
@@ -240,7 +276,16 @@ func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
 	if is_defeated:
 		return {"damage": 0, "effect": "none"}
 
-	var defense_resist: float = defense * defense_factor
+	# 无敌检查
+	if _is_invincible:
+		print("[Player] %s 无敌! 伤害免疫" % _pname())
+		return {"damage": 0, "effect": "none"}
+
+	# 易伤倍率
+	var dmg_mult: float = get_damage_taken_mult()
+	var effective_amount: float = amount * dmg_mult
+
+	var defense_resist: float = get_effective_defense() * defense_factor
 	var actual_damage: int = 0
 	var decay_rate: float = 0.0
 	var effect: String = "none"
@@ -248,18 +293,18 @@ func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
 	if is_ready_to_catch:
 		# === 待接球: 韧性系统生效 ===
 		# 1. 韧性伤害衰减百分比
-		decay_rate = _get_resilience_decay_rate(resilience)
-		var reduced_attack: float = amount * (1.0 - decay_rate)
+		decay_rate = _get_resilience_decay_rate(get_effective_resilience())
+		var reduced_attack: float = effective_amount * (1.0 - decay_rate)
 		actual_damage = int(max(0, reduced_attack - defense_resist))
 
 		# 2. 扣血（取整）
 		stamina = int(max(0, stamina + defense_resist - reduced_attack))
 
 		# 3. 僵直时间（与韧性反比，四段）
-		var base_stagger: float = _get_stagger_by_resilience(resilience)
+		var base_stagger: float = _get_stagger_by_resilience(get_effective_resilience())
 
 		# 4. 韧性效果判定（与衰减同时发生，三选一）
-		effect = _roll_resilience_effect(resilience)
+		effect = _roll_resilience_effect(get_effective_resilience())
 		if effect == "knockback1":
 			_apply_knockback(attacker, 100.0)
 			_stagger_timer = max(base_stagger, _knockback_timer)
@@ -276,10 +321,10 @@ func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
 			_stagger_timer = base_stagger
 	else:
 		# === 非待接球: 新体力 = 当前体力 + 防御抗力 - 攻击 ===
-		actual_damage = int(max(0, amount - defense_resist))
-		stamina = int(max(0, stamina + defense_resist - amount))
+		actual_damage = int(max(0, effective_amount - defense_resist))
+		stamina = int(max(0, stamina + defense_resist - effective_amount))
 		# 非待接球无韧性保护，但僵直仍按韧性查表
-		_stagger_timer = _get_stagger_by_resilience(resilience)
+		_stagger_timer = _get_stagger_by_resilience(get_effective_resilience())
 
 	# 体力条由下方球员栏更新，此处不处理
 
@@ -570,6 +615,11 @@ func use_skill(slot_index: int) -> void:
 		print("[Player] 技能未解锁: %s" % (skill_data.get("name", "")))
 		return
 
+	# 沉默检查
+	if _is_silenced:
+		print("[Player] %s 被沉默，无法使用技能" % _pname())
+		return
+
 	# 检查CD
 	var current_cd: float = skill_cooldowns[skill_id] if skill_cooldowns.has(skill_id) else 0.0
 	if current_cd > 0:
@@ -715,3 +765,333 @@ func equip_spirit(spirit_data: Dictionary) -> void:
 	for sid in equipped_skills:
 		skill_cooldowns[str(sid)] = 0.0
 	print("[Player] %s 装备元灵: %s 技能=%s" % [char_data.get("name", "?"), spirit_data.get("name", "?"), str(skill_ids)])
+
+
+## ==================== Buff 栈系统实现 ====================
+
+## 添加一个 buff（由 TagEffectHandler 调用）
+## stat: "attack"/"defense"/"speed"/"resilience"/"max_energy"
+## mult: 乘法修正（1.0=不变）  flat: 加法修正（0=不变）
+## duration: 持续秒数（0=即时）
+## 返回 buff_id 用于后续移除
+func add_buff(tag_id: String, stat: String, mult: float, flat: float, duration: float) -> String:
+	_buff_counter += 1
+	var bid: String = "buff_%d" % _buff_counter
+	_buffs[bid] = {
+		"tag_id": tag_id,
+		"stat": stat,
+		"mult": mult,
+		"flat": flat,
+		"duration": duration,
+		"remaining": duration,
+	}
+	print("[Player] %s 获得 buff: %s stat=%s mult=%.2f flat=%.1f dur=%.1fs" % [
+		_pname(), tag_id, stat, mult, flat, duration])
+	return bid
+
+
+## 添加状态标记 buff（眩晕/定身/沉默/缴械/无敌/隐身等）
+func add_status_buff(tag_id: String, status: String, duration: float) -> String:
+	# 免疫控制检查
+	if _is_cc_immune and status in ["stunned", "rooted", "silenced", "disarmed"]:
+		print("[Player] %s 免疫控制: %s 被抵消" % [_pname(), tag_id])
+		return ""
+	_buff_counter += 1
+	var bid: String = "buff_%d" % _buff_counter
+	_buffs[bid] = {
+		"tag_id": tag_id,
+		"stat": "status",
+		"status": status,
+		"duration": duration,
+		"remaining": duration,
+	}
+	_apply_status(status, true)
+	print("[Player] %s 获得状态: %s (%.1fs)" % [_pname(), status, duration])
+	return bid
+
+
+## 移除一个 buff
+func remove_buff(bid: String) -> void:
+	if not _buffs.has(bid):
+		return
+	var buff: Dictionary = _buffs[bid]
+	# 状态类 buff：恢复状态
+	if buff.get("stat", "") == "status":
+		_apply_status(buff["status"], false)
+	_buffs.erase(bid)
+	print("[Player] %s buff过期: %s" % [_pname(), buff.get("tag_id", "?")])
+
+
+## 每帧处理 buff 栈
+func _process_buffs(delta: float) -> void:
+	var to_remove: PackedStringArray = []
+	for bid in _buffs:
+		var buff: Dictionary = _buffs[bid]
+		if buff["duration"] <= 0.0:
+			continue  # 即时 buff 跳过
+		buff["remaining"] -= delta
+		if buff["remaining"] <= 0.0:
+			to_remove.append(bid)
+	for bid in to_remove:
+		remove_buff(bid)
+	# 持续回血/掉血
+	if _hp_regen_rate > 0.0:
+		stamina = min(max_stamina, stamina + _hp_regen_rate * delta)
+	if _hp_dot_rate > 0.0:
+		stamina = max(0.0, stamina - _hp_dot_rate * delta)
+		if stamina <= 0.0 and not is_defeated:
+			_on_defeated()
+
+
+## 应用/移除状态标记
+func _apply_status(status: String, active: bool) -> void:
+	match status:
+		"stunned":
+			_is_stunned = active
+		"rooted":
+			_is_rooted = active
+		"silenced":
+			_is_silenced = active
+		"disarmed":
+			_is_disarmed = active
+		"invincible":
+			_is_invincible = active
+		"stealthed":
+			_is_stealthed = active
+		"cc_immune":
+			_is_cc_immune = active
+		"vulnerable_dummy":
+			# 易伤到期 → 恢复
+			if not active:
+				_is_vulnerable = false
+				_vulnerable_mult = 1.0
+		"hp_regen_dummy":
+			if not active:
+				_hp_regen_rate = 0.0
+		"hp_dot_dummy":
+			if not active:
+				_hp_dot_rate = 0.0
+		"spirit_cost_dummy":
+			if not active:
+				_skill_cost_mult = 1.0
+		"spirit_cd_dummy":
+			if not active:
+				_skill_cd_mult = 1.0
+
+
+## ==================== 属性计算接口（含 buff 修正）====================
+
+## 获取有效攻击力（基础 + buff 加成）
+func get_effective_attack() -> float:
+	var m: float = 1.0
+	var f: float = 0.0
+	for bid in _buffs:
+		var b: Dictionary = _buffs[bid]
+		if b.get("stat", "") == "attack":
+			m *= b.get("mult", 1.0)
+			f += b.get("flat", 0.0)
+	return (attack_power + f) * m
+
+
+## 获取有效防御力
+func get_effective_defense() -> float:
+	var m: float = 1.0
+	var f: float = 0.0
+	for bid in _buffs:
+		var b: Dictionary = _buffs[bid]
+		if b.get("stat", "") == "defense":
+			m *= b.get("mult", 1.0)
+			f += b.get("flat", 0.0)
+	return (defense + f) * m
+
+
+## 获取有效速度
+func get_effective_speed() -> float:
+	var m: float = 1.0
+	var f: float = 0.0
+	for bid in _buffs:
+		var b: Dictionary = _buffs[bid]
+		if b.get("stat", "") == "speed":
+			m *= b.get("mult", 1.0)
+			f += b.get("flat", 0.0)
+	return (speed + f) * m
+
+
+## 获取有效韧性
+func get_effective_resilience() -> float:
+	var m: float = 1.0
+	var f: float = 0.0
+	for bid in _buffs:
+		var b: Dictionary = _buffs[bid]
+		if b.get("stat", "") == "resilience":
+			m *= b.get("mult", 1.0)
+			f += b.get("flat", 0.0)
+	return (resilience + f) * m
+
+
+## 获取有效最大能量
+func get_effective_max_energy() -> float:
+	var m: float = 1.0
+	var f: float = 0.0
+	for bid in _buffs:
+		var b: Dictionary = _buffs[bid]
+		if b.get("stat", "") == "max_energy":
+			m *= b.get("mult", 1.0)
+			f += b.get("flat", 0.0)
+	return (max_spirit_energy + f) * m
+
+
+## 判断是否被眩晕
+func is_stunned() -> bool:
+	return _is_stunned
+
+
+## 判断是否被定身
+func is_rooted() -> bool:
+	return _is_rooted
+
+
+## 判断是否被沉默
+func is_silenced() -> bool:
+	return _is_silenced
+
+
+## 判断是否被缴械
+func is_disarmed() -> bool:
+	return _is_disarmed
+
+
+## 判断是否无敌
+func is_invincible() -> bool:
+	return _is_invincible
+
+
+## 判断是否隐身
+func is_stealthed() -> bool:
+	return _is_stealthed
+
+
+## 判断是否免疫控制
+func is_cc_immune() -> bool:
+	return _is_cc_immune
+
+
+## 获取受伤倍率（易伤/无敌）
+func get_damage_taken_mult() -> float:
+	if _is_invincible:
+		return 0.0
+	if _is_vulnerable:
+		return _vulnerable_mult
+	return 1.0
+
+
+## 获取技能消耗倍率
+func get_skill_cost_mult() -> float:
+	return _skill_cost_mult
+
+
+## 获取技能CD倍率
+func get_skill_cd_mult() -> float:
+	return _skill_cd_mult
+
+
+## 检查下次技能是否翻倍
+func consume_next_skill_double() -> bool:
+	var result := _next_skill_double
+	_next_skill_double = false
+	_next_skill_half = false  # 互斥
+	return result
+
+
+## 检查下次技能是否减半
+func consume_next_skill_half() -> bool:
+	var result := _next_skill_half
+	_next_skill_half = false
+	_next_skill_double = false  # 互斥
+	return result
+
+
+## 持续回血/掉血注册
+func set_hp_regen(rate: float) -> void:
+	_hp_regen_rate = rate
+
+
+func set_hp_dot(rate: float) -> void:
+	_hp_dot_rate = rate
+
+
+## 元灵系统 buff 注册
+func set_skill_cost_mult(mult: float) -> void:
+	_skill_cost_mult = mult
+
+
+func set_skill_cd_mult(mult: float) -> void:
+	_skill_cd_mult = mult
+
+
+func add_skill_uses(bonus: int) -> void:
+	_skill_uses_bonus += bonus
+
+
+func set_next_skill_double(active: bool) -> void:
+	_next_skill_double = active
+	if active:
+		_next_skill_half = false
+
+
+func set_next_skill_half(active: bool) -> void:
+	_next_skill_half = active
+	if active:
+		_next_skill_double = false
+
+
+## 易伤注册
+func set_vulnerable(active: bool, mult: float = 1.5) -> void:
+	_is_vulnerable = active
+	_vulnerable_mult = mult
+
+
+## 传送/返回
+var _pre_teleport_pos: Vector2 = Vector2.ZERO
+
+func teleport_to(pos: Vector2) -> void:
+	_pre_teleport_pos = global_position
+	global_position = pos
+	print("[Player] %s 传送到 (%.0f,%.0f)" % [_pname(), pos.x, pos.y])
+
+
+func return_to_previous() -> void:
+	if _pre_teleport_pos != Vector2.ZERO:
+		global_position = _pre_teleport_pos
+		print("[Player] %s 返回 (%.0f,%.0f)" % [_pname(), _pre_teleport_pos.x, _pre_teleport_pos.y])
+		_pre_teleport_pos = Vector2.ZERO
+
+
+## 辅助：球员名称
+func _pname() -> String:
+	return char_data.get("name", "?")
+
+
+## 清除所有 buff（战斗结束时调用）
+func clear_all_buffs() -> void:
+	for bid in _buffs.keys():
+		var buff: Dictionary = _buffs[bid]
+		if buff.get("stat", "") == "status":
+			_apply_status(buff["status"], false)
+	_buffs.clear()
+	_is_invincible = false
+	_is_vulnerable = false
+	_is_stealthed = false
+	_is_stunned = false
+	_is_rooted = false
+	_is_silenced = false
+	_is_disarmed = false
+	_is_cc_immune = false
+	_skill_cost_mult = 1.0
+	_skill_cd_mult = 1.0
+	_skill_uses_bonus = 0
+	_next_skill_double = false
+	_next_skill_half = false
+	_hp_regen_rate = 0.0
+	_hp_dot_rate = 0.0
+	_vulnerable_mult = 1.0

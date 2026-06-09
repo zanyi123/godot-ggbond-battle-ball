@@ -22,6 +22,9 @@ var trajectory_type: String = "straight"
 
 var stuck_on_obstacle: StaticBody2D = null  # 球卡在障碍物上时引用
 
+## 碰撞追踪：本次飞行已命中的球员instance_id，防止双重命中
+var _hit_player_ids: Dictionary = {}
+
 ## ==================== 物理属性 ====================
 var bounce_coefficient: float = 0.0  # 弹性系数 e（0=无反弹, 1=完全反弹）
 
@@ -97,8 +100,11 @@ func _physics_process(delta: float) -> void:
 		_process_obstacle_stuck(delta)
 		return
 
+	# === 追踪球状态（供后续距离判断使用）===
+	var is_tracking: bool = tag_effect_handler and tag_effect_handler.is_ball_tracking()
+
 	# === 追踪：向目标转向 ===
-	if tag_effect_handler and tag_effect_handler.is_ball_tracking():
+	if is_tracking:
 		var target: Node = tag_effect_handler.get_tracking_target()
 		if target and is_instance_valid(target) and not target.is_defeated:
 			var desired_dir: Vector2 = (target.global_position - global_position).normalized()
@@ -130,6 +136,9 @@ func _physics_process(delta: float) -> void:
 	position += move_vector
 	flight_distance += move_vector.length()
 
+	# === 距离碰撞检测：补充 body_entered 可能漏检的情况 ===
+	_check_player_collision_distance()
+
 	# === 检测障碍物碰撞 ===
 	_check_obstacle_collision()
 
@@ -138,8 +147,8 @@ func _physics_process(delta: float) -> void:
 		_on_ball_out_of_field()
 		return
 
-	# 超出最大距离
-	if flight_distance >= max_flight_distance:
+	# 超出最大距离（追踪球不受距离限制，直到命中球员）
+	if not is_tracking and flight_distance >= max_flight_distance:
 		_on_ball_stopped()
 
 	# 更新技能光环动画
@@ -230,6 +239,12 @@ func _on_body_entered(body: Node2D) -> void:
 	if player.is_defeated:
 		return
 
+	# 防止双重命中（body_entered + 距离检测）
+	var pid: int = player.get_instance_id()
+	if _hit_player_ids.has(pid):
+		return
+	_hit_player_ids[pid] = true
+
 	# === 同队队友 → 直接接球,不造成伤害 ===
 	if attacker_player and player.team == attacker_player.team:
 		_catch_ball(player)
@@ -264,16 +279,21 @@ func _on_body_entered(body: Node2D) -> void:
 					hit_count += 1
 		print("[Ball] AOE范围伤害: 半径=%.0f 范围伤害=%.1f 命中%d人" % [aoe_radius, aoe_damage, hit_count])
 
-	# === 穿透：击中后不停止，继续飞行 ===
+	# === 状态标记 ===
 	var is_penetrating: bool = tag_effect_handler and tag_effect_handler.is_ball_penetrating()
+	var is_tracking: bool = tag_effect_handler and tag_effect_handler.is_ball_tracking()
 
-	# 被击败:球回到攻击者手上
+	# === 被击败 ===
 	if player.is_defeated:
 		if is_penetrating:
 			print("[Ball] 穿透击中 %s(被击败),球继续飞行" % _pname(player))
-			return  # 穿透球继续飞
+			return
 		is_active = false
-		if attacker_player and is_instance_valid(attacker_player):
+		if is_tracking:
+			# 追踪球：球权归受击方 → 回到受击者同队最近存活球员
+			_return_to_nearest_team_player(player.team)
+			print("[Ball] 追踪球击败 %s! 球回到队%s最近球员" % [_pname(player), player.team.to_upper()])
+		elif attacker_player and is_instance_valid(attacker_player):
 			return_to_player(attacker_player)
 			print("[Ball] %s 被击败! 球回到 %s" % [_pname(player), _pname(attacker_player)])
 		return
@@ -283,16 +303,27 @@ func _on_body_entered(body: Node2D) -> void:
 		var random_angle: float = randf_range(-90.0, 90.0)
 		ball_direction = ball_direction.rotated(deg_to_rad(random_angle))
 		flight_distance = 0.0
-		max_flight_distance = 600.0
-		print("[Ball] %s 韧性弹飞! 方向偏转%.0f度" % [_pname(player), random_angle])
+		if is_tracking:
+			# 追踪球：弹飞后继续追踪，不受距离限制
+			print("[Ball] 追踪球-韧性弹飞! 方向偏转%.0f度,继续追踪" % random_angle)
+		else:
+			max_flight_distance = 600.0
+			print("[Ball] %s 韧性弹飞! 方向偏转%.0f度" % [_pname(player), random_angle])
 		return
 
-	# 穿透：球不回攻击者，继续飞行
+	# === 追踪球：击中即停，球权归受击者 ===
+	if is_tracking:
+		is_active = false
+		_catch_ball(player)
+		print("[Ball] 追踪球击中 %s,球归受击者" % _pname(player))
+		return
+
+	# === 穿透：球不回攻击者，继续飞行 ===
 	if is_penetrating:
 		print("[Ball] 穿透击中 %s,球继续飞行" % _pname(player))
 		return
 
-	# 无弹飞效果:球回到攻击者手上
+	# === 普通球：球回到攻击者手上 ===
 	if attacker_player and is_instance_valid(attacker_player):
 		is_active = false
 		return_to_player(attacker_player)
@@ -309,11 +340,42 @@ func _catch_ball(player: CharacterBody2D) -> void:
 
 
 func _on_ball_stopped() -> void:
-	"""球停止(超出距离但未出界)→ 最近球员拾球"""
+	"""球停止(超出距离但未出界)
+	先检查附近是否有球员（视为命中），否则按半场分配球权
+	"""
 	is_active = false
 	_set_idle_visual()
+
+	# === 球落地前，检查附近60px内是否有球员 ===
+	var all_players := _get_all_players_array()
+	var nearest_player: CharacterBody2D = null
+	var nearest_dist: float = 60.0  # 命中判定范围
+
+	for p in all_players:
+		if not p or not is_instance_valid(p):
+			continue
+		if not p is CharacterBody2D:
+			continue
+		if p == attacker_player:
+			continue
+		if p.is_defeated:
+			continue
+		if _hit_player_ids.has(p.get_instance_id()):
+			continue
+		var dist: float = global_position.distance_to(p.global_position)
+		if dist < nearest_dist:
+			nearest_dist = dist
+			nearest_player = p
+
+	if nearest_player:
+		# 球停在球员附近 → 视为命中，走正常伤害判定
+		print("[Ball] 球停在 %s 附近(%.0fpx),视为命中!" % [_pname(nearest_player), nearest_dist])
+		is_active = true  # 临时恢复，让 _on_body_entered 正常执行
+		_on_body_entered(nearest_player)
+		return
+
+	# === 落地无人在附近 → 按半场分配球权 ===
 	print("[Ball] 球落地,飞行距离: %.1f" % flight_distance)
-	# 弹飞球落地:离哪队近就给哪队最近球员
 	if global_position.x < 0:
 		_return_to_nearest_team_player("a")
 	else:
@@ -336,6 +398,7 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	owner_player = null
 	trajectory_type = "straight"
 	element_type = ""
+	_hit_player_ids = {}
 
 	# 获取标签效果处理器
 	if not tag_effect_handler:
@@ -661,6 +724,34 @@ func apply_impulse(force: Vector2, delta_time: float = 0.1) -> void:
 
 ## ==================== 障碍物碰撞检测 ====================
 
+func _check_player_collision_distance() -> void:
+	"""距离碰撞检测：补充 body_entered 可能漏检的情况
+	命中距离 = 球半径(14) + 球员半径(28) + 球速帧移动距离
+	"""
+	if not is_active:
+		return
+
+	var delta_val: float = get_process_delta_time()
+	var detection_range: float = 42.0 + ball_speed * delta_val  # 防止高速穿透
+
+	var all_players := _get_all_players_array()
+	for p in all_players:
+		if not p or not is_instance_valid(p):
+			continue
+		if not p is CharacterBody2D:
+			continue
+		var pid: int = p.get_instance_id()
+		if _hit_player_ids.has(pid):
+			continue
+		if p == attacker_player:
+			continue
+		if p.is_defeated:
+			continue
+		var dist: float = global_position.distance_to(p.global_position)
+		if dist <= detection_range:
+			_on_body_entered(p)
+			return
+
 func _check_obstacle_collision() -> void:
 	"""每帧检测球是否碰到障碍物"""
 	if not is_active:
@@ -739,6 +830,18 @@ func _stop_and_return() -> void:
 	if attacker_player and is_instance_valid(attacker_player):
 		return_to_player(attacker_player)
 
+
+func _get_all_players_array() -> Array:
+	"""获取场上所有球员数组"""
+	var all_players: Array = []
+	if GameManager:
+		var team_a = GameManager.get("team_a")
+		var team_b = GameManager.get("team_b")
+		if team_a:
+			all_players.append_array(team_a)
+		if team_b:
+			all_players.append_array(team_b)
+	return all_players
 
 func _find_obstacle_manager() -> Node:
 	"""查找障碍物管理器"""
