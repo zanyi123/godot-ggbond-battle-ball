@@ -16,3 +16,6 @@ desktop.ini
 
 # Logs
 *.log
+
+# Test artifacts
+*.uid

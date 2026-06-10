@@ -107,9 +107,13 @@ func _physics_process(delta: float) -> void:
 	if is_tracking:
 		var target: Node = tag_effect_handler.get_tracking_target()
 		if target and is_instance_valid(target) and not target.is_defeated:
-			var desired_dir: Vector2 = (target.global_position - global_position).normalized()
-			var turn_speed: float = tag_effect_handler.get_tracking_turn_speed()
-			ball_direction = ball_direction.move_toward(desired_dir, turn_speed * delta).normalized()
+			# 目标隐身 → 丢失目标，转直飞
+			if target.has_method("is_status_active") and target.is_status_active("stealthed"):
+				tag_effect_handler._ball_mods.tracking_target = null
+			else:
+				var desired_dir: Vector2 = (target.global_position - global_position).normalized()
+				var turn_speed: float = tag_effect_handler.get_tracking_turn_speed()
+				ball_direction = ball_direction.move_toward(desired_dir, turn_speed * delta).normalized()
 		else:
 			tag_effect_handler._ball_mods.tracking_target = null
 
@@ -272,6 +276,9 @@ func _on_body_entered(body: Node2D) -> void:
 				if p.team != enemy_team:
 					continue
 				if p.is_defeated:
+					continue
+				# 隐身者不受AOE影响（看不到就不会被波及）
+				if p.has_method("is_status_active") and p.is_status_active("stealthed"):
 					continue
 				var dist: float = player.global_position.distance_to(p.global_position)
 				if dist <= aoe_radius:

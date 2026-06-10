@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/systems/buff_system/test_stealth_checks.gd" id="1"]
+
+[node name="TestStealthChecks" type="Node"]
+script = ExtResource("1")
