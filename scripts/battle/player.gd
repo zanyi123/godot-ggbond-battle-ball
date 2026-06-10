@@ -47,6 +47,9 @@ var _status_lights: Dictionary = {}  # { "stunned": { "remaining": 2.0, ... }, .
 # 闹钟纸条（第3步：持续效果系统）
 var _tick_effects: Dictionary = {}  # { "hp_regen": { "type": "regen", "rate": 5.0, "remaining": 5.0 }, ... }
 
+# Buff堆栈（第1步：属性修改器）
+var _buffs: Dictionary = {}  # { "buff_1": { "stat": "attack", "mult": 1.3, "flat": 0.0, "source": "...", "duration": 5.0, "remaining": 5.0 } }
+
 # 折扣卡（第4步：技能倍率系统）
 var _skill_cost_mults: Dictionary = {}   # { "cost_1": { "mult": 0.5, "remaining": 5.0 } }
 var _skill_cd_mults: Dictionary = {}     # { "cd_1": { "mult": 0.5, "remaining": 5.0 } }
@@ -189,6 +192,7 @@ func _physics_process(delta: float) -> void:
 		_knockback_timer -= delta
 		_tick_status_lights(delta)
 		_process_tick_effects(delta)
+		_tick_buffs(delta)
 		_process_discount_cards(delta)
 
 		# 匀减速：速度线性衰减到0
@@ -216,6 +220,7 @@ func _physics_process(delta: float) -> void:
 				_stagger_timer = 0.0
 		_tick_status_lights(delta)
 		_process_tick_effects(delta)
+		_tick_buffs(delta)
 		_process_discount_cards(delta)
 		velocity = Vector2.ZERO
 		move_and_slide()
@@ -225,7 +230,7 @@ func _physics_process(delta: float) -> void:
 		return  # AI控制由AI管理器处理
 
 	# 计算实际移动速度（含冲刺加成）
-	var move_speed: float = speed
+	var move_speed: float = _get_effective_value("speed", speed)
 	if is_sprinting:
 		move_speed += SPRINT_SPEED_BONUS
 
@@ -249,6 +254,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_tick_status_lights(delta)
 	_process_tick_effects(delta)
+	_tick_buffs(delta)
 	_process_discount_cards(delta)
 
 
@@ -272,7 +278,7 @@ func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
 		dmg_mult = _status_lights["vulnerable"].get("multiplier", 1.5)
 	var effective_amount: float = amount * dmg_mult
 
-	var defense_resist: float = defense * defense_factor
+	var defense_resist: float = _get_effective_value("defense", defense) * defense_factor
 	var actual_damage: int = 0
 	var decay_rate: float = 0.0
 	var effect: String = "none"
@@ -280,7 +286,7 @@ func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
 	if is_ready_to_catch:
 		# === 待接球: 韧性系统生效 ===
 		# 1. 韧性伤害衰减百分比
-		decay_rate = _get_resilience_decay_rate(resilience)
+		decay_rate = _get_resilience_decay_rate(_get_effective_value("resilience", resilience))
 		var reduced_attack: float = effective_amount * (1.0 - decay_rate)
 		actual_damage = int(max(0, reduced_attack - defense_resist))
 
@@ -288,10 +294,10 @@ func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
 		stamina = int(max(0, stamina + defense_resist - reduced_attack))
 
 		# 3. 僵直时间（与韧性反比，四段）
-		var base_stagger: float = _get_stagger_by_resilience(resilience)
+		var base_stagger: float = _get_stagger_by_resilience(_get_effective_value("resilience", resilience))
 
 		# 4. 韧性效果判定（与衰减同时发生，三选一）
-		effect = _roll_resilience_effect(resilience)
+		effect = _roll_resilience_effect(_get_effective_value("resilience", resilience))
 		if effect == "knockback1":
 			_apply_knockback(attacker, 100.0)
 			_stagger_timer = max(base_stagger, _knockback_timer)
@@ -308,10 +314,10 @@ func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
 			_stagger_timer = base_stagger
 	else:
 		# === 非待接球: 新体力 = 当前体力 + 防御抗力 - 攻击 ===
-		actual_damage = int(max(0, amount - defense_resist))
-		stamina = int(max(0, stamina + defense_resist - amount))
+		actual_damage = int(max(0, effective_amount - defense_resist))
+		stamina = int(max(0, stamina + defense_resist - effective_amount))
 		# 非待接球无韧性保护，但僵直仍按韧性查表
-		_stagger_timer = _get_stagger_by_resilience(resilience)
+		_stagger_timer = _get_stagger_by_resilience(_get_effective_value("resilience", resilience))
 
 	# 体力条由下方球员栏更新，此处不处理
 
@@ -953,3 +959,61 @@ func _tick_mult_dict(d: Dictionary, delta: float) -> void:
 			to_remove.append(id)
 	for id in to_remove:
 		d.erase(id)
+
+
+## ==================== Buff堆栈接口（第1步：属性修改器）====================
+
+
+func add_buff(id: String, stat: String, mult: float, flat: float, duration: float, source: String = "") -> void:
+	"""添加/覆盖属性buff
+	stat: attack/defense/speed/resilience/max_energy
+	mult: 乘法修正（1.0=不改）
+	flat: 加法修正（0.0=不改）
+	duration: 持续时间，<=0永久"""
+	_buffs[id] = {
+		"id": id,
+		"stat": stat,
+		"mult": mult,
+		"flat": flat,
+		"source": source,
+		"duration": duration,
+		"remaining": duration,
+	}
+
+
+func remove_buff(id: String) -> bool:
+	return _buffs.erase(id)
+
+
+func has_buff(id: String) -> bool:
+	return _buffs.has(id)
+
+
+func get_buff_count() -> int:
+	return _buffs.size()
+
+
+func _get_effective_value(stat: String, base_value: float) -> float:
+	"""计算某个属性的最终值 = 基础×连乘 + 加法求和"""
+	var m: float = 1.0
+	var f: float = 0.0
+	for id in _buffs:
+		var b: Dictionary = _buffs[id]
+		if b.get("stat", "") == stat:
+			m *= b.get("mult", 1.0)
+			f += b.get("flat", 0.0)
+	m = maxf(m, 0.01)
+	return base_value * m + f
+
+
+func _tick_buffs(delta: float) -> void:
+	var to_remove: PackedStringArray = []
+	for id in _buffs:
+		var b: Dictionary = _buffs[id]
+		if b.get("duration", 0.0) <= 0.0:
+			continue
+		b["remaining"] = b.get("remaining", 0.0) - delta
+		if b.get("remaining", 0.0) <= 0.0:
+			to_remove.append(id)
+	for id in to_remove:
+		_buffs.erase(id)
