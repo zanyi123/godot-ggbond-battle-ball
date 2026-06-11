@@ -269,10 +269,10 @@ func apply_tag_effect(tag_id: String, params: Dictionary, caster_id: int) -> Dic
 			success = true
 		# === 球员标签 - 运动(27-30) ===
 		"player_move_slow":
-			_apply_player_stat_buff(params, caster_id, "speed", 1.0 / max(0.01, 1.0 + float(params.get("value", 50)) / 100.0), 0.0)
+			_apply_player_stat_buff(params, caster_id, "speed", 1.0 / max(0.01, float(params.get("multiplier", 1.5))), 0.0)
 			success = true
 		"player_move_boost":
-			_apply_player_stat_buff(params, caster_id, "speed", 1.0 + float(params.get("value", 50)) / 100.0, 0.0)
+			_apply_player_stat_buff(params, caster_id, "speed", float(params.get("multiplier", 1.5)), 0.0)
 			success = true
 		"player_root":
 			_apply_player_status(params, caster_id, "rooted")
@@ -699,7 +699,8 @@ func _apply_player_stat_buff(params: Dictionary, caster_id: int, stat: String, m
 	var final_mult: float = 1.0 + (mult - 1.0) * skill_mult
 	var final_flat: float = flat * skill_mult
 	for target in targets:
-		var buff_id: String = "player_%s_%d" % [stat, target.get_instance_id()]
+		_effect_counter += 1
+		var buff_id: String = "stat_%d_%s_%d" % [_effect_counter, stat, target.get_instance_id()]
 		target.add_buff(buff_id, stat, final_mult, final_flat, duration, params.get("_tag_id", ""))
 	print("[TagEffect] 属性buff: stat=%s mult=%.2f flat=%.1f dur=%.1fs targets=%d" % [stat, final_mult, final_flat, duration, targets.size()])
 
@@ -837,25 +838,25 @@ func _apply_player_energy_flat(params: Dictionary, caster_id: int, is_gain: bool
 ## === ④折扣类 ===
 func _apply_player_spirit_cost(params: Dictionary, caster_id: int, is_down: bool) -> void:
 	var targets := _get_player_targets(params, caster_id)
-	var val: float = float(params.get("value", 20)) / 100.0
+	var mult_val: float = float(params.get("multiplier", 0.8))
 	var duration: float = float(params.get("duration", 5.0))
 	for target in targets:
-		var mult: float = (1.0 - val) if is_down else (1.0 + val)
+		var mult: float = mult_val if is_down else (1.0 + (1.0 - mult_val))
 		target.add_skill_cost_mult("spirit_cost_%d" % target.get_instance_id(), max(0.1, mult), duration)
-	print("[TagEffect] 消耗%s: val=%.0f%% dur=%.1fs" % ["减少" if is_down else "增加", val * 100.0, duration])
+	print("[TagEffect] 消耗%s: mult=%.2f dur=%.1fs" % ["减少" if is_down else "增加", mult_val, duration])
 
 func _apply_player_spirit_cd(params: Dictionary, caster_id: int, is_down: bool) -> void:
 	var targets := _get_player_targets(params, caster_id)
-	var val: float = float(params.get("value", 20)) / 100.0
+	var mult_val: float = float(params.get("multiplier", 0.8))
 	var duration: float = float(params.get("duration", 5.0))
 	for target in targets:
-		var mult: float = (1.0 - val) if is_down else (1.0 + val)
+		var mult: float = mult_val if is_down else (1.0 + (1.0 - mult_val))
 		target.add_skill_cd_mult("spirit_cd_%d" % target.get_instance_id(), max(0.1, mult), duration)
-	print("[TagEffect] CD%s: val=%.0f%% dur=%.1fs" % ["缩短" if is_down else "延长", val * 100.0, duration])
+	print("[TagEffect] CD%s: mult=%.2f dur=%.1fs" % ["缩短" if is_down else "延长", mult_val, duration])
 
 func _apply_player_spirit_uses(params: Dictionary, caster_id: int) -> void:
 	var targets := _get_player_targets(params, caster_id)
-	var bonus: int = int(params.get("value", 1))
+	var bonus: int = int(params.get("bonus_uses", 1))
 	var skill_id: String = str(params.get("skill_id", ""))
 	for target in targets:
 		if skill_id != "":

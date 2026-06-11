@@ -251,7 +251,7 @@ func _on_throw_requested(direction: Vector2, power: float) -> void:
 	if player == null or not player.is_carrying_ball:
 		return
 
-	var damage: float = player.attack_power
+	var damage: float = player._get_effective_value("attack", player.attack_power)
 	var max_dist: float = 300.0 + power * 500.0
 
 	var skills: Array[Dictionary] = []

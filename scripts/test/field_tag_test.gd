@@ -894,7 +894,7 @@ func _try_throw_ball() -> void:
 	ball_node.launch(
 		player_attacker.global_position,
 		throw_dir,
-		player_attacker.attack_power,
+		player_attacker._get_effective_value("attack", player_attacker.attack_power),
 		600.0,
 		player_attacker
 	)

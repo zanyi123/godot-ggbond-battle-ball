@@ -190,10 +190,7 @@ func _physics_process(delta: float) -> void:
 	# 击退中：匀减速到0（不处理输入）
 	if _knockback_timer > 0.0:
 		_knockback_timer -= delta
-		_tick_status_lights(delta)
-		_process_tick_effects(delta)
-		_tick_buffs(delta)
-		_process_discount_cards(delta)
+		_tick_all_timers(delta)
 
 		# 匀减速：速度线性衰减到0
 		if _knockback_duration > 0.0:
@@ -218,15 +215,16 @@ func _physics_process(delta: float) -> void:
 			_stagger_timer -= delta
 			if _stagger_timer <= 0.0:
 				_stagger_timer = 0.0
-		_tick_status_lights(delta)
-		_process_tick_effects(delta)
-		_tick_buffs(delta)
-		_process_discount_cards(delta)
+		_tick_all_timers(delta)
 		velocity = Vector2.ZERO
 		move_and_slide()
 		return
 
+	# 所有球员（包括AI和非玩家控制）都要更新持续效果
+	_tick_all_timers(delta)
+
 	if not is_player_controlled:
+		move_and_slide()
 		return  # AI控制由AI管理器处理
 
 	# 计算实际移动速度（含冲刺加成）
@@ -252,10 +250,6 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector2.ZERO
 
 	move_and_slide()
-	_tick_status_lights(delta)
-	_process_tick_effects(delta)
-	_tick_buffs(delta)
-	_process_discount_cards(delta)
 
 
 func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
@@ -848,6 +842,14 @@ func get_total_tick_rate(type: String) -> float:
 	return total
 
 
+func _tick_all_timers(delta: float) -> void:
+	"""统一更新所有持续效果计时器（状态灯/闹钟/buff/折扣卡）"""
+	_tick_status_lights(delta)
+	_process_tick_effects(delta)
+	_tick_buffs(delta)
+	_process_discount_cards(delta)
+
+
 func _process_tick_effects(delta: float) -> void:
 	"""每帧执行：运行闹钟纸条 + 倒计时 + 撕掉到期的"""
 	var to_remove: PackedStringArray = []
@@ -1017,3 +1019,19 @@ func _tick_buffs(delta: float) -> void:
 			to_remove.append(id)
 	for id in to_remove:
 		_buffs.erase(id)
+
+
+## ==================== 传送系统 ====================
+
+var _pre_teleport_pos: Vector2 = Vector2.ZERO
+
+func teleport_to(pos: Vector2) -> void:
+	"""传送到指定位置"""
+	_pre_teleport_pos = global_position
+	global_position = pos
+
+func return_to_previous() -> void:
+	"""返回传送前位置"""
+	if _pre_teleport_pos != Vector2.ZERO:
+		global_position = _pre_teleport_pos
+		_pre_teleport_pos = Vector2.ZERO

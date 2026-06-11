@@ -1274,7 +1274,7 @@ func _do_pass(ap: Dictionary) -> void:
 	var distance: float = p.global_position.distance_to(target_pos)
 
 	p.set_carrying_ball(false)
-	ball_node.launch(p.global_position, direction, p.attack_power * 0.5, distance + 80.0, p, [] as Array[Dictionary])
+	ball_node.launch(p.global_position, direction, p._get_effective_value("attack", p.attack_power) * 0.5, distance + 80.0, p, [] as Array[Dictionary])
 
 	ap.state = State.DEFEND
 	ap.target_pos = ap.home_pos
@@ -1307,7 +1307,7 @@ func _do_shoot(ap: Dictionary) -> void:
 		shoot_dir = shoot_dir.rotated(deg_to_rad(randf_range(-error, error)))
 
 	p.set_carrying_ball(false)
-	ball_node.launch(p.global_position, shoot_dir, p.attack_power, shoot_dist, p, [] as Array[Dictionary])
+	ball_node.launch(p.global_position, shoot_dir, p._get_effective_value("attack", p.attack_power), shoot_dist, p, [] as Array[Dictionary])
 
 	ap.state = State.DEFEND
 	ap.target_pos = ap.home_pos
