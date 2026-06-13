@@ -301,10 +301,14 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 			_apply_ball_dmg_down(params)
 			success = true
 		"ball_dmg_up_flat":
-			_apply_ball_dmg_up(params)
+			var flat_params_up: Dictionary = params.duplicate()
+			flat_params_up["value_type"] = "flat"
+			_apply_ball_dmg_up(flat_params_up)
 			success = true
 		"ball_dmg_down_flat":
-			_apply_ball_dmg_down(params)
+			var flat_params_down: Dictionary = params.duplicate()
+			flat_params_down["value_type"] = "flat"
+			_apply_ball_dmg_down(flat_params_down)
 			success = true
 		"ball_speed_up_pct":
 			_apply_ball_speed_up(params)
