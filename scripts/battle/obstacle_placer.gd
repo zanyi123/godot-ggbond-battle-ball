@@ -215,8 +215,11 @@ func _on_left_click() -> void:
 	"""左键点击"""
 	if current_mode == Mode.PLACING:
 		_place_obstacle()
+		get_viewport().set_input_as_handled()
 	elif current_mode == Mode.CLEARING:
 		_clear_step()
+		if current_mode == Mode.NONE:  # 刚完成最后一次操作
+			get_viewport().set_input_as_handled()
 
 
 func _place_obstacle() -> void:

@@ -17,6 +17,25 @@ var players: Array[Node] = []
 var _active_effects: Dictionary = {}
 var _effect_counter: int = 0
 
+# ==================== 优先级队列 ====================
+# 多标签并发时(间隔<0.1s)按优先级排序执行,让比赛状态更真实
+# 详见 docs/tag_priority.md
+
+## 标签优先级字典: tag_id → 优先级数字(越小越先执行)
+var _tag_priority: Dictionary = {}
+
+## 待执行队列: [{tag_id, params, caster_id, priority}]
+var _pending_tags: Array = []
+
+## 累积窗口计时器(秒)
+var _flush_timer: float = 0.0
+
+## 窗口时长(秒): 多个标签在此时间内到达会排队
+const FLUSH_WINDOW: float = 0.1
+
+## 是否启用优先级队列(测试平台可关闭)
+var priority_queue_enabled: bool = true
+
 # 球的临时修饰符（发球时生效，球落地/回收时清空）
 var _ball_mods: Dictionary = {
 	"dmg_mult": 1.0,        # 伤害倍率
@@ -43,6 +62,138 @@ var _ball_mods: Dictionary = {
 
 func _ready() -> void:
 	battle_manager = get_node_or_null("/root/BattleManager")
+	_init_priority_table()
+
+
+## ==================== 优先级表初始化 ====================
+
+func _init_priority_table() -> void:
+	"""初始化所有标签的优先级数字,越小越先执行"""
+	# === BALL类 ===
+	# B-10 数值修改层
+	_tag_priority["ball_dmg_up_pct"] = 11
+	_tag_priority["ball_dmg_down_pct"] = 12
+	_tag_priority["ball_dmg_up_flat"] = 13
+	_tag_priority["ball_dmg_down_flat"] = 14
+	_tag_priority["ball_speed_up_pct"] = 15
+	_tag_priority["ball_speed_down_pct"] = 16
+	_tag_priority["ball_speed_up_flat"] = 17
+	_tag_priority["ball_speed_down_flat"] = 18
+	# B-20 飞行行为层
+	_tag_priority["ball_tracking"] = 21
+	_tag_priority["ball_avoid"] = 22
+	_tag_priority["ball_boomerang"] = 23
+	_tag_priority["ball_straight"] = 24
+	_tag_priority["ball_lockon"] = 25
+	_tag_priority["ball_spread"] = 26
+	# B-30 穿透/范围层
+	_tag_priority["ball_penetrate"] = 31
+	_tag_priority["ball_range_up"] = 32
+	_tag_priority["ball_range_down"] = 33
+
+	# === FIELD类 ===
+	# F-10 障碍层
+	_tag_priority["field_obs_add"] = 101
+	_tag_priority["field_obs_clear"] = 102
+	# F-20 地形层
+	_tag_priority["field_terra_change"] = 121
+	_tag_priority["field_terra_revert"] = 122
+	_tag_priority["field_zone_mark"] = 123
+	_tag_priority["field_zone_clear"] = 124
+	# F-30 区域效果层
+	_tag_priority["field_zone_boost"] = 131
+	_tag_priority["field_zone_slow"] = 132
+	_tag_priority["field_zone_danger"] = 133
+	_tag_priority["field_zone_safe"] = 134
+	# F-40 视觉层
+	_tag_priority["field_illusion_add"] = 141
+	_tag_priority["field_illusion_clear"] = 142
+
+	# === PLAYER类 ===
+	# P-10 规则修改层(最先执行,影响后续标签结算)
+	_tag_priority["player_spirit_cost_down"] = 201
+	_tag_priority["player_spirit_cost_up"] = 202
+	_tag_priority["player_spirit_cd_down"] = 203
+	_tag_priority["player_spirit_cd_up"] = 204
+	_tag_priority["player_spirit_double"] = 205
+	_tag_priority["player_spirit_half"] = 206
+	_tag_priority["player_spirit_uses_up"] = 207
+	# P-20 属性Buff层
+	_tag_priority["player_atk_up_pct"] = 221
+	_tag_priority["player_atk_down_pct"] = 222
+	_tag_priority["player_atk_up_flat"] = 223
+	_tag_priority["player_atk_down_flat"] = 224
+	_tag_priority["player_def_up_pct"] = 225
+	_tag_priority["player_def_down_pct"] = 226
+	_tag_priority["player_def_up_flat"] = 227
+	_tag_priority["player_def_down_flat"] = 228
+	_tag_priority["player_spd_up_pct"] = 229
+	_tag_priority["player_spd_down_pct"] = 230
+	_tag_priority["player_spd_up_flat"] = 231
+	_tag_priority["player_spd_down_flat"] = 232
+	_tag_priority["player_res_up_pct"] = 233
+	_tag_priority["player_res_down_pct"] = 234
+	_tag_priority["player_res_up_flat"] = 235
+	_tag_priority["player_res_down_flat"] = 236
+	_tag_priority["player_energy_max_up_pct"] = 237
+	_tag_priority["player_energy_max_down_pct"] = 238
+	_tag_priority["player_energy_max_up_flat"] = 239
+	_tag_priority["player_energy_max_down_flat"] = 240
+	# P-30 状态灯层
+	_tag_priority["player_invincible"] = 301
+	_tag_priority["player_vulnerable"] = 302
+	_tag_priority["player_stealth"] = 303
+	_tag_priority["player_reveal"] = 304
+	# P-40 运动控制层
+	_tag_priority["player_move_slow"] = 401
+	_tag_priority["player_move_boost"] = 402
+	_tag_priority["player_root"] = 403
+	_tag_priority["player_unroot"] = 404
+	# P-50 控制层
+	_tag_priority["player_stun"] = 501
+	_tag_priority["player_cc_immune"] = 502
+	_tag_priority["player_silence"] = 503
+	_tag_priority["player_disarm"] = 504
+	# P-60 即时效果层(依赖前面所有buff的最终值)
+	_tag_priority["player_hp_heal_pct"] = 601
+	_tag_priority["player_hp_damage_pct"] = 602
+	_tag_priority["player_hp_heal_flat"] = 603
+	_tag_priority["player_hp_damage_flat"] = 604
+	_tag_priority["player_hp_regen"] = 605
+	_tag_priority["player_hp_dot"] = 606
+	_tag_priority["player_energy_gain_pct"] = 607
+	_tag_priority["player_energy_cost_pct"] = 608
+	_tag_priority["player_energy_gain_flat"] = 609
+	_tag_priority["player_energy_cost_flat"] = 610
+	# P-70 交互层
+	_tag_priority["player_teleport"] = 701
+	_tag_priority["player_return"] = 702
+
+
+func get_tag_priority(tag_id: String) -> int:
+	"""获取标签优先级,未注册的返回999(最后执行)"""
+	return _tag_priority.get(tag_id, 999)
+
+
+func queue_tag_effect(tag_id: String, params: Dictionary, caster_id: int) -> void:
+	"""将标签加入待执行队列,重置窗口计时器"""
+	var pri: int = get_tag_priority(tag_id)
+	_pending_tags.append({"tag_id": tag_id, "params": params, "caster_id": caster_id, "priority": pri})
+	_flush_timer = FLUSH_WINDOW
+	print("[TagQueue] 排队: %s (优先级=%d, 队列=%d)" % [tag_id, pri, _pending_tags.size()])
+
+
+func _flush_pending_tags() -> void:
+	"""按优先级排序后批量执行队列中的标签"""
+	if _pending_tags.is_empty():
+		return
+	# 按优先级排序(小数字先执行)
+	_pending_tags.sort_custom(func(a, b): return a.priority < b.priority)
+	print("[TagQueue] 开始按优先级执行 %d 个标签" % _pending_tags.size())
+	for entry in _pending_tags:
+		_do_apply_tag(entry.tag_id, entry.params, entry.caster_id)
+	_pending_tags.clear()
+	_flush_timer = 0.0
 
 
 ## ==================== 球修饰符接口（供 ball.gd 调用）====================
@@ -120,6 +271,22 @@ func trigger_boomerang(current_dir: Vector2) -> Vector2:
 ## ==================== 主入口 ====================
 
 func apply_tag_effect(tag_id: String, params: Dictionary, caster_id: int) -> Dictionary:
+	"""标签效果入口:启用队列时入队,否则直接执行"""
+	if priority_queue_enabled and not _pending_tags.is_empty():
+		# 队列中已有等待标签,新标签入队
+		queue_tag_effect(tag_id, params, caster_id)
+		return {"success": true, "tag_id": tag_id, "queued": true}
+	elif priority_queue_enabled:
+		# 队列为空,入队并启动窗口
+		queue_tag_effect(tag_id, params, caster_id)
+		return {"success": true, "tag_id": tag_id, "queued": true}
+	else:
+		# 不启用队列,直接执行
+		return _do_apply_tag(tag_id, params, caster_id)
+
+
+func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictionary:
+	"""实际执行标签效果(原 match 逻辑)"""
 	print("[TagEffect] 执行标签: %s params=%s" % [tag_id, params])
 
 	var success := false
@@ -184,6 +351,19 @@ func apply_tag_effect(tag_id: String, params: Dictionary, caster_id: int) -> Dic
 			success = true
 		"field_obs_clear":
 			_apply_field_obs_clear(params)
+			success = true
+		# === 场地标签 - 区域效果(07-10) ===
+		"field_zone_boost":
+			_apply_field_zone_effect(params, 0)
+			success = true
+		"field_zone_slow":
+			_apply_field_zone_effect(params, 1)
+			success = true
+		"field_zone_danger":
+			_apply_field_zone_effect(params, 2)
+			success = true
+		"field_zone_safe":
+			_apply_field_zone_effect(params, 3)
 			success = true
 		# 对球员标签暂不实现（第1步只做buff堆栈）
 		# === 球员标签 - 属性(01-16) ===
@@ -389,6 +569,13 @@ func remove_tag_effect(effect_id: String) -> void:
 
 
 func _process(delta: float) -> void:
+	# 优先级队列窗口计时
+	if _flush_timer > 0.0:
+		_flush_timer -= delta
+		if _flush_timer <= 0.0:
+			_flush_pending_tags()
+
+	# 活跃效果倒计时
 	var to_remove: PackedStringArray = []
 	for eid in _active_effects:
 		var effect: Dictionary = _active_effects[eid]
@@ -625,18 +812,77 @@ func _apply_field_zone_mark(params: Dictionary) -> void:
 	pass
 func _apply_field_zone_clear(params: Dictionary) -> void:
 	pass
-func _apply_field_zone_boost(params: Dictionary) -> void:
-	pass
-func _apply_field_zone_slow(params: Dictionary) -> void:
-	pass
-func _apply_field_zone_danger(params: Dictionary) -> void:
-	pass
-func _apply_field_zone_safe(params: Dictionary) -> void:
-	pass
+func _apply_field_zone_effect(params: Dictionary, zone_type: int) -> void:
+	"""区域效果标签通用函数：进入鼠标放置模式
+	zone_type: 0=加速 1=减速 2=危险 3=安全"""
+	var manager = _get_field_zone_manager()
+	if not manager:
+		push_error("[TagEffectHandler] 找不到 FieldZoneManager")
+		return
+
+	# 构建区域参数
+	var zone_params: Dictionary = {}
+	zone_params["zone_type"] = zone_type
+	zone_params["width"] = float(params.get("width", 120.0))
+	zone_params["height"] = float(params.get("height", 120.0))
+	zone_params["duration"] = float(params.get("duration", 10.0))
+
+	# 效果值：加速/减速=倍率，危险=每秒伤害，安全=无
+	match zone_type:
+		0:  # 加速
+			zone_params["effect_value"] = float(params.get("boost_multiplier", 1.5))
+		1:  # 减速
+			zone_params["effect_value"] = float(params.get("slow_multiplier", 1.5))
+		2:  # 危险
+			zone_params["effect_value"] = float(params.get("damage_value", 10.0))
+		3:  # 安全
+			zone_params["effect_value"] = 0.0
+
+	# 补充来源技能
+	if not params.has("source_skill"):
+		zone_params["source_skill"] = params.get("skill_id", "")
+
+	var mouse_ops: int = int(params.get("mouse_ops", 1))
+	manager.start_placing(zone_params, mouse_ops)
+
+	var type_names: Array = ["加速区", "减速区", "危险区", "安全区"]
+	print("[TagEffectHandler] 区域效果: %s size=%.0f×%.0f dur=%.1fs mouse_ops=%d" % [
+		type_names[zone_type],
+		zone_params["width"], zone_params["height"],
+		zone_params["duration"], mouse_ops
+	])
 func _apply_field_illusion_add(params: Dictionary) -> void:
-	pass
+	"""幻象生成标签：进入鼠标放置模式
+	params: place_mode(any/near), count, stamina, duration, ai_mode, source_player"""
+	var manager = _get_illusion_manager()
+	if not manager:
+		push_error("[TagEffectHandler] 找不到 IllusionManager")
+		return
+
+	var source: CharacterBody2D = params.get("source_player", null)
+	if not source or not is_instance_valid(source):
+		push_error("[TagEffectHandler] 幻象缺少 source_player")
+		return
+
+	var mouse_ops: int = int(params.get("count", 1))
+	manager.start_placing(params, mouse_ops)
+
+	print("[TagEffectHandler] 幻象生成: mode=%s count=%d stamina=%.0f dur=%.1fs ai=%s" % [
+		str(params.get("place_mode", "any")), mouse_ops,
+		float(params.get("stamina", source.max_stamina)),
+		float(params.get("duration", 10.0)),
+		str(params.get("ai_mode", false))
+	])
+
+
 func _apply_field_illusion_clear(params: Dictionary) -> void:
-	pass
+	"""幻象破除标签：释放后直接清除场上所有幻象（无鼠标系统）"""
+	var manager = _get_illusion_manager()
+	if not manager:
+		push_error("[TagEffectHandler] 找不到 IllusionManager")
+		return
+	manager.clear_all_illusions()
+	print("[TagEffectHandler] 幻象破除: 清除场上所有幻象")
 
 
 ## ==================== 辅助方法 ====================
@@ -645,6 +891,32 @@ func _get_obstacle_manager() -> Node:
 	"""获取障碍物管理器"""
 	if battle_manager and battle_manager.has_node("ObstacleManager"):
 		return battle_manager.get_node("ObstacleManager")
+	# 独立测试 fallback：通过组查找
+	var om = get_tree().get_first_node_in_group("obstacle_managers")
+	if om:
+		return om
+	return null
+
+
+func _get_field_zone_manager() -> Node:
+	"""获取场地区域管理器"""
+	if battle_manager and battle_manager.has_node("FieldZoneManager"):
+		return battle_manager.get_node("FieldZoneManager")
+	# 独立测试 fallback：通过组查找
+	var zm = get_tree().get_first_node_in_group("field_zone_managers")
+	if zm:
+		return zm
+	return null
+
+
+func _get_illusion_manager() -> Node:
+	"""获取幻象管理器"""
+	if battle_manager and battle_manager.has_node("IllusionManager"):
+		return battle_manager.get_node("IllusionManager")
+	# 独立测试 fallback：通过组查找
+	var im = get_tree().get_first_node_in_group("illusion_managers")
+	if im:
+		return im
 	return null
 
 
@@ -695,14 +967,17 @@ func _get_player_targets(params: Dictionary, caster_id: int) -> Array:
 func _apply_player_stat_buff(params: Dictionary, caster_id: int, stat: String, mult: float, flat: float) -> void:
 	var targets := _get_player_targets(params, caster_id)
 	var duration: float = float(params.get("duration", 5.0))
-	var skill_mult: float = float(params.get("_skill_mult", 1.0))
-	var final_mult: float = 1.0 + (mult - 1.0) * skill_mult
-	var final_flat: float = flat * skill_mult
 	for target in targets:
+		# 读取并消费双倍/减半倍率（来自 player_spirit_double/half 标签）
+		var skill_mult: float = target.get_and_consume_next_skill_mult()
+		var final_mult: float = 1.0 + (mult - 1.0) * skill_mult
+		var final_flat: float = flat * skill_mult
 		_effect_counter += 1
 		var buff_id: String = "stat_%d_%s_%d" % [_effect_counter, stat, target.get_instance_id()]
 		target.add_buff(buff_id, stat, final_mult, final_flat, duration, params.get("_tag_id", ""))
-	print("[TagEffect] 属性buff: stat=%s mult=%.2f flat=%.1f dur=%.1fs targets=%d" % [stat, final_mult, final_flat, duration, targets.size()])
+		if skill_mult != 1.0:
+			print("[TagEffect] 双倍/减半生效: skill_mult=%.2f -> mult=%.2f flat=%.1f" % [skill_mult, final_mult, final_flat])
+		print("[TagEffect] 属性buff: stat=%s mult=%.2f flat=%.1f dur=%.1fs target=%s" % [stat, final_mult, final_flat, duration, target.char_data.get("name", "?")])
 
 
 ## === ②状态类通用 ===
@@ -744,18 +1019,18 @@ func _apply_player_reveal(params: Dictionary, caster_id: int) -> void:
 func _apply_player_hp_heal_pct(params: Dictionary, caster_id: int) -> void:
 	var targets := _get_player_targets(params, caster_id)
 	var pct: float = float(params.get("value", 20)) / 100.0
-	var skill_mult: float = float(params.get("_skill_mult", 1.0))
 	for target in targets:
+		var skill_mult: float = target.get_and_consume_next_skill_mult()
 		var heal: float = target.max_stamina * pct * skill_mult
 		target.stamina = min(target.max_stamina, target.stamina + heal)
 
 func _apply_player_hp_damage_pct(params: Dictionary, caster_id: int) -> void:
 	var targets := _get_player_targets(params, caster_id)
 	var pct: float = float(params.get("value", 20)) / 100.0
-	var skill_mult: float = float(params.get("_skill_mult", 1.0))
 	for target in targets:
 		if target.is_status_active("invincible"):
 			continue
+		var skill_mult: float = target.get_and_consume_next_skill_mult()
 		var dmg: float = target.max_stamina * pct * skill_mult
 		target.stamina = max(0.0, target.stamina - dmg)
 		if target.stamina <= 0.0 and not target.is_defeated:
@@ -766,17 +1041,17 @@ func _apply_player_hp_damage_pct(params: Dictionary, caster_id: int) -> void:
 func _apply_player_hp_heal_flat(params: Dictionary, caster_id: int) -> void:
 	var targets := _get_player_targets(params, caster_id)
 	var val: float = float(params.get("value", 30))
-	var skill_mult: float = float(params.get("_skill_mult", 1.0))
 	for target in targets:
+		var skill_mult: float = target.get_and_consume_next_skill_mult()
 		target.stamina = min(target.max_stamina, target.stamina + val * skill_mult)
 
 func _apply_player_hp_damage_flat(params: Dictionary, caster_id: int) -> void:
 	var targets := _get_player_targets(params, caster_id)
 	var val: float = float(params.get("value", 30))
-	var skill_mult: float = float(params.get("_skill_mult", 1.0))
 	for target in targets:
 		if target.is_status_active("invincible"):
 			continue
+		var skill_mult: float = target.get_and_consume_next_skill_mult()
 		target.stamina = max(0.0, target.stamina - val * skill_mult)
 		if target.stamina <= 0.0 and not target.is_defeated:
 			target._on_defeated()
@@ -787,18 +1062,25 @@ func _apply_player_hp_regen(params: Dictionary, caster_id: int) -> void:
 	var targets := _get_player_targets(params, caster_id)
 	var rate: float = float(params.get("value", 5))
 	var duration: float = float(params.get("duration", 5.0))
-	var skill_mult: float = float(params.get("_skill_mult", 1.0))
 	for target in targets:
+		# 读取并消费双倍/减半倍率（来自 player_spirit_double/half 标签）
+		var skill_mult: float = target.get_and_consume_next_skill_mult()
 		target.add_tick_effect("hp_regen_%d" % target.get_instance_id(), "regen", rate * skill_mult, duration)
+		if skill_mult != 1.0:
+			print("[TagEffect] 持续恢复双倍/减半生效: rate=%.1f × %.2f = %.1f/s" % [rate, skill_mult, rate * skill_mult])
 	print("[TagEffect] 持续恢复: rate=%.1f/s dur=%.1fs" % [rate, duration])
 
 func _apply_player_hp_dot(params: Dictionary, caster_id: int) -> void:
 	var targets := _get_player_targets(params, caster_id)
 	var rate: float = float(params.get("value", 5))
 	var duration: float = float(params.get("duration", 5.0))
-	var skill_mult: float = float(params.get("_skill_mult", 1.0))
 	for target in targets:
-		target.add_tick_effect("hp_dot_%d" % target.get_instance_id(), "dot", rate * skill_mult, duration)
+		# 读取并消费双倍/减半倍率（来自 player_spirit_double/half 标签）
+		var skill_mult: float = target.get_and_consume_next_skill_mult()
+		# 思想2：数值层相互影响 - 绑定攻击力属性
+		target.add_tick_effect("hp_dot_%d" % target.get_instance_id(), "dot", rate * skill_mult, duration, ["attack"])
+		if skill_mult != 1.0:
+			print("[TagEffect] 持续掉血双倍/减半生效: rate=%.1f × %.2f = %.1f/s" % [rate, skill_mult, rate * skill_mult])
 	print("[TagEffect] 持续掉血: rate=%.1f/s dur=%.1fs" % [rate, duration])
 
 
@@ -814,8 +1096,8 @@ func _apply_player_unroot(params: Dictionary, caster_id: int) -> void:
 func _apply_player_energy_pct(params: Dictionary, caster_id: int, is_gain: bool) -> void:
 	var targets := _get_player_targets(params, caster_id)
 	var pct: float = float(params.get("value", 20)) / 100.0
-	var skill_mult: float = float(params.get("_skill_mult", 1.0))
 	for target in targets:
+		var skill_mult: float = target.get_and_consume_next_skill_mult()
 		var amt: float = target.max_spirit_energy * pct * skill_mult
 		if is_gain:
 			target.spirit_energy = min(target._get_effective_value("max_energy", target.max_spirit_energy), target.spirit_energy + amt)
@@ -827,8 +1109,8 @@ func _apply_player_energy_pct(params: Dictionary, caster_id: int, is_gain: bool)
 func _apply_player_energy_flat(params: Dictionary, caster_id: int, is_gain: bool) -> void:
 	var targets := _get_player_targets(params, caster_id)
 	var val: float = float(params.get("value", 20))
-	var skill_mult: float = float(params.get("_skill_mult", 1.0))
 	for target in targets:
+		var skill_mult: float = target.get_and_consume_next_skill_mult()
 		if is_gain:
 			target.spirit_energy = min(target._get_effective_value("max_energy", target.max_spirit_energy), target.spirit_energy + val * skill_mult)
 		else:

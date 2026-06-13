@@ -254,6 +254,14 @@ func _on_body_entered(body: Node2D) -> void:
 		_catch_ball(player)
 		return
 
+	# === 幻象：击中只扣幻象体力，球继续飞（不当作击中真身）===
+	if player.has_method("get") and player.get("is_illusion") == true:
+		player.take_damage(ball_damage, attacker_player)
+		ball_hit_player.emit(player, ball_damage)
+		# 穿透模式下继续飞；非穿透也继续飞（幻象是虚假目标，不挡球权流转）
+		print("[Ball] 击中幻象 %s, 扣体力, 球继续飞行" % (player.illusion_id if player.get("illusion_id") else "?"))
+		return
+
 	# === 对方球员 → 击中造成伤害 ===
 	var result: Dictionary = player.take_damage(ball_damage, attacker_player)
 	var actual_damage: int = result.get("damage", 0)
@@ -279,6 +287,9 @@ func _on_body_entered(body: Node2D) -> void:
 					continue
 				# 隐身者不受AOE影响（看不到就不会被波及）
 				if p.has_method("is_status_active") and p.is_status_active("stealthed"):
+					continue
+				# 幻象不受AOE影响（虚假目标，不计入范围伤害）
+				if p.get("is_illusion") == true:
 					continue
 				var dist: float = player.global_position.distance_to(p.global_position)
 				if dist <= aoe_radius:

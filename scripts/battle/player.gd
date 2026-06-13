@@ -759,6 +759,15 @@ func equip_spirit(spirit_data: Dictionary) -> void:
 # 控制类状态名列表（受免控灯保护）
 const _CC_STATUSES: PackedStringArray = ["stunned", "silenced", "disarmed", "rooted"]
 
+# 互斥状态灯映射：灯名 → 互斥规则
+# "block": 互斥灯存在时拒绝点此灯
+# "clear": 点此灯时清除互斥灯
+const _MUTEX_LIGHTS: Dictionary = {
+	"invincible": {"block": ["vulnerable"]},       # 无敌期间易伤无效
+	"vulnerable": {"block": ["invincible"]},        # 易伤被无敌阻塞（无敌优先，不破无敌）
+	"reveal": {"clear": ["stealthed"]},  # 显形清除隐身
+}
+
 
 func is_status_active(status_name: String) -> bool:
 	"""灯亮没亮？"""
@@ -768,11 +777,30 @@ func is_status_active(status_name: String) -> bool:
 func turn_on_light(status_name: String, duration: float, extra: Dictionary = {}) -> bool:
 	"""点灯（返回true=成功，false=被免控拦截）
 	控制类状态（眩晕/沉默/缴械/定身）会被免控灯拦截
-	同一盏灯重复点会刷新时间"""
+	同一盏灯重复点会刷新时间
+	互斥灯会清除/拦截对应状态"""
 	# 控制类状态，先检查免控灯
 	if status_name in _CC_STATUSES:
 		if is_status_active("cc_immune"):
 			return false
+
+	# 互斥检查
+	if _MUTEX_LIGHTS.has(status_name):
+		var mutex: Dictionary = _MUTEX_LIGHTS[status_name]
+		var block_list: Array = mutex.get("block", [])
+		var clear_list: Array = mutex.get("clear", [])
+		
+		# 检查是否被其他灯阻塞
+		for block_light in block_list:
+			if is_status_active(block_light):
+				return false
+		
+		# 清除互斥的灯
+		for clear_light in clear_list:
+			if is_status_active(clear_light):
+				turn_off_light(clear_light)
+
+	# 设置状态灯（所有灯都会设置到这里）
 	_status_lights[status_name] = {
 		"on": true,
 		"remaining": duration,
@@ -810,16 +838,18 @@ func _tick_status_lights(delta: float) -> void:
 ## ==================== 闹钟纸条系统（第3步：持续效果）====================
 
 
-func add_tick_effect(id: String, type: String, rate: float, duration: float) -> void:
+func add_tick_effect(id: String, type: String, rate: float, duration: float, affected_stats: Array = []) -> void:
 	"""添加一个持续效果（闹钟纸条）
 	type: "regen"（持续恢复）或 "dot"（持续掉血）
 	rate: 每秒的量
 	duration: 持续时间（秒）
+	affected_stats: 影响的属性列表 ["attack", "defense"] - tick时动态读这些属性的buff倍率
 	同id重复添加会覆盖"""
 	_tick_effects[id] = {
 		"type": type,
 		"rate": rate,
 		"remaining": duration,
+		"affected_stats": affected_stats,
 	}
 
 
@@ -864,7 +894,14 @@ func _process_tick_effects(delta: float) -> void:
 		elif etype == "dot":
 			# 无敌灯亮时，不掉血（但倒计时照跑）
 			if not is_status_active("invincible"):
-				stamina = maxf(0.0, stamina - rate * delta)
+				var base_rate: float = rate
+				# 思想2：数值层相互影响（buff 栈影响持续效果）
+				var affected_stats: Array = effect.get("affected_stats", [])
+				for stat in affected_stats:
+					if stat == "attack":
+						var attack_mult: float = _get_effective_value("attack", attack_power) / attack_power
+						base_rate *= attack_mult
+				stamina = maxf(0.0, stamina - base_rate * delta)
 				if stamina <= 0.0 and not is_defeated:
 					_on_defeated()
 

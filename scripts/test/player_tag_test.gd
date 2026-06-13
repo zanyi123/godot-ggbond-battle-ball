@@ -32,6 +32,14 @@ var log_lines: Array = []
 var popup_panel: Panel
 var popup_visible: bool = false
 
+## 已添加标签记录: [{tag_id, tag_name, caster, target, energy_cost, params}]
+var applied_tags: Array = []
+var applied_tags_label: Label  # 右面板下方显示已添加标签列表
+var show_applied_list: bool = false
+
+## SETUP阶段待扣除的能量列表: [{caster, cost, caster_name}]
+var _pending_energy_costs: Array = []
+
 ## 阶段
 enum Phase { SETUP, PLAYING }
 var current_phase: int = Phase.SETUP
@@ -171,6 +179,11 @@ func _create_handler() -> void:
 	# 球需要通过 group 找到 handler
 	handler.add_to_group("spirit_system")
 
+	# handler暂停,活跃效果不会提前倒计时
+	handler.set_process(false)
+	# 测试平台关闭优先级队列(不需要0.1s延迟,直接执行)
+	handler.priority_queue_enabled = false
+
 
 ## ==================== 创建球员 ====================
 
@@ -192,6 +205,10 @@ func _create_players() -> void:
 	handler.players.append(player_b)
 
 	controlled_player = player_a
+
+	# SETUP阶段暂停球员和handler的物理帧,防止buff/状态灯提前开始倒计时
+	player_a.set_physics_process(false)
+	player_b.set_physics_process(false)
 
 
 func _create_ball() -> void:
@@ -303,6 +320,9 @@ func _create_ui() -> void:
 	auto_test_btn.pressed.connect(_auto_test_all_tags)
 	hud.add_child(auto_test_btn)
 	main_ui_nodes.append(auto_test_btn)
+
+	# === 已添加标签列表区域 ===
+	_create_applied_tags_panel()
 
 	# === 操作提示(始终显示)===
 	var tips := Label.new()
@@ -543,6 +563,135 @@ func _create_tag_button_panel() -> void:
 		var sep := HSeparator.new()
 		sep.add_theme_stylebox_override("separator", StyleBoxEmpty.new())
 		vbox.add_child(sep)
+
+
+func _create_applied_tags_panel() -> void:
+	"""已添加标签列表面板(右侧日志下方)"""
+	var bg := Panel.new()
+	bg.name = "AppliedTagsPanel"
+	bg.position = Vector2(270, 560)
+	bg.size = Vector2(520, 90)
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.08, 0.1, 0.08, 0.9)
+	bg_style.border_color = Color(0.4, 0.6, 0.3)
+	bg_style.set_corner_radius_all(5)
+	bg_style.border_width_bottom = 1
+	bg_style.border_width_top = 1
+	bg_style.border_width_left = 1
+	bg_style.border_width_right = 1
+	bg.add_theme_stylebox_override("panel", bg_style)
+	hud.add_child(bg)
+	main_ui_nodes.append(bg)
+
+	# 标题行
+	var title := Label.new()
+	title.text = "已添加标签 (0)"
+	title.name = "AppliedTagsTitle"
+	title.position = Vector2(280, 563)
+	title.size = Vector2(200, 18)
+	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_color_override("font_color", Color(0.5, 0.9, 0.4))
+	hud.add_child(title)
+	main_ui_nodes.append(title)
+
+	# 切换展开/折叠按钮
+	var toggle_btn := Button.new()
+	toggle_btn.name = "AppliedTagsToggle"
+	toggle_btn.text = "展开"
+	toggle_btn.position = Vector2(730, 561)
+	toggle_btn.size = Vector2(50, 20)
+	toggle_btn.add_theme_font_size_override("font_size", 12)
+	toggle_btn.pressed.connect(_toggle_applied_list)
+	hud.add_child(toggle_btn)
+	main_ui_nodes.append(toggle_btn)
+
+	# 清空按钮
+	var clear_btn := Button.new()
+	clear_btn.name = "AppliedTagsClear"
+	clear_btn.text = "清空"
+	clear_btn.position = Vector2(680, 561)
+	clear_btn.size = Vector2(45, 20)
+	clear_btn.add_theme_font_size_override("font_size", 12)
+	clear_btn.pressed.connect(_clear_applied_tags)
+	hud.add_child(clear_btn)
+	main_ui_nodes.append(clear_btn)
+
+	# 内容标签
+	applied_tags_label = Label.new()
+	applied_tags_label.name = "AppliedTagsContent"
+	applied_tags_label.position = Vector2(280, 583)
+	applied_tags_label.size = Vector2(500, 60)
+	applied_tags_label.add_theme_font_size_override("font_size", 11)
+	applied_tags_label.add_theme_color_override("font_color", Color(0.75, 0.85, 0.7))
+	applied_tags_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hud.add_child(applied_tags_label)
+	main_ui_nodes.append(applied_tags_label)
+
+
+func _toggle_applied_list() -> void:
+	"""展开/折叠已添加标签列表"""
+	show_applied_list = not show_applied_list
+	var toggle_btn = hud.get_node_or_null("AppliedTagsToggle")
+	var bg = hud.get_node_or_null("AppliedTagsPanel")
+	if show_applied_list:
+		if toggle_btn: toggle_btn.text = "折叠"
+		if bg: bg.size.y = 180
+		if applied_tags_label: applied_tags_label.size.y = 150
+		_refresh_applied_tags_display()
+	else:
+		if toggle_btn: toggle_btn.text = "展开"
+		if bg: bg.size.y = 90
+		if applied_tags_label: applied_tags_label.size.y = 60
+		_refresh_applied_tags_display()
+
+
+func _clear_applied_tags() -> void:
+	"""清空已添加标签记录"""
+	applied_tags.clear()
+	_refresh_applied_tags_display()
+	_add_log("[color=gray]已清空标签记录[/color]")
+
+
+func _refresh_applied_tags_display() -> void:
+	"""刷新已添加标签显示"""
+	var title = hud.get_node_or_null("AppliedTagsTitle")
+	if title:
+		title.text = "已添加标签 (%d)" % applied_tags.size()
+
+	if not applied_tags_label:
+		return
+
+	if applied_tags.is_empty():
+		applied_tags_label.text = "(无)"
+		return
+
+	if show_applied_list:
+		# 展开模式:逐行显示
+		var lines: Array = []
+		for i in range(applied_tags.size()):
+			var rec: Dictionary = applied_tags[i]
+			var cost_str: String = ""
+			if rec.get("energy_cost", 0.0) > 0.0:
+				cost_str = " ⚡%.0f" % float(rec.get("energy_cost", 0.0))
+			var param_str: String = str(rec.get("params_summary", ""))
+			lines.append("%d. %s | %s→%s%s | %s" % [
+				i + 1,
+				str(rec.get("tag_name", "")),
+				str(rec.get("caster", "")),
+				str(rec.get("target", "")),
+				cost_str,
+				param_str,
+			])
+		applied_tags_label.text = "\n".join(lines)
+	else:
+		# 折叠模式:只显示一行概要
+		var names: Array = []
+		for rec in applied_tags:
+			var cost_str: String = ""
+			if rec.get("energy_cost", 0.0) > 0.0:
+				cost_str = "⚡%.0f" % float(rec.get("energy_cost", 0.0))
+			names.append("%s%s" % [str(rec.get("tag_name", "")), cost_str])
+		applied_tags_label.text = " | ".join(names)
 
 
 func _create_log_panel() -> void:
@@ -860,19 +1009,26 @@ func _execute_tag(use_a_as_caster: bool) -> void:
 	var caster: CharacterBody2D = player_a if use_a_as_caster else player_b
 	var caster_id: int = caster.get_instance_id()
 
-	# === 元灵能量消耗 ===
+	# === 元灵能量消耗(SETUP阶段只记录,开始测试时统一扣除) ===
 	var energy_cost: float = 0.0
 	if params.has("energy_cost"):
 		energy_cost = float(params["energy_cost"])
 		params.erase("energy_cost")
 	if energy_cost > 0.0:
 		var caster_name: String = "球员A" if use_a_as_caster else "球员B"
+		# 检查能量是否够(预检查)
 		if caster.spirit_energy < energy_cost:
 			_add_log("[color=red]✗[/color] %s 能量不足! 需要%.0f, 当前%.0f" % [caster_name, energy_cost, caster.spirit_energy])
 			_close_param_popup()
 			return
-		caster.spirit_energy -= energy_cost
-		_add_log("[color=cyan]%s 消耗能量 %.0f → 剩余 %.0f[/color]" % [caster_name, energy_cost, caster.spirit_energy])
+		# SETUP阶段不扣除,记录到待扣列表
+		if current_phase == Phase.SETUP:
+			_pending_energy_costs.append({"caster": caster, "cost": energy_cost, "caster_name": caster_name})
+			_add_log("[color=cyan]%s 预扣能量 %.0f (开始测试时结算)[/color]" % [caster_name, energy_cost])
+		else:
+			# PLAYING阶段立即扣除
+			caster.spirit_energy -= energy_cost
+			_add_log("[color=cyan]%s 消耗能量 %.0f → 剩余 %.0f[/color]" % [caster_name, energy_cost, caster.spirit_energy])
 
 	# 调试日志
 	_add_log("[color=gray]DEBUG %s caster=%s id=%d target=%s params=%s[/color]" % [selected_tag_id, ("A" if caster == player_a else "B"), caster_id, str(params.get("target", "?")), str(params)])
@@ -895,7 +1051,22 @@ func _execute_tag(use_a_as_caster: bool) -> void:
 
 	if success:
 		_add_log("[color=green]✓[/color] [%s→%s] %s | %s" % [caster_name, target_name, tag_name, _format_params(params)])
+		# 能量消耗日志(醒目显示)
+		if energy_cost > 0.0:
+			_add_log("[color=cyan]  ⚡元灵能量消耗: %.0f (%s剩余%.0f)[/color]" % [energy_cost, caster_name, caster.spirit_energy])
 		_log_diff(before, after)
+
+		# 记录到已添加标签列表
+		var param_summary: String = _format_params(params)
+		applied_tags.append({
+			"tag_id": selected_tag_id,
+			"tag_name": tag_name,
+			"caster": caster_name,
+			"target": target_name,
+			"energy_cost": energy_cost,
+			"params_summary": param_summary,
+		})
+		_refresh_applied_tags_display()
 	else:
 		_add_log("[color=red]✗[/color] 标签未实现: %s" % tag_name)
 
@@ -1110,8 +1281,14 @@ func _input(event: InputEvent) -> void:
 
 
 func _on_start_test() -> void:
-	"""开始测试 → 隐藏面板"""
+	"""开始测试 → 隐藏面板 → 启动物理帧 → 结算能量"""
 	current_phase = Phase.PLAYING
+	# 结算SETUP阶段累积的能量消耗
+	_settle_pending_energy()
+	# 启动球员和handler的物理帧(buff/状态灯/持续效果开始生效)
+	player_a.set_physics_process(true)
+	player_b.set_physics_process(true)
+	handler.set_process(true)
 	for node in main_ui_nodes:
 		if node and is_instance_valid(node):
 			node.visible = false
@@ -1126,8 +1303,16 @@ func _toggle_panels() -> void:
 		if node and is_instance_valid(node):
 			node.visible = show
 	if show:
-		_add_log("[color=yellow]面板已显示 | 选标签后点'开始测试'[/color]")
+		# 切回SETUP(显示面板) → 暂停物理帧
+		player_a.set_physics_process(false)
+		player_b.set_physics_process(false)
+		handler.set_process(false)
+		_add_log("[color=yellow]面板已显示(已暂停) | 选标签后点'开始测试'[/color]")
 	else:
+		# 切回PLAYING(隐藏面板) → 恢复物理帧
+		player_a.set_physics_process(true)
+		player_b.set_physics_process(true)
+		handler.set_process(true)
 		_add_log("[color=green]▶ 测试继续 | F6=显示面板[/color]")
 
 
@@ -1191,15 +1376,56 @@ func _reset_players() -> void:
 		p._next_skill_mults.clear()
 		p.is_defeated = false
 		p.global_position = Vector2(-300.0, 0.0) if p == player_a else Vector2(300.0, 0.0)
+	# 重置后回到SETUP状态,暂停物理帧
+	player_a.set_physics_process(false)
+	player_b.set_physics_process(false)
+	handler.set_process(false)
+	current_phase = Phase.SETUP
 	# 球回到球员A
 	if ball_node and is_instance_valid(ball_node) and player_a and is_instance_valid(player_a):
 		ball_node.owner_player = player_a
 		player_a.is_carrying_ball = true
 		player_a.set_carrying_ball(true)
+	applied_tags.clear()
+	_pending_energy_costs.clear()
+	_refresh_applied_tags_display()
 	_add_log("[color=cyan]已重置所有状态[/color]")
 
 
-## ==================== 自动验证51标签 ====================
+func _settle_pending_energy() -> void:
+	"""开始测试时,统一结算SETUP阶段累积的能量消耗"""
+	if _pending_energy_costs.is_empty():
+		return
+	_add_log("[color=cyan]═══ 结算能量消耗 ═══[/color]")
+	# 按施法者分组汇总
+	var totals: Dictionary = {}  # caster_instance_id → {caster, base_total, final_total, name}
+	for entry in _pending_energy_costs:
+		var c: CharacterBody2D = entry.caster
+		var ckey: int = c.get_instance_id()
+		if not totals.has(ckey):
+			totals[ckey] = {"caster": c, "base_total": 0.0, "final_total": 0.0, "name": entry.caster_name}
+		var base_cost: float = entry.cost
+		totals[ckey].base_total += base_cost
+	# 汇总检查+扣除
+	for ckey in totals:
+		var info: Dictionary = totals[ckey]
+		var c: CharacterBody2D = info.caster
+		# 读取消耗倍率（来自 player_spirit_cost_down/up 标签）
+		var cost_mult: float = c.get_skill_cost_mult()
+		var base_total: float = info.base_total
+		var actual_cost: float = base_total * cost_mult
+		info.final_total = actual_cost
+		if cost_mult != 1.0:
+			_add_log("[color=gray]  %s 基础消耗 %.0f × 倍率 %.2f = 实际 %.0f[/color]" % [
+				info.name, base_total, cost_mult, actual_cost])
+		if c.spirit_energy < actual_cost:
+			_add_log("[color=red]✗ %s 能量不足! 需要%.0f, 当前%.0f[/color]" % [info.name, actual_cost, c.spirit_energy])
+			# 能量不够也扣,扣到0
+			actual_cost = c.spirit_energy
+		c.spirit_energy -= actual_cost
+		_add_log("[color=cyan]%s 总消耗 %.0f (基础 %.0f × %.2f) → 剩余 %.0f[/color]" % [
+			info.name, actual_cost, base_total, cost_mult, c.spirit_energy])
+	_pending_energy_costs.clear()
 
 func _auto_test_all_tags() -> void:
 	"""一键验证51个标签，报告通过/失败"""
@@ -1308,11 +1534,49 @@ func _auto_test_all_tags() -> void:
 		_add_log("[color=red]保存报告失败[/color]")
 
 
+## ==================== 辅助函数:字典序列化 ====================
+
+func _serialize_mult_dict(mults: Dictionary) -> String:
+	"""把倍率字典序列化为字符串,方便快照比较"""
+	if mults.is_empty():
+		return ""
+	var pairs: Array = []
+	for key in mults:
+		var mult: float = mults[key].get("mult", 1.0)
+		var rem: float = mults[key].get("remaining", 0.0)
+		pairs.append("%s:%.2f(%.1f)" % [key, mult, rem])
+	pairs.sort()
+	return ",".join(pairs)
+
+
+func _serialize_next_mults(mults: Array) -> String:
+	"""把倍率数组序列化为字符串,方便快照比较"""
+	if mults.is_empty():
+		return ""
+	var pairs: Array = []
+	for i in range(mults.size()):
+		var val: float = mults[i]
+		pairs.append("%.2f" % val)
+	return ",".join(pairs)
+
+
+func _serialize_bonus_uses(uses: Dictionary) -> String:
+	"""把额外次数字典序列化为字符串"""
+	if uses.is_empty():
+		return ""
+	var pairs: Array = []
+	for key in uses:
+		var val: int = uses[key]
+		pairs.append("%s:%d" % [key, val])
+	pairs.sort()
+	return ",".join(pairs)
+
+
 func _reset_for_test() -> void:
 	"""重置两个球员到测试初始状态"""
 	for p in [player_a, player_b]:
 		if not p or not is_instance_valid(p):
-			return
+			continue  # 修正：用 continue 而不是 return
 		p.stamina = p.max_stamina
 		p.spirit_energy = p.max_spirit_energy
 		p._buffs.clear()
@@ -1390,10 +1654,11 @@ func _quick_snapshot(player: CharacterBody2D) -> Dictionary:
 		"pos": player.global_position,
 		"is_invincible": player.is_status_active("invincible"),
 		"is_stunned": player.is_status_active("stunned"),
-		"cost_mults": player._skill_cost_mults.size(),
-		"cd_mults": player._skill_cd_mults.size(),
-		"next_mults": player._next_skill_mults.size(),
-		"bonus_uses": player._skill_bonus_uses.size(),
+		# 规则修改类：记录具体倍率值(不只是个数)
+		"cost_mults": _serialize_mult_dict(player._skill_cost_mults),
+		"cd_mults": _serialize_mult_dict(player._skill_cd_mults),
+		"next_mults": _serialize_next_mults(player._next_skill_mults),
+		"bonus_uses": _serialize_bonus_uses(player._skill_bonus_uses),
 	}
 
 
@@ -1410,14 +1675,14 @@ func _has_change(before: Dictionary, after: Dictionary) -> bool:
 		return true
 	if int(after.get("tick_count", 0)) != int(before.get("tick_count", 0)):
 		return true
-	# 元灵系字典变化
-	if int(after.get("cost_mults", 0)) != int(before.get("cost_mults", 0)):
+	# 元灵系字典变化(现在比较序列化字符串,不是个数)
+	if after.get("cost_mults", "") != before.get("cost_mults", ""):
 		return true
-	if int(after.get("cd_mults", 0)) != int(before.get("cd_mults", 0)):
+	if after.get("cd_mults", "") != before.get("cd_mults", ""):
 		return true
-	if int(after.get("next_mults", 0)) != int(before.get("next_mults", 0)):
+	if after.get("next_mults", "") != before.get("next_mults", ""):
 		return true
-	if int(after.get("bonus_uses", 0)) != int(before.get("bonus_uses", 0)):
+	if after.get("bonus_uses", "") != before.get("bonus_uses", ""):
 		return true
 	# 位置变化
 	if Vector2(after.get("pos", Vector2.ZERO)) != Vector2(before.get("pos", Vector2.ZERO)):
@@ -1458,12 +1723,15 @@ func _diff_text(before: Dictionary, after: Dictionary) -> String:
 		parts.append("+持续")
 	if int(after.get("cost_mults", 0)) > int(before.get("cost_mults", 0)):
 		parts.append("+消耗修正")
-	if int(after.get("cd_mults", 0)) > int(before.get("cd_mults", 0)):
-		parts.append("+CD修正")
-	if int(after.get("next_mults", 0)) > int(before.get("next_mults", 0)):
-		parts.append("+倍率卡")
-	if int(after.get("bonus_uses", 0)) > int(before.get("bonus_uses", 0)):
-		parts.append("+额外次数")
+	# 倍率卡也检查变化（不是只有新增）
+	if after.get("cost_mults", "") != before.get("cost_mults", ""):
+		parts.append("消耗修正变化")
+	if after.get("cd_mults", "") != before.get("cd_mults", ""):
+		parts.append("CD修正变化")
+	if after.get("next_mults", "") != before.get("next_mults", ""):
+		parts.append("倍率卡变化")
+	if after.get("bonus_uses", "") != before.get("bonus_uses", ""):
+		parts.append("额外次数变化")
 	if Vector2(after.get("pos", Vector2.ZERO)) != Vector2(before.get("pos", Vector2.ZERO)):
 		parts.append("传送")
 	if after.get("is_invincible", false) != before.get("is_invincible", false):
