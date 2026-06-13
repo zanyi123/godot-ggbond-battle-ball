@@ -669,10 +669,11 @@ func _apply_ball_armor(params: Dictionary) -> void:
 	_ball_mods.armor += val
 	print("[TagEffect] 护甲: armor=%.1f" % _ball_mods.armor)
 
-## 05 加速 — params: {multiplier, fixed_value, duration}
+## 05 加速 — params: {multiplier, value(固定值), duration}
 func _apply_ball_speed_up(params: Dictionary) -> void:
 	var mult: float = float(params.get("multiplier", 0))
-	var fixed: float = float(params.get("fixed_value", 0))
+	# 兼容 registry 的 value 字段(ball_speed_up_flat 用 value)
+	var fixed: float = float(params.get("value", params.get("fixed_value", 0)))
 
 	if mult > 0:
 		_ball_mods.speed_mult *= mult
@@ -683,7 +684,7 @@ func _apply_ball_speed_up(params: Dictionary) -> void:
 ## 06 减速
 func _apply_ball_speed_down(params: Dictionary) -> void:
 	var mult: float = float(params.get("multiplier", 0))
-	var fixed: float = float(params.get("fixed_value", 0))
+	var fixed: float = float(params.get("value", params.get("fixed_value", 0)))
 
 	if mult > 0:
 		_ball_mods.speed_mult /= mult
@@ -692,12 +693,20 @@ func _apply_ball_speed_down(params: Dictionary) -> void:
 	_ball_mods.speed_mult = max(0.1, _ball_mods.speed_mult)
 	print("[TagEffect] 球减速: mult=%.2f flat=%.1f" % [_ball_mods.speed_mult, _ball_mods.speed_flat])
 
-## 07 范围扩大 — params: {multiplier, duration}
+## 07 范围扩大/AOE — params: {radius, damage_pct, multiplier(兼容)}
+## registry 定义: radius=AOE半径, damage_pct=范围伤害比(0-1)
 func _apply_ball_range_up(params: Dictionary) -> void:
+	var radius: float = float(params.get("radius", 0))
+	var dmg_pct: float = float(params.get("damage_pct", 0))
 	var mult: float = float(params.get("multiplier", 0))
+	# 设置 AOE 半径和伤害比(供 ball.gd 的 has_ball_aoe/get_ball_aoe_radius 使用)
+	if radius > 0:
+		_ball_mods.aoe_radius = radius
+	if dmg_pct > 0:
+		_ball_mods.aoe_damage_pct = dmg_pct
 	if mult > 0:
 		_ball_mods.range_mult *= mult
-	print("[TagEffect] 范围扩大: mult=%.2f" % _ball_mods.range_mult)
+	print("[TagEffect] 范围扩大/AOE: radius=%.1f dmg_pct=%.2f mult=%.2f" % [_ball_mods.aoe_radius, _ball_mods.aoe_damage_pct, _ball_mods.range_mult])
 
 ## 08 范围缩小
 func _apply_ball_range_down(params: Dictionary) -> void:
@@ -1122,23 +1131,23 @@ func _apply_player_energy_flat(params: Dictionary, caster_id: int, is_gain: bool
 
 
 ## === ④折扣类 ===
+## multiplier 直接代表最终倍率: down传<1(如0.8减耗20%), up传>1(如1.2增耗20%)
+## is_down 仅用于日志显示, 不再反转数值(避免传入>1值时算反)
 func _apply_player_spirit_cost(params: Dictionary, caster_id: int, is_down: bool) -> void:
 	var targets := _get_player_targets(params, caster_id)
-	var mult_val: float = float(params.get("multiplier", 0.8))
+	var mult: float = float(params.get("multiplier", 0.8 if is_down else 1.2))
 	var duration: float = float(params.get("duration", 5.0))
 	for target in targets:
-		var mult: float = mult_val if is_down else (1.0 + (1.0 - mult_val))
 		target.add_skill_cost_mult("spirit_cost_%d" % target.get_instance_id(), max(0.1, mult), duration)
-	print("[TagEffect] 消耗%s: mult=%.2f dur=%.1fs" % ["减少" if is_down else "增加", mult_val, duration])
+	print("[TagEffect] 消耗%s: mult=%.2f dur=%.1fs" % ["减少" if is_down else "增加", mult, duration])
 
 func _apply_player_spirit_cd(params: Dictionary, caster_id: int, is_down: bool) -> void:
 	var targets := _get_player_targets(params, caster_id)
-	var mult_val: float = float(params.get("multiplier", 0.8))
+	var mult: float = float(params.get("multiplier", 0.8 if is_down else 1.2))
 	var duration: float = float(params.get("duration", 5.0))
 	for target in targets:
-		var mult: float = mult_val if is_down else (1.0 + (1.0 - mult_val))
 		target.add_skill_cd_mult("spirit_cd_%d" % target.get_instance_id(), max(0.1, mult), duration)
-	print("[TagEffect] CD%s: mult=%.2f dur=%.1fs" % ["缩短" if is_down else "延长", mult_val, duration])
+	print("[TagEffect] CD%s: mult=%.2f dur=%.1fs" % ["缩短" if is_down else "延长", mult, duration])
 
 func _apply_player_spirit_uses(params: Dictionary, caster_id: int) -> void:
 	var targets := _get_player_targets(params, caster_id)
