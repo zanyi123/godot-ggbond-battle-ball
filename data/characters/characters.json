@@ -1,6 +1,7 @@
 [
 	{
 		"attack": 38.0,
+		"ball_speed": 420.0,
 		"defense": 60.0,
 		"defense_factor": 0.15,
 		"description": "主角，攻守兼备的全能型球员",
@@ -16,6 +17,7 @@
 	},
 	{
 		"attack": 30.0,
+		"ball_speed": 380.0,
 		"defense": 80.0,
 		"defense_factor": 0.2,
 		"description": "防御型球员，高韧性高防御",
@@ -31,6 +33,7 @@
 	},
 	{
 		"attack": 33.0,
+		"ball_speed": 480.0,
 		"defense": 50.0,
 		"defense_factor": 0.12,
 		"description": "高速度辅助型球员",
@@ -46,6 +49,7 @@
 	},
 	{
 		"attack": 35.0,
+		"ball_speed": 400.0,
 		"defense": 65.0,
 		"defense_factor": 0.15,
 		"description": "均衡型球员，适合多种位置",
@@ -61,6 +65,7 @@
 	},
 	{
 		"attack": 43.0,
+		"ball_speed": 460.0,
 		"defense": 55.0,
 		"defense_factor": 0.1,
 		"description": "高攻击力的进攻型球员",
@@ -76,6 +81,7 @@
 	},
 	{
 		"attack": 30.0,
+		"ball_speed": 390.0,
 		"defense": 70.0,
 		"defense_factor": 0.18,
 		"description": "辅助型球员，增强团队能力",
@@ -91,6 +97,7 @@
 	},
 	{
 		"attack": 18,
+		"ball_speed": 370.0,
 		"defense": 40,
 		"defense_factor": 0.15,
 		"description": "小虎队的梦幻球员",

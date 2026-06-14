@@ -22,6 +22,7 @@ const STAT_COLORS: Dictionary = {
 	"attack": Color(0.65, 0.65, 0.65),     # 黑（深灰，深色背景可见）
 	"resilience": Color(0.55, 0.55, 0.55), # 灰
 	"defense_factor": Color(0.6, 0.8, 0.3), # 绿
+	"ball_speed": Color(0.6, 0.4, 0.2),    # 棕色
 }
 
 const STAT_LABELS: Dictionary = {
@@ -31,13 +32,39 @@ const STAT_LABELS: Dictionary = {
 	"attack": "攻击",
 	"resilience": "韧性",
 	"defense_factor": "防御因子",
+	"ball_speed": "发球球速",
 }
 
 # 属性最大值（用于条形图比例）
 const STAT_MAX: float = 100.0
 
+# === 右侧详情面板排版规范常量 === === 添加新属性时只需修改内容，不需要修改位置计算 ===
+const PANEL_X: float = 370.0
+const PANEL_Y: float = 90.0
+const PANEL_WIDTH: float = 1070.0
+const PANEL_HEIGHT: float = 700.0
+const PANEL_VISIBLE_HEIGHT: float = 625.0  # 可见高度（启用滚动）
+
+const CONTENT_X: float = 370.0
+const NAME_Y: float = 90.0
+const DESC_Y: float = 130.0
+const STAT_Y_START: float = 175.0
+const STAT_SPACING: float = 44.0
+const STAT_BAR_X: float = 440.0
+const STAT_BAR_WIDTH: float = 350.0
+const STAT_BAR_HEIGHT: float = 18.0
+const STAT_VAL_X: float = 800.0
+const SEP_AFTER_STATS: float = 15.0  # 分隔线距离最后一条属性条的间距
+const TALENT_TITLE_AFTER_SEP: float = 15.0
+const TALENT_DESC_AFTER_TITLE: float = 27.0
+const SPIRIT_AFTER_DESC: float = 43.0
+const ULTIMATE_AFTER_SPIRIT: float = 35.0
+
 var characters_data: Array = []
 var selected_index: int = 0
+
+# 属性键数组（添加新属性时只需修改这里）
+var stat_keys: Array[String] = ["stamina", "defense", "speed", "attack", "resilience", "defense_factor", "ball_speed"]
 
 # 左侧列表节点引用
 var avatar_list: VBoxContainer
@@ -131,107 +158,130 @@ func _build_ui() -> void:
 		avatar_list.add_child(btn)
 		avatar_buttons.append(btn)
 
-	# === 右侧详情面板 ===
-	detail_panel = Panel.new()
-	detail_panel.position = Vector2(330, 75)
-	detail_panel.size = Vector2(1070, 700)
-	add_child(detail_panel)
-
+	# === 右侧详情面板 === === 排版规范（添加新属性时只需修改类成员 stat_keys 数组） ===
+	
+	# === 创建滚动容器 ===
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(PANEL_X, PANEL_Y)
+	scroll.size = Vector2(PANEL_WIDTH, PANEL_VISIBLE_HEIGHT)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	add_child(scroll)
+	
+	# 计算内容总高度
+	var stats_height: float = stat_keys.size() * STAT_SPACING
+	var content_height: float = (
+		NAME_Y +
+		stats_height +
+		SEP_AFTER_STATS +
+		TALENT_TITLE_AFTER_SEP +
+		TALENT_DESC_AFTER_TITLE +
+		SPIRIT_AFTER_DESC +
+		ULTIMATE_AFTER_SPIRIT +
+		50.0  # 底部留白
+	)
+	
+	var content := Control.new()
+	content.custom_minimum_size = Vector2(PANEL_WIDTH, max(content_height, PANEL_VISIBLE_HEIGHT))
+	scroll.add_child(content)
+	
+	# === 在content内添加所有元素 ===
+	
 	# 球员名称
 	name_label = Label.new()
-	name_label.position = Vector2(370, 90)
+	name_label.position = Vector2(0, 0)
 	name_label.add_theme_font_size_override("font_size", 28)
 	name_label.add_theme_color_override("font_color", Color.WHITE)
-	add_child(name_label)
-
+	content.add_child(name_label)
+	
 	# 描述
 	desc_label = Label.new()
-	desc_label.position = Vector2(370, 130)
+	desc_label.position = Vector2(0, DESC_Y - NAME_Y)
 	desc_label.add_theme_font_size_override("font_size", 15)
 	desc_label.add_theme_color_override("font_color", Color(0.65, 0.65, 0.65))
-	add_child(desc_label)
-
-	# 属性条（5个）
-	var stat_keys: Array[String] = ["stamina", "defense", "speed", "attack", "resilience", "defense_factor"]
-	var stat_y_start: float = 175.0
-	var stat_spacing: float = 44.0
-
+	content.add_child(desc_label)
+	
+	# 属性条
 	for idx in range(stat_keys.size()):
 		var key: String = stat_keys[idx]
-		var y: float = stat_y_start + idx * stat_spacing
+		var y: float = (STAT_Y_START - NAME_Y) + idx * STAT_SPACING
 
 		# 属性名标签
 		var stat_name := Label.new()
 		stat_name.text = STAT_LABELS[key]
-		stat_name.position = Vector2(370, y)
+		stat_name.position = Vector2(0, y)
 		stat_name.size = Vector2(60, 22)
 		stat_name.add_theme_font_size_override("font_size", 16)
 		stat_name.add_theme_color_override("font_color", STAT_COLORS[key])
-		add_child(stat_name)
+		content.add_child(stat_name)
 
 		# 属性条背景
 		var bar_bg := ColorRect.new()
-		bar_bg.position = Vector2(440, y + 2)
-		bar_bg.size = Vector2(350, 18)
+		bar_bg.position = Vector2(STAT_BAR_X - PANEL_X, y + 2)
+		bar_bg.size = Vector2(STAT_BAR_WIDTH, STAT_BAR_HEIGHT)
 		bar_bg.color = Color(0.2, 0.2, 0.25)
-		add_child(bar_bg)
+		content.add_child(bar_bg)
 
 		# 属性条填充
 		var bar_fill := ColorRect.new()
-		bar_fill.position = Vector2(440, y + 2)
-		bar_fill.size = Vector2(0, 18)
+		bar_fill.position = Vector2(STAT_BAR_X - PANEL_X, y + 2)
+		bar_fill.size = Vector2(0, STAT_BAR_HEIGHT)
 		bar_fill.color = STAT_COLORS[key]
-		add_child(bar_fill)
+		content.add_child(bar_fill)
 
 		# 数值标签
 		var val_label := Label.new()
-		val_label.position = Vector2(800, y)
+		val_label.position = Vector2(STAT_VAL_X - PANEL_X, y)
 		val_label.size = Vector2(60, 22)
 		val_label.add_theme_font_size_override("font_size", 16)
 		val_label.add_theme_color_override("font_color", STAT_COLORS[key])
-		add_child(val_label)
+		content.add_child(val_label)
 
 		stat_bars[key] = {
 			"fill": bar_fill,
 			"val_label": val_label,
 			"bg": bar_bg,
 		}
-
+	
+	# 计算分隔线位置
+	var sep_y: float = (STAT_Y_START - NAME_Y) + (stat_keys.size() - 1) * STAT_SPACING + 30.0
+	
 	# 分隔线
 	var sep := ColorRect.new()
-	sep.position = Vector2(370, 445)
+	sep.position = Vector2(0, sep_y)
 	sep.size = Vector2(480, 1)
 	sep.color = Color(0.4, 0.4, 0.45)
-	add_child(sep)
-
-	# 天赋
+	content.add_child(sep)
+	
+	# 天赋标题
 	talent_title = Label.new()
-	talent_title.position = Vector2(370, 460)
+	talent_title.position = Vector2(0, sep_y + TALENT_TITLE_AFTER_SEP)
 	talent_title.add_theme_font_size_override("font_size", 17)
 	talent_title.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
-	add_child(talent_title)
+	content.add_child(talent_title)
 
+	# 天赋描述
 	talent_desc = Label.new()
-	talent_desc.position = Vector2(370, 487)
+	talent_desc.position = Vector2(0, sep_y + TALENT_TITLE_AFTER_SEP + TALENT_DESC_AFTER_TITLE)
 	talent_desc.add_theme_font_size_override("font_size", 14)
 	talent_desc.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
 	talent_desc.size = Vector2(480, 20)
-	add_child(talent_desc)
+	content.add_child(talent_desc)
 
 	# 元灵偏好
 	spirit_label = Label.new()
-	spirit_label.position = Vector2(370, 530)
+	spirit_label.position = Vector2(0, sep_y + TALENT_TITLE_AFTER_SEP + TALENT_DESC_AFTER_TITLE + SPIRIT_AFTER_DESC)
 	spirit_label.add_theme_font_size_override("font_size", 17)
-	add_child(spirit_label)
+	content.add_child(spirit_label)
 
 	# 大招
 	ultimate_label = Label.new()
-	ultimate_label.position = Vector2(370, 565)
+	ultimate_label.position = Vector2(0, sep_y + TALENT_TITLE_AFTER_SEP + TALENT_DESC_AFTER_TITLE + SPIRIT_AFTER_DESC + ULTIMATE_AFTER_SPIRIT)
 	ultimate_label.add_theme_font_size_override("font_size", 17)
 	ultimate_label.add_theme_color_override("font_color", Color(1, 0.5, 0.2))
-	add_child(ultimate_label)
+	content.add_child(ultimate_label)
 
-	# 右侧圆形大头像占位
+	# 右侧圆形大头像占位（放在滚动容器外，固定位置）
 	_build_large_avatar_placeholder()
 
 
@@ -302,17 +352,22 @@ func _select_character(index: int) -> void:
 	# 描述
 	desc_label.text = data.get("description", "")
 
-	# 属性条
-	var stat_keys: Array[String] = ["stamina", "defense", "speed", "attack", "resilience", "defense_factor"]
+	# 属性条（使用数组stat_keys）
 	for key in stat_keys:
 		var val: float = float(data.get(key, 0))
 		var info: Dictionary = stat_bars[key]
 		var fill: ColorRect = info["fill"]
 		var label: Label = info["val_label"]
-		# 防御因子范围0.1~0.2,按0.25算比例
-		var max_val: float = 0.25 if key == "defense_factor" else STAT_MAX
+		# 防御因子范围0.1~0.2,按0.25算比例；发球球速范围300~600
+		var max_val: float
+		if key == "defense_factor":
+			max_val = 0.25
+		elif key == "ball_speed":
+			max_val = 600.0
+		else:
+			max_val = STAT_MAX
 		var ratio: float = clampf(val / max_val, 0.0, 1.0)
-		fill.size = Vector2(350.0 * ratio, 18)
+		fill.size = Vector2(STAT_BAR_WIDTH * ratio, STAT_BAR_HEIGHT)
 		if key == "defense_factor":
 			label.text = "%.2f" % val
 		else:

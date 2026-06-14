@@ -28,6 +28,8 @@ var preparation_ui: Control  # 备战界面
 var field_physics: Node  # FieldPhysicsManager
 var obstacle_manager: Node  # ObstacleManager
 var spirit_system: Node  # SpiritSystemManager
+var field_zone_manager: Node  # FieldZoneManager
+var illusion_manager: Node  # IllusionManager
 
 # 消息气泡显示
 var message_bubbles: Array[Dictionary] = []  # [{label, timer, player}]
@@ -66,6 +68,8 @@ func _ready() -> void:
 	_setup_preparation_ui()
 	_setup_field_physics_manager()
 	_setup_obstacle_manager()
+	_setup_field_zone_manager()
+	_setup_illusion_manager()
 	_setup_spirit_system()
 
 	GameManager.phase_changed.connect(_on_phase_changed)
@@ -1022,7 +1026,6 @@ func _on_bounciness_changed(new_bounciness: float, source: String) -> void:
 	print("[BattleManager] 场地弹性改变: e=%.2f (来源: %s)" % [new_bounciness, source])
 
 
-## 障碍物管理器
 func _setup_obstacle_manager() -> void:
 	"""创建障碍物管理器"""
 	var obs_script := load("res://scripts/battle/obstacle_manager.gd")
@@ -1031,6 +1034,28 @@ func _setup_obstacle_manager() -> void:
 	obstacle_manager.set_script(obs_script)
 	add_child(obstacle_manager)
 	print("[BattleManager] 障碍物管理器已创建")
+
+
+## 场地区域管理器
+func _setup_field_zone_manager() -> void:
+	"""创建场地区域管理器（加速/减速/危险/安全区）"""
+	var zm_script := load("res://scripts/battle/field_zone_manager.gd")
+	field_zone_manager = Node.new()
+	field_zone_manager.name = "FieldZoneManager"
+	field_zone_manager.set_script(zm_script)
+	add_child(field_zone_manager)
+	print("[BattleManager] 场地区域管理器已创建")
+
+
+## 幻象管理器
+func _setup_illusion_manager() -> void:
+	"""创建幻象管理器（虚假目标/路径）"""
+	var im_script := load("res://scripts/battle/illusion_manager.gd")
+	illusion_manager = Node.new()
+	illusion_manager.name = "IllusionManager"
+	illusion_manager.set_script(im_script)
+	add_child(illusion_manager)
+	print("[BattleManager] 幻象管理器已创建")
 
 
 func _setup_spirit_system() -> void:

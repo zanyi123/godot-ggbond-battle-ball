@@ -379,6 +379,17 @@ func _create_ui() -> void:
 	hud.add_child(combo_btn)
 	main_ui_nodes.append(combo_btn)
 
+	# === 并行验证按钮（模拟比赛优先级队列）===
+	var parallel_btn := Button.new()
+	parallel_btn.name = "ParallelTestBtn"
+	parallel_btn.text = "🔬 并行验证(5组)"
+	parallel_btn.position = Vector2(960, 640)
+	parallel_btn.size = Vector2(200, 32)
+	parallel_btn.add_theme_font_size_override("font_size", 14)
+	parallel_btn.pressed.connect(_run_parallel_tests)
+	hud.add_child(parallel_btn)
+	main_ui_nodes.append(parallel_btn)
+
 	# === 操作提示(始终显示) ===
 	var tips := Label.new()
 	tips.text = "WASD=移动 | Tab=切换球员 | 左键=发球 | 9=重置 | 0=暂停/面板 | 1-5=配对快捷"
@@ -2193,3 +2204,122 @@ func _run_one_combo(idx: int) -> Dictionary:
 func _has_tag(tag_id: String) -> bool:
 	"""检查标签是否在 registry 已实现列表"""
 	return _is_tag_implemented(tag_id)
+
+
+## ==================== 并行验证测试（模拟比赛优先级队列）====================
+
+func _run_parallel_tests() -> void:
+	"""并行模式验证：5项并行可行性（临时开启优先级队列，模拟比赛）"""
+	if not handler:
+		_add_log("[color=red]✗ 无handler[/color]")
+		return
+
+	_add_log("\n[color=yellow]═══════ 并行验证开始 (5组·模拟比赛队列) ═══════[/color]")
+
+	# 临时切换到比赛模式（优先级队列 + 开启_process让flush跑）
+	var old_pq: bool = handler.priority_queue_enabled
+	handler.priority_queue_enabled = true
+	handler.set_process(true)
+
+	var pass_count: int = 0
+	var fail_count: int = 0
+
+	for i in range(1, 6):
+		_reset_player_state(player_a)
+		_reset_player_state(player_b)
+		if illusion_mgr:
+			illusion_mgr.clear_all_illusions()
+		if zone_mgr:
+			zone_mgr.clear_all_zones()
+		handler.reset_ball_mods()
+
+		var result: Dictionary = await _run_one_parallel(i)
+		var status: String = "[color=green]✓PASS[/color]" if result["pass"] else "[color=red]✗FAIL[/color]"
+		_add_log("[%2d] %s %s | %s" % [i, status, result["name"], result["detail"]])
+		if result["pass"]:
+			pass_count += 1
+		else:
+			fail_count += 1
+
+	_add_log("[color=yellow]═══════ 并行验证完成: %d通过 / %d失败 ═══════[/color]" % [pass_count, fail_count])
+
+	# 恢复测试模式（原状态）
+	handler.priority_queue_enabled = old_pq
+	handler.set_process(false)
+
+	# 清理
+	_reset_player_state(player_a)
+	_reset_player_state(player_b)
+	if illusion_mgr:
+		illusion_mgr.clear_all_illusions()
+	if zone_mgr:
+		zone_mgr.clear_all_zones()
+	handler.reset_ball_mods()
+
+
+func _run_one_parallel(idx: int) -> Dictionary:
+	"""并行模式单组验证（每项都验证优先级队列机制）"""
+	match idx:
+		1:
+			# 队列窗口验证：apply后立即无效果，await flush后生效
+			# 证明标签确实入队（0.1s窗口内不执行），而非立即执行
+			var base_atk: float = player_a._get_effective_value("attack", player_a.attack_power)
+			_apply_tag_to("player_atk_up_pct", {"value": 30, "target": "self"}, player_a)
+			# 队列模式下应未执行（在0.1s窗口内）
+			var immediate_atk: float = player_a._get_effective_value("attack", player_a.attack_power)
+			var queued_ok: bool = absf(immediate_atk - base_atk) < 0.1
+			# 等待flush窗口（0.1s + 余量）
+			await get_tree().create_timer(0.15).timeout
+			var flushed_atk: float = player_a._get_effective_value("attack", player_a.attack_power)
+			var flushed_ok: bool = flushed_atk > base_atk + 1.0
+			var ok: bool = queued_ok and flushed_ok
+			return {"name": "队列窗口(入队不立即执行)", "pass": ok,
+				"detail": "即时%.1f(应≈%.1f) flush后%.1f(应>%.1f)" % [immediate_atk, base_atk, flushed_atk, base_atk]}
+		2:
+			# 优先级排序验证：并发2个不同优先级标签(221/225)，都应执行
+			var base_atk: float = player_a._get_effective_value("attack", player_a.attack_power)
+			var base_def: float = player_a._get_effective_value("defense", player_a.defense)
+			_apply_tag_to("player_atk_up_pct", {"value": 30, "target": "self"}, player_a)  # 优先级221
+			_apply_tag_to("player_def_up_pct", {"value": 30, "target": "self"}, player_a)  # 优先级225
+			await get_tree().create_timer(0.15).timeout
+			var after_atk: float = player_a._get_effective_value("attack", player_a.attack_power)
+			var after_def: float = player_a._get_effective_value("defense", player_a.defense)
+			var ok: bool = after_atk > base_atk + 1.0 and after_def > base_def + 1.0
+			return {"name": "优先级排序(2标签都执行)", "pass": ok,
+				"detail": "atk%.0f→%.1f def%.0f→%.1f" % [base_atk, after_atk, base_def, after_def]}
+		3:
+			# buff_id唯一性：并发3个不同stat的buff(221/225/229)，无覆盖
+			_apply_tag_to("player_atk_up_pct", {"value": 30, "target": "self"}, player_a)
+			_apply_tag_to("player_def_up_pct", {"value": 30, "target": "self"}, player_a)
+			_apply_tag_to("player_spd_up_pct", {"value": 30, "target": "self"}, player_a)
+			await get_tree().create_timer(0.15).timeout
+			var buff_n: int = player_a._buffs.size()
+			var ok: bool = buff_n == 3
+			return {"name": "buff_id唯一(3标签无覆盖)", "pass": ok,
+				"detail": "buff数=%d(期望3)" % buff_n}
+		4:
+			# 多球员隔离：A、B各对自己挂atk_up，caster不串
+			var a_base: float = player_a._get_effective_value("attack", player_a.attack_power)
+			var b_base: float = player_b._get_effective_value("attack", player_b.attack_power)
+			_apply_tag_to("player_atk_up_pct", {"value": 30, "target": "self"}, player_a)
+			_apply_tag_to("player_atk_up_pct", {"value": 30, "target": "self"}, player_b)
+			await get_tree().create_timer(0.15).timeout
+			var a_after: float = player_a._get_effective_value("attack", player_a.attack_power)
+			var b_after: float = player_b._get_effective_value("attack", player_b.attack_power)
+			var ok: bool = a_after > a_base + 1.0 and b_after > b_base + 1.0
+			return {"name": "多球员隔离(各自生效)", "pass": ok,
+				"detail": "A:%.0f→%.1f B:%.0f→%.1f" % [a_base, a_after, b_base, b_after]}
+		5:
+			# ball_mods并发累加：dmg_up + speed_up 同时入队，都生效
+			var base_dmg: float = 40.0
+			var base_spd: float = 400.0
+			_apply_tag_to("ball_dmg_up_pct", {"value": 50}, player_a)
+			_apply_tag_to("ball_speed_up_pct", {"value": 30}, player_a)
+			await get_tree().create_timer(0.15).timeout
+			var mod_dmg: float = handler.get_modified_ball_damage(base_dmg)
+			var mod_spd: float = handler.get_modified_ball_speed(base_spd)
+			var ok: bool = mod_dmg > base_dmg + 1.0 and mod_spd > base_spd + 1.0
+			return {"name": "ball_mods并发累加", "pass": ok,
+				"detail": "dmg%.0f→%.1f spd%.0f→%.1f" % [base_dmg, mod_dmg, base_spd, mod_spd]}
+		_:
+			return {"name": "未知用例", "pass": false, "detail": "idx=%d" % idx}

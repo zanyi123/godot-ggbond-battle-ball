@@ -73,7 +73,7 @@ var talent_desc: String = ""
 
 # 元灵
 var spirit_id: String = ""
-var equipped_skills: Array[int] = []  # 最多4个技能ID
+var equipped_skills: Array[String] = []  # 最多4个技能ID
 
 # 技能CD追踪
 var skill_cooldowns: Dictionary = {}
@@ -122,6 +122,20 @@ func initialize(data_id: String, team_name: String, controlled: bool) -> void:
 		load_spirit_by_element(spirit_pref)
 
 	_setup_visuals()
+
+
+## ==================== 发球特性 ====================
+
+## 获取该球员的发球基础球速
+func get_base_ball_speed() -> float:
+	"""返回该球员的发球基础球速
+	
+	从 char_data 中的 ball_speed 字段读取，
+	如果没有配置则返回默认值 400.0
+	"""
+	if char_data.has("ball_speed"):
+		return float(char_data["ball_speed"])
+	return 400.0  # 默认值
 
 
 func _setup_visuals() -> void:
@@ -597,7 +611,7 @@ func use_skill(slot_index: int) -> void:
 	if is_status_active("silenced"):
 		return
 
-	var skill_id: String = str(equipped_skills[slot_index])
+	var skill_id: String = equipped_skills[slot_index]
 	var skill_data: Dictionary = DataManager.get_skill_by_id(skill_id)
 	if skill_data.is_empty():
 		return
@@ -615,12 +629,12 @@ func use_skill(slot_index: int) -> void:
 
 	# 检查能量（应用消耗折扣卡）
 	var cost: float = float(skill_data["energy_cost"] if skill_data.has("energy_cost") else 0) * get_skill_cost_mult()
+	# [标签整合测试] 临时跳过能量检查（能量回复机制未实现，待后续设计）
 	if spirit_energy < cost:
-		print("[Player] 能量不足: %s (需要%.1f, 当前%.1f)" % [(skill_data.get("name") if skill_data.has("name") else ""), cost, spirit_energy])
-		return
+		print("[Player][测试] 能量不足但跳过: %s (需要%.1f, 当前%.1f)" % [(skill_data.get("name") if skill_data.has("name") else ""), cost, spirit_energy])
 
-	# 消耗能量
-	spirit_energy -= cost
+	# 消耗能量（测试阶段不扣）
+	# spirit_energy -= cost
 	# 能量条由下方球员栏更新，此处不处理
 
 	# 设置CD（应用CD折扣卡）
@@ -708,7 +722,7 @@ func _get_ball_node() -> Node:
 func use_skill_by_id(skill_id: String) -> void:
 	"""通过技能ID使用技能"""
 	for i in range(equipped_skills.size()):
-		if str(equipped_skills[i]) == skill_id:
+		if equipped_skills[i] == skill_id:
 			use_skill(i)
 			return
 	print("[Player] 未找到技能ID: %s" % skill_id)

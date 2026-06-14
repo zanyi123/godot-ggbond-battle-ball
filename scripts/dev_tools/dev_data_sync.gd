@@ -136,6 +136,7 @@ static func create_character_template(id: String) -> Dictionary:
 		"attack": 35,
 		"resilience": 50,
 		"defense_factor": 0.15,
+		"ball_speed": 400.0,
 		"talent_name": "未命名天赋",
 		"talent_desc": "天赋效果描述",
 		"spirit_preference": "金刚",

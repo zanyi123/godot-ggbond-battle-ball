@@ -407,7 +407,13 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	global_position = from
 	ball_direction = direction.normalized()
 	ball_damage = damage
-	ball_speed = 400.0  # 重置球速（上次碰撞可能修改过）
+	
+	# === 获取攻击者的发球基础球速 ===
+	var base_ball_speed: float = 400.0
+	if attacker and attacker.has_method("get_base_ball_speed"):
+		base_ball_speed = attacker.get_base_ball_speed()
+	ball_speed = base_ball_speed  # 使用球员个性化球速
+	
 	max_flight_distance = max_dist
 	attacker_player = attacker
 	injected_skills = skills

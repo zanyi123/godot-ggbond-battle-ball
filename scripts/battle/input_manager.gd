@@ -73,6 +73,9 @@ func _input(event: InputEvent) -> void:
 	
 	# === 鼠标操作 ===
 	if event is InputEventMouseButton:
+		# 鼠标放置守卫：技能激活了障碍/区域/幻象放置模式时，鼠标交给 placer，不触发瞄准/发球/接球
+		if _any_placer_operating():
+			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
 				_on_left_click_press()
@@ -244,7 +247,7 @@ func get_movement_direction(input_dir: Vector2) -> Vector2:
 ## ==================== 技能系统处理 ====================
 
 func _init_skill_state_manager() -> void:
-	"""初始化技能状态管理器"""
+	"""初始化技能状态管理器，并为当前球员设置技能"""
 	if skill_state_manager == null:
 		skill_state_manager = SkillStateManager.new()
 		add_child(skill_state_manager)
@@ -254,12 +257,12 @@ func _init_skill_state_manager() -> void:
 		skill_state_manager.skill_cancelled.connect(_on_skill_cancelled)
 		skill_state_manager.skill_released.connect(_on_skill_released)
 
-		# 设置玩家技能
-		if controlled_player and controlled_player.has_method("get_equipped_skills"):
-			var skill_ids = controlled_player.get_equipped_skills()
-			var player_id = controlled_player.get_instance_id()
-			skill_state_manager.setup_player_skills(player_id, skill_ids)
-			print("[InputManager] 已设置玩家技能: %d个" % skill_ids.size())
+	# 每次切换主控球员都重新设置该球员的技能（按 player_id 索引，安全可重复调用）
+	if controlled_player and controlled_player.has_method("get_equipped_skills"):
+		var skill_ids = controlled_player.get_equipped_skills()
+		var player_id = controlled_player.get_instance_id()
+		skill_state_manager.setup_player_skills(player_id, skill_ids)
+		print("[InputManager] 已设置玩家技能: player=%d %d个" % [player_id, skill_ids.size()])
 
 
 func _handle_skill_key_press(slot: int) -> void:
@@ -330,3 +333,17 @@ func cleanup() -> void:
 	if skill_state_manager and controlled_player:
 		var player_id = controlled_player.get_instance_id()
 		skill_state_manager.cleanup_player(player_id)
+
+
+## 检查是否有任意鼠标放置管理器正在操作（障碍/区域/幻象）
+## 用于在技能激活鼠标放置时，屏藏球员的鼠标输入（瞄准/发球/接球）
+func _any_placer_operating() -> bool:
+	var parent_node = get_parent()
+	if parent_node == null:
+		return false
+	for mgr_name in ["ObstacleManager", "FieldZoneManager", "IllusionManager"]:
+		if parent_node.has_node(mgr_name):
+			var mgr = parent_node.get_node(mgr_name)
+			if mgr.has_method("is_operating") and mgr.is_operating():
+				return true
+	return false

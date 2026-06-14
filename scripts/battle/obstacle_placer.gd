@@ -280,10 +280,12 @@ func _clear_step() -> void:
 
 
 func _on_right_click() -> void:
-	"""右键：取消已选中的最后一个（清除模式）"""
+	"""右键：取消已选中的最后一个（清除模式）/ 取消放置（放置模式）"""
 	if current_mode == Mode.CLEARING and selected_for_clear.size() > 0:
 		var removed = selected_for_clear.pop_back()
 		print("[ObstaclePlacer] 取消选中 (" + str(selected_for_clear.size()) + "/" + str(clear_count) + ")")
+	elif current_mode == Mode.PLACING:
+		cancel_operation()
 
 
 ## ==================== 操作控制 ====================

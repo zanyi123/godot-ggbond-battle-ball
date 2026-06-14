@@ -23,6 +23,7 @@ const STAT_DEFS: Array[Dictionary] = [
 	{"key": "attack", "label": "攻击", "min": 5.0, "max": 100.0, "step": 1.0, "color": Color(0.65, 0.65, 0.65)},
 	{"key": "resilience", "label": "韧性", "min": 0.0, "max": 100.0, "step": 1.0, "color": Color(0.55, 0.55, 0.55)},
 	{"key": "defense_factor", "label": "防御因子", "min": 0.01, "max": 0.50, "step": 0.01, "color": Color(0.6, 0.8, 0.3)},
+	{"key": "ball_speed", "label": "发球球速", "min": 300.0, "max": 600.0, "step": 5.0, "color": Color(0.6, 0.4, 0.2)},  # 棕色
 ]
 
 # 字段定义（文本类）

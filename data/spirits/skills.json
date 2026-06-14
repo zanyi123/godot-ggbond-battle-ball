@@ -36,7 +36,18 @@
 			"id": "skill_大地_1",
 			"name": "岩石墙",
 			"tag_params": {
-
+				"field_obs_add": {
+					"shape": "rect",
+					"width": 140.0,
+					"height": 28.0,
+					"hp": 300.0,
+					"attack_consume_rate": 10.0,
+					"speed_consume_rate": 40.0,
+					"max_count": 2,
+					"duration": 12.0,
+					"element": "大地",
+					"mouse_ops": 1
+				}
 			},
 			"tags": [
 				"field_obs_add"
