@@ -171,9 +171,32 @@ static func create_skill_template(id: String, element: String) -> Dictionary:
 		"description": "新建技能",
 		"detail": "技能详细说明",
 		"icon_color": "#FFFFFF",
+		"icon_path": "",
 		"tags": [],
 		"tag_params": {}
 	}
+
+const ICONS_DIR := "res://data/spirits/icons"
+
+## 复制上传的图标到项目目录，返回存储路径（失败返回空字符串）
+static func save_icon(source_path: String, skill_id: String) -> String:
+	if source_path.strip_edges() == "":
+		return ""
+	if not FileAccess.file_exists(source_path):
+		printerr("[DevDataSync] 图标源文件不存在: %s" % source_path)
+		return ""
+	# 确保目录存在
+	DirAccess.make_dir_recursive_absolute(ICONS_DIR)
+	var ext := source_path.get_extension().to_lower()
+	if ext not in ["png", "jpg", "jpeg", "webp"]:
+		ext = "png"
+	var dest_path := "%s/%s.%s" % [ICONS_DIR, skill_id, ext]
+	var err := DirAccess.copy_absolute(source_path, dest_path)
+	if err != OK:
+		printerr("[DevDataSync] 图标复制失败: %s → %s (err=%d)" % [source_path, dest_path, err])
+		return ""
+	print("[DevDataSync] 图标已保存: %s" % dest_path)
+	return dest_path
 
 ## 元素列表
 static func get_elements() -> PackedStringArray:

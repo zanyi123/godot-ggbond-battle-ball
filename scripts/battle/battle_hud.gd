@@ -11,6 +11,9 @@ var player_panels: Array[Control] = []
 var player_stamina_bars: Array[ProgressBar] = []
 var player_energy_bars: Array[ProgressBar] = []
 var player_name_labels: Array[Label] = []
+# 每个球员的技能图标容器：player_skill_boxes[i] = [ColorRect, ColorRect, ColorRect]
+var player_skill_boxes: Array = []
+var player_skill_labels: Array = []  # 技能首字标签 [i]=[Label,Label,Label]
 
 var enemy_stamina_bars: Array[ProgressBar] = []
 var enemy_name_labels: Array[Label] = []
@@ -19,6 +22,10 @@ var timer_label: Label
 var score_label: Label
 var quick_msg_buttons: Array[Button] = []
 var comm_system: Node = null  # AI通信系统引用
+
+# 技能提示弹窗
+var skill_toast: Label = null
+var skill_toast_timer: float = 0.0
 
 # 球员引用
 var team_players: Array[CharacterBody2D] = []  # 玩家方3个球员
@@ -37,6 +44,13 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_update_bars()
+	# 技能提示弹窗计时淡出
+	if skill_toast and skill_toast.visible:
+		skill_toast_timer -= _delta
+		if skill_toast_timer <= 0.0:
+			skill_toast.visible = false
+		elif skill_toast_timer < 0.5:
+			skill_toast.modulate.a = skill_toast_timer / 0.5
 
 
 func setup_players(team: Array[CharacterBody2D], enemies: Array[CharacterBody2D]) -> void:
@@ -44,15 +58,98 @@ func setup_players(team: Array[CharacterBody2D], enemies: Array[CharacterBody2D]
 	team_players = team
 	enemy_players = enemies
 
-	# 更新底部面板名称
+	# 更新底部面板名称 + 技能图标
 	for i in range(min(3, team.size())):
 		if team[i] and team[i].char_data.has("name"):
 			player_name_labels[i].text = team[i].char_data["name"]
+		_update_player_skill_icons(i)
 
 	# 更新对方名称
 	for i in range(min(3, enemies.size())):
 		if enemies[i] and enemies[i].char_data.has("name"):
 			enemy_name_labels[i].text = enemies[i].char_data["name"]
+
+	# 创建技能提示弹窗（延迟一帧，确保已进入场景树）
+	call_deferred("_create_skill_toast")
+
+
+## 根据球员装备的元灵技能，填充技能栏图标（图片/色块+首字）
+func _update_player_skill_icons(player_index: int) -> void:
+	if player_index >= player_skill_boxes.size():
+		return
+	var player: CharacterBody2D = team_players[player_index] if player_index < team_players.size() else null
+	if not player:
+		return
+	var skill_ids: Array[String] = player.get_equipped_skills()
+	var boxes: Array = player_skill_boxes[player_index]
+	var labels: Array = player_skill_labels[player_index]
+	for slot in range(3):
+		var box: ColorRect = boxes[slot]
+		var lbl: Label = labels[slot]
+		if slot >= skill_ids.size():
+			# 该位置无技能
+			box.color = Color(0.2, 0.2, 0.2)
+			lbl.text = ""
+			continue
+		var skill_data: Dictionary = DataManager.get_skill_by_id(skill_ids[slot])
+		if skill_data.is_empty():
+			# 留白技能（无数据）
+			box.color = Color(0.15, 0.15, 0.15)
+			lbl.text = "?"
+			continue
+		# 色块：优先 icon_color，为白色时用元素色兜底
+		var color_str := str(skill_data.get("icon_color", "#FFFFFF"))
+		var icon_color := Color.from_string(color_str, Color(0.6, 0.6, 0.6))
+		if color_str == "#FFFFFF" or color_str == "":
+			icon_color = _get_element_color(str(skill_data.get("element", "")))
+		box.color = icon_color
+		# 首字
+		var skill_name := str(skill_data.get("name", ""))
+		if skill_name.length() > 0:
+			lbl.text = skill_name.substr(0, 1)
+		else:
+			lbl.text = ""
+
+
+## 元素颜色映射（与 handler 一致）
+func _get_element_color(element: String) -> Color:
+	var colors: Dictionary = {
+		"金刚": Color(0.85, 0.75, 0.3),
+		"大地": Color(0.7, 0.55, 0.35),
+		"雷火": Color(1.0, 0.4, 0.2),
+		"冰雪": Color(0.4, 0.8, 1.0),
+		"草木": Color(0.3, 0.8, 0.3),
+		"梦幻": Color(0.7, 0.5, 0.9),
+	}
+	return colors.get(element, Color(0.6, 0.6, 0.6))
+
+
+## 创建技能提示弹窗（中上方，1.5秒淡出）
+func _create_skill_toast() -> void:
+	if skill_toast != null and is_instance_valid(skill_toast):
+		return
+	skill_toast = Label.new()
+	skill_toast.text = ""
+	skill_toast.position = Vector2(520, 130)
+	skill_toast.size = Vector2(400, 32)
+	skill_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	skill_toast.add_theme_font_size_override("font_size", 18)
+	skill_toast.add_theme_color_override("font_color", Color(1.0, 0.95, 0.6))
+	skill_toast.visible = false
+	add_child(skill_toast)
+
+
+## 显示技能提示（由 input_manager 调用）
+## state: "激活" / "释放" / "取消"
+func show_skill_toast(skill_id: String, state: String) -> void:
+	if skill_toast == null:
+		return
+	var skill_data: Dictionary = DataManager.get_skill_by_id(skill_id)
+	var skill_name: String = skill_data.get("name", skill_id) if not skill_data.is_empty() else skill_id
+	skill_toast.text = "【%s】 %s" % [state, skill_name]
+	skill_toast.visible = true
+	skill_toast.modulate.a = 1.0
+	skill_toast_timer = 1.5
 
 
 func _update_bars() -> void:
@@ -257,18 +354,36 @@ func _create_single_panel(index: int, pos: Vector2, width: float, height: float)
 	player_energy_bars.append(energy)
 
 	# 技能图标占位 x3
+	var this_player_skill_boxes: Array = []
+	var this_player_skill_labels: Array = []
 	for s in range(3):
 		var skill_box := ColorRect.new()
 		skill_box.size = Vector2(30, 30)
 		skill_box.position = Vector2(70 + s * 35, 48)
-		skill_box.color = Color(0.3, 0.3, 0.3)
+		skill_box.color = Color(0.25, 0.25, 0.25)  # 默认深灰（无技能）
 		panel.add_child(skill_box)
+		this_player_skill_boxes.append(skill_box)
+
+		# 技能首字标签（叠在色块上）
+		var skill_char_label := Label.new()
+		skill_char_label.text = ""
+		skill_char_label.position = Vector2(70 + s * 35 + 8, 54)
+		skill_char_label.size = Vector2(14, 18)
+		skill_char_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		skill_char_label.add_theme_font_size_override("font_size", 14)
+		skill_char_label.add_theme_color_override("font_color", Color.WHITE)
+		panel.add_child(skill_char_label)
+		this_player_skill_labels.append(skill_char_label)
 
 		var skill_num := Label.new()
 		skill_num.text = str(s + 4)  # 快捷键 4,5,6
-		skill_num.position = Vector2(80 + s * 35, 53)
-		skill_num.add_theme_color_override("font_color", Color.WHITE)
+		skill_num.position = Vector2(80 + s * 35, 75)
+		skill_num.add_theme_font_size_override("font_size", 11)
+		skill_num.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
 		panel.add_child(skill_num)
+
+	player_skill_boxes.append(this_player_skill_boxes)
+	player_skill_labels.append(this_player_skill_labels)
 
 	# 快捷键提示
 	var key_label := Label.new()

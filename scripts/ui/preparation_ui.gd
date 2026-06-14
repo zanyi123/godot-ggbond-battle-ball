@@ -286,13 +286,40 @@ func _build_spirit_card(index: int, x: float, y: float) -> void:
 	icon_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
 	card.add_child(icon_label)
 	
+	# 技能色块容器（3个，28×28，在元灵图标下方）
+	var skill_boxes: Array = []
+	var skill_chars: Array = []
+	for s in range(3):
+		var sbox := Control.new()
+		sbox.position = Vector2(280 + s * 30, 90)
+		sbox.size = Vector2(28, 28)
+		# 底色块
+		var sbg := ColorRect.new()
+		sbg.size = Vector2(28, 28)
+		sbg.color = Color(0.2, 0.2, 0.2)
+		sbox.add_child(sbg)
+		# 首字标签
+		var schar := Label.new()
+		schar.position = Vector2(0, 5)
+		schar.size = Vector2(28, 18)
+		schar.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		schar.add_theme_font_size_override("font_size", 13)
+		schar.add_theme_color_override("font_color", Color.WHITE)
+		schar.text = ""
+		sbox.add_child(schar)
+		card.add_child(sbox)
+		skill_boxes.append(sbox)
+		skill_chars.append(schar)
+	
 	spirit_widgets.append({
 		"card": card,
 		"current_label": current_label,
 		"attr_label": attr_label,
 		"change_btn": change_btn,
 		"icon_panel": icon_panel,
-		"icon_label": icon_label
+		"icon_label": icon_label,
+		"skill_boxes": skill_boxes,
+		"skill_chars": skill_chars
 	})
 
 
@@ -640,6 +667,56 @@ func _update_spirit_widget(index: int, spirit_data: Dictionary) -> void:
 	if w.icon_label:
 		w.icon_label.text = s_elem + "\n元灵"
 		w.icon_label.position = Vector2(287, 28)
+	
+	# 更新技能色块（3个槽）
+	if w.has("skill_boxes"):
+		var skill_boxes: Array = w.skill_boxes
+		var skill_chars: Array = w.skill_chars
+		for slot in range(3):
+			if slot >= skill_boxes.size():
+				break
+			var sbox: Control = skill_boxes[slot]
+			var schar: Label = skill_chars[slot]
+			var sbg: ColorRect = sbox.get_child(0)
+			# 清除旧的图片节点（保留底色块和首字标签）
+			for child in sbox.get_children():
+				if child is TextureRect:
+					child.queue_free()
+			if slot >= skills.size():
+				# 无技能
+				sbg.color = Color(0.18, 0.18, 0.18)
+				schar.text = ""
+				schar.visible = true
+				continue
+			var sd: Dictionary = DataManager.get_skill_by_id(str(skills[slot]))
+			if sd.is_empty():
+				# 留白技能（无数据）
+				sbg.color = Color(0.12, 0.12, 0.12)
+				schar.text = "?"
+				schar.visible = true
+				continue
+			# 色块颜色：优先 icon_color，白色/空时用元素色
+			var color_str: String = str(sd.get("icon_color", "#FFFFFF"))
+			var box_color: Color = elem_color
+			if color_str != "" and color_str != "#FFFFFF":
+				box_color = Color.from_string(color_str, elem_color)
+			sbg.color = box_color
+			# 首字
+			var sname: String = str(sd.get("name", ""))
+			schar.text = sname.substr(0, 1) if sname.length() > 0 else ""
+			schar.visible = true
+			# 图片（有 icon_path 才加载）
+			var icon_path: String = str(sd.get("icon_path", ""))
+			if icon_path != "":
+				var img := Image.new()
+				if img.load(icon_path) == OK:
+					var tex_rect := TextureRect.new()
+					tex_rect.size = Vector2(28, 28)
+					tex_rect.texture = ImageTexture.create_from_image(img)
+					tex_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+					tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+					sbox.add_child(tex_rect)
+					schar.visible = false  # 有图隐藏首字
 
 
 func _on_spirit_popup_bg_input(event: InputEvent) -> void:

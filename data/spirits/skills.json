@@ -7,6 +7,7 @@
 			"element": "金刚",
 			"energy_cost": 30.0,
 			"icon_color": "#FFD700",
+			"icon_path": "",
 			"id": "skill_jingang_1",
 			"name": "猛虎金刚闪",
 			"tag_params": {
@@ -33,6 +34,7 @@
 			"element": "大地",
 			"energy_cost": 20,
 			"icon_color": "#FFFFFF",
+			"icon_path": "",
 			"id": "skill_大地_1",
 			"name": "岩石墙",
 			"tag_params": {

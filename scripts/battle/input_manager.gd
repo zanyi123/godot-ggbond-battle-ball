@@ -302,18 +302,19 @@ func _handle_skill_cancel() -> void:
 func _on_skill_activated(skill_id: String, player_id: int) -> void:
 	"""技能已激活回调"""
 	print("[InputManager] 技能已激活: %s (玩家:%d)" % [skill_id, player_id])
-	# TODO: 通知UI显示激活状态
+	_show_skill_toast(skill_id, "激活")
 
 
 func _on_skill_cancelled(skill_id: String, player_id: int) -> void:
 	"""技能已取消回调"""
 	print("[InputManager] 技能已取消: %s (玩家:%d)" % [skill_id, player_id])
-	# TODO: 通知UI清除激活状态
+	_show_skill_toast(skill_id, "取消")
 
 
 func _on_skill_released(skill_id: String, player_id: int) -> void:
 	"""技能已释放回调"""
 	print("[InputManager] 技能已释放: %s (玩家:%d)" % [skill_id, player_id])
+	_show_skill_toast(skill_id, "释放")
 	# 通知玩家执行技能
 	if controlled_player and controlled_player.get_instance_id() == player_id:
 		if controlled_player.has_method("use_skill_by_id"):
@@ -347,3 +348,17 @@ func _any_placer_operating() -> bool:
 			if mgr.has_method("is_operating") and mgr.is_operating():
 				return true
 	return false
+
+
+## 显示技能提示弹窗（通过 battle_manager 找到 HUD）
+func _show_skill_toast(skill_id: String, state: String) -> void:
+	var parent_node = get_parent()
+	if parent_node == null:
+		return
+	# battle_manager → UILayer → HUD
+	var ui_layer = parent_node.get_node_or_null("UILayer")
+	if ui_layer == null:
+		return
+	var hud = ui_layer.get_node_or_null("HUD")
+	if hud and hud.has_method("show_skill_toast"):
+		hud.show_skill_toast(skill_id, state)

@@ -402,15 +402,44 @@ func _refresh_skill_list(spirit_data: Dictionary) -> void:
 		var row := HBoxContainer.new()
 		row.custom_minimum_size = Vector2(0, 38)
 
-		# 技能色块（图标占位）
-		var icon := ColorRect.new()
-		icon.custom_minimum_size = Vector2(30, 30)
-		var icon_color_str: String = skill_data.get("icon_color", "#FFFFFF")
-		if icon_color_str:
-			icon.color = Color.from_string(icon_color_str, Color.GRAY)
+		# 技能图标（30×30容器：底色块+首字+图片叠加）
+		var icon_box := Control.new()
+		icon_box.custom_minimum_size = Vector2(30, 30)
+		icon_box.size = Vector2(30, 30)
+		# 底色块：优先 icon_color，白色/空时用元素色兜底
+		var icon_bg := ColorRect.new()
+		icon_bg.size = Vector2(30, 30)
+		var icon_color_str: String = str(skill_data.get("icon_color", "#FFFFFF"))
+		var bg_color: Color = Color.GRAY
+		if icon_color_str != "" and icon_color_str != "#FFFFFF":
+			bg_color = Color.from_string(icon_color_str, Color.GRAY)
 		else:
-			icon.color = Color.GRAY
-		row.add_child(icon)
+			bg_color = _get_element_color_for_icon(str(skill_data.get("element", "")))
+		icon_bg.color = bg_color
+		icon_box.add_child(icon_bg)
+		# 首字标签（无图时显示）
+		var icon_char := Label.new()
+		var skill_name_str: String = str(skill_data.get("name", ""))
+		icon_char.text = skill_name_str.substr(0, 1) if skill_name_str.length() > 0 else ""
+		icon_char.position = Vector2(0, 6)
+		icon_char.size = Vector2(30, 18)
+		icon_char.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		icon_char.add_theme_font_size_override("font_size", 14)
+		icon_char.add_theme_color_override("font_color", Color.WHITE)
+		icon_box.add_child(icon_char)
+		# 图片（有 icon_path 才加载，覆盖在色块上）
+		var icon_path_str: String = str(skill_data.get("icon_path", ""))
+		if icon_path_str != "":
+			var img := Image.new()
+			if img.load(icon_path_str) == OK:
+				var tex_rect := TextureRect.new()
+				tex_rect.size = Vector2(30, 30)
+				tex_rect.texture = ImageTexture.create_from_image(img)
+				tex_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+				tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				icon_box.add_child(tex_rect)
+				icon_char.visible = false  # 有图隐藏首字
+		row.add_child(icon_box)
 
 		# 技能名
 		var name_lbl := Label.new()
@@ -456,6 +485,19 @@ func _find_tag(tag_id: String) -> Dictionary:
 		if str(t.get("id", "")) == tag_id:
 			return t
 	return {}
+
+
+## 元素颜色映射（与 handler/HUD 一致）
+func _get_element_color_for_icon(element: String) -> Color:
+	var colors: Dictionary = {
+		"金刚": Color(0.85, 0.75, 0.3),
+		"大地": Color(0.7, 0.55, 0.35),
+		"雷火": Color(1.0, 0.4, 0.2),
+		"冰雪": Color(0.4, 0.8, 1.0),
+		"草木": Color(0.3, 0.8, 0.3),
+		"梦幻": Color(0.7, 0.5, 0.9),
+	}
+	return colors.get(element, Color(0.6, 0.6, 0.6))
 
 
 func _on_slider_changed(val: float, key: String) -> void:
@@ -784,6 +826,67 @@ func _open_skill_edit_panel(skill_id: String) -> void:
 	ic_row.add_child(ic_edit)
 	popup_vbox.add_child(ic_row)
 
+	# 图标图片（可选）
+	var icon_row := HBoxContainer.new()
+	icon_row.custom_minimum_size = Vector2(0, 32)
+	var icon_lbl := Label.new()
+	icon_lbl.text = "图标图片:"
+	icon_lbl.custom_minimum_size = Vector2(80, 28)
+	icon_lbl.add_theme_font_size_override("font_size", 14)
+	icon_row.add_child(icon_lbl)
+	# 图片路径显示框
+	var icon_path_edit := LineEdit.new()
+	icon_path_edit.text = str(skill_data.get("icon_path", ""))
+	icon_path_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	icon_path_edit.add_theme_font_size_override("font_size", 14)
+	icon_path_edit.editable = false  # 不能手填，必须通过按钮选择
+	icon_path_edit.placeholder_text = "未上传图片（留空则显示色块）"
+	icon_row.add_child(icon_path_edit)
+	# 上传按钮
+	var icon_btn := Button.new()
+	icon_btn.text = "选择图片"
+	icon_btn.custom_minimum_size = Vector2(100, 28)
+	icon_btn.add_theme_font_size_override("font_size", 13)
+	icon_row.add_child(icon_btn)
+	# 清除按钮
+	var icon_clear_btn := Button.new()
+	icon_clear_btn.text = "清除"
+	icon_clear_btn.custom_minimum_size = Vector2(60, 28)
+	icon_clear_btn.add_theme_font_size_override("font_size", 13)
+	icon_row.add_child(icon_clear_btn)
+	# 预览图
+	var icon_preview := TextureRect.new()
+	icon_preview.custom_minimum_size = Vector2(32, 32)
+	icon_preview.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	icon_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon_row.add_child(icon_preview)
+	# FileDialog（懒创建）
+	var icon_dialog := FileDialog.new()
+	icon_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	icon_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	icon_dialog.filters = PackedStringArray(["*.png ; PNG 图片", "*.jpg ; JPG 图片", "*.jpeg ; JPEG 图片", "*.webp ; WebP 图片"])
+	icon_dialog.title = "选择技能图标"
+	icon_dialog.file_selected.connect(func(path: String):
+		icon_path_edit.text = path
+		var img := Image.new()
+		if img.load(path) == OK:
+			icon_preview.texture = ImageTexture.create_from_image(img)
+		else:
+			printerr("[DevSpiritPanel] 预览加载失败: %s" % path)
+	)
+	skill_edit_panel.add_child(icon_dialog)
+	icon_btn.pressed.connect(func(): icon_dialog.popup_centered(Vector2(800, 600)))
+	icon_clear_btn.pressed.connect(func():
+		icon_path_edit.text = ""
+		icon_preview.texture = null
+	)
+	# 初始化预览
+	if icon_path_edit.text != "":
+		var init_img := Image.new()
+		if init_img.load(icon_path_edit.text) == OK:
+			icon_preview.texture = ImageTexture.create_from_image(init_img)
+	popup_vbox.add_child(icon_row)
+
 	# 分隔线
 	var sep_tags := HSeparator.new()
 	sep_tags.custom_minimum_size = Vector2(0, 10)
@@ -875,7 +978,7 @@ func _open_skill_edit_panel(skill_id: String) -> void:
 	confirm_btn.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
 	confirm_btn.pressed.connect(_on_skill_confirm.bind(
 		skill_data, is_new, name_edit, desc_edit, detail_edit,
-		type_option, skill_sliders, ic_edit, selected_tags, tag_params_data
+		type_option, skill_sliders, ic_edit, icon_path_edit, selected_tags, tag_params_data
 	))
 	confirm_row.add_child(confirm_btn)
 
@@ -1175,6 +1278,7 @@ func _on_skill_confirm(
 	type_option: OptionButton,
 	skill_sliders: Dictionary,
 	ic_edit: LineEdit,
+	icon_path_edit: LineEdit,
 	selected_tags: Array,
 	tag_params_data: Dictionary
 ) -> void:
@@ -1186,6 +1290,25 @@ func _on_skill_confirm(
 	skill_data["type"] = "active" if type_option.selected == 0 else "passive"
 	skill_data["icon_color"] = ic_edit.text
 	skill_data["tags"] = selected_tags.duplicate()
+
+	# 处理图标图片：若用户选了新图片，复制到项目目录；若清空则置空
+	var icon_src := icon_path_edit.text.strip_edges()
+	var old_icon_path := str(original_data.get("icon_path", ""))
+	if icon_src == "":
+		# 用户清空了
+		skill_data["icon_path"] = ""
+	elif icon_src == old_icon_path:
+		# 未改动
+		skill_data["icon_path"] = old_icon_path
+	else:
+		# 新选了图片，复制到项目目录
+		var saved := DevDataSync.save_icon(icon_src, skill_data.get("id", ""))
+		if saved != "":
+			skill_data["icon_path"] = saved
+		else:
+			# 复制失败，保留旧路径或空
+			skill_data["icon_path"] = old_icon_path
+			print("[DevSpiritPanel] 警告：图标保存失败，使用旧值")
 
 	# 收集标签参数（从UI输入框读取）
 	var collected_params: Dictionary = {}
