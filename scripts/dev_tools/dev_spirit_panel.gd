@@ -470,6 +470,14 @@ func _refresh_skill_list(spirit_data: Dictionary) -> void:
 		edit_btn.pressed.connect(_on_edit_skill.bind(str(skill_id)))
 		row.add_child(edit_btn)
 
+		# 删除按钮
+		var delete_btn := Button.new()
+		delete_btn.text = "删除"
+		delete_btn.custom_minimum_size = Vector2(60, 30)
+		delete_btn.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+		delete_btn.pressed.connect(_on_delete_skill_confirm.bind(str(skill_id), skill_data.get("name", "未命名")))
+		row.add_child(delete_btn)
+
 		skill_list_container.add_child(row)
 
 
@@ -735,7 +743,7 @@ func _open_skill_edit_panel(skill_id: String) -> void:
 	desc_lbl.add_theme_font_size_override("font_size", 14)
 	desc_row.add_child(desc_lbl)
 	var desc_edit := LineEdit.new()
-	desc_edit.text = str(skill_data.get("description", ""))
+	desc_edit.text = str(skill_data.get("base_description", skill_data.get("description", "")))
 	desc_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	desc_edit.add_theme_font_size_override("font_size", 14)
 	desc_row.add_child(desc_edit)
@@ -1325,26 +1333,32 @@ func _on_skill_confirm(
 							var section_params: Dictionary = {}
 							for child in section.get_children():
 								if child is HBoxContainer:
-									for sub in child.get_children():
-										if sub is OptionButton and sub.name.begins_with("Input_"):
-											var pkey_ob: String = sub.name.substr(6)
-											var shape_list: Array = ["rect", "circle", "crescent"]
-											var ob_idx: int = sub.selected
-											if ob_idx >= 0 and ob_idx < shape_list.size():
-												section_params[pkey_ob] = shape_list[ob_idx]
-										elif sub is LineEdit and sub.name.begins_with("Input_"):
-											var pkey: String = sub.name.substr(6)  # 去掉 "Input_"
-											var pval: String = sub.text.strip_edges()
-											if pval != "":
-												# 尝试转数字
-												if pval.is_valid_float():
-													section_params[pkey] = float(pval)
-												else:
-													section_params[pkey] = pval
+										for sub in child.get_children():
+											if sub is HSlider and sub.name == "Slider_energy_cost":
+												section_params["energy_cost"] = int(sub.value)
+											elif sub is OptionButton and sub.name.begins_with("Input_"):
+												var pkey_ob: String = sub.name.substr(6)
+												var shape_list: Array = ["rect", "circle", "crescent"]
+												var ob_idx: int = sub.selected
+												if ob_idx >= 0 and ob_idx < shape_list.size():
+													section_params[pkey_ob] = shape_list[ob_idx]
+											elif sub is LineEdit and sub.name.begins_with("Input_"):
+												var pkey: String = sub.name.substr(6)  # 去掉 "Input_"
+												var pval: String = sub.text.strip_edges()
+												if pval != "":
+													# 尝试转数字
+													if pval.is_valid_float():
+														section_params[pkey] = float(pval)
+													else:
+														section_params[pkey] = pval
 							if section_params.size() > 0:
 								collected_params[tid] = section_params
 
 	skill_data["tag_params"] = collected_params
+
+	# 保存手填描述原文，并自动拼接标签效果生成完整描述（元灵系统右键可见）
+	skill_data["base_description"] = desc_edit.text
+	skill_data["description"] = _build_description_from_tags(desc_edit.text, selected_tags, collected_params)
 
 	# 数值
 	for key in skill_sliders:
@@ -1391,6 +1405,158 @@ func _on_skill_confirm(
 	elif is_creating:
 		_refresh_skill_list(create_data)
 
+
+## 拼接技能描述：手填描述 + 各标签效果句（含X替换为实际数值）
+func _build_description_from_tags(base_desc: String, tags: Array, tag_params: Dictionary) -> String:
+	var lines: PackedStringArray = []
+	for tag_id in tags:
+		var tag: Dictionary = DataManager.get_tag_by_id(str(tag_id))
+		if tag.is_empty():
+			continue
+		var desc: String = str(tag.get("description", ""))
+		var params: Array = tag.get("params", [])
+		var values: Dictionary = tag_params.get(str(tag_id), {})
+		# 含X占位符：替换为第一个参数的实际值
+		if "X" in desc and params.size() > 0:
+			var first_key: String = str(params[0])
+			var val = values.get(first_key, "")
+			if str(val) != "":
+				desc = desc.replace("X", _format_num(val))
+		# 持续时间参数追加（如存在且未被描述覆盖）
+		if params.has("duration") and values.has("duration") and "持续" not in desc:
+			desc += "（持续%d秒）" % int(float(values["duration"]))
+		if desc != "":
+			lines.append("该技能" + desc)
+	var result := base_desc.strip_edges()
+	if lines.size() > 0:
+		if result != "":
+			result += "\n"
+		result += "\n".join(lines)
+	return result
+
+
+## 数字格式化（整数不显示小数点）
+func _format_num(val) -> String:
+	var f: float = float(val)
+	if f == int(f):
+		return str(int(f))
+	return str(f)
+
+
+func _on_delete_skill_confirm(skill_id: String, skill_name: String) -> void:
+	"""显示删除技能确认弹窗"""
+	if skill_edit_panel and is_instance_valid(skill_edit_panel):
+		return  # 已有弹窗打开，不允许操作
+
+	# 创建删除确认弹窗
+	skill_edit_panel = Control.new()
+	skill_edit_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(skill_edit_panel)
+
+	# 半透明遮罩
+	var overlay := ColorRect.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.color = Color(0, 0, 0, 0.5)
+	skill_edit_panel.add_child(overlay)
+
+	# 确认框
+	var confirm_panel := Panel.new()
+	confirm_panel.offset_left = 500
+	confirm_panel.offset_top = 350
+	confirm_panel.offset_right = 940
+	confirm_panel.offset_bottom = 500
+	skill_edit_panel.add_child(confirm_panel)
+
+	var container := VBoxContainer.new()
+	container.offset_left = 520
+	container.offset_top = 380
+	container.offset_right = 920
+	container.offset_bottom = 470
+	container.add_theme_constant_override("separation", 15)
+	skill_edit_panel.add_child(container)
+
+	# 标题
+	var title_lbl := Label.new()
+	title_lbl.text = "确认删除技能"
+	title_lbl.add_theme_font_size_override("font_size", 20)
+	title_lbl.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	container.add_child(title_lbl)
+
+	# 技能名
+	var name_lbl := Label.new()
+	name_lbl.text = "技能名称: %s" % skill_name
+	name_lbl.add_theme_font_size_override("font_size", 14)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	container.add_child(name_lbl)
+
+	# 按钮行
+	var btn_row := HBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 20)
+	container.add_child(btn_row)
+
+	# 确认删除
+	var confirm_btn := Button.new()
+	confirm_btn.text = "确认删除"
+	confirm_btn.custom_minimum_size = Vector2(120, 35)
+	confirm_btn.add_theme_font_size_override("font_size", 15)
+	confirm_btn.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+	confirm_btn.pressed.connect(_on_delete_skill.bind(skill_id))
+	btn_row.add_child(confirm_btn)
+
+	# 取消
+	var cancel_btn := Button.new()
+	cancel_btn.text = "取消"
+	cancel_btn.custom_minimum_size = Vector2(120, 35)
+	cancel_btn.add_theme_font_size_override("font_size", 15)
+	cancel_btn.pressed.connect(_close_skill_edit_panel)
+	btn_row.add_child(cancel_btn)
+
+func _on_delete_skill(skill_id: String) -> void:
+	"""执行删除技能操作"""
+	print("[DevSpiritPanel] 删除技能: %s" % skill_id)
+
+	# 从技能列表中删除
+	var found := false
+	for i in range(all_skills.size()):
+		if str(all_skills[i].get("id", "")) == skill_id:
+			all_skills.remove_at(i)
+			found = true
+			break
+
+	if not found:
+		print("[DevSpiritPanel] 未找到技能: %s" % skill_id)
+		return
+
+	# 保存技能数据
+	DevDataSync.save_skills(all_skills)
+
+	# 从当前选中元灵的技能列表中移除
+	if selected_index >= 0 and selected_index < spirits_data.size():
+		var spirit_skills: Array = spirits_data[selected_index].get("skills", [])
+		if skill_id in spirit_skills:
+			spirit_skills.erase(skill_id)
+			spirits_data[selected_index]["skills"] = spirit_skills
+			DevDataSync.save_spirits(spirits_data)
+
+	# 从创建中的元灵移除
+	if is_creating:
+		var create_skills: Array = create_data.get("skills", [])
+		if skill_id in create_skills:
+			create_skills.erase(skill_id)
+			create_data["skills"] = create_skills
+
+	# 关闭弹窗并刷新
+	_close_skill_edit_panel()
+
+	# 刷新技能列表
+	if selected_index >= 0 and selected_index < spirits_data.size():
+		_refresh_skill_list(spirits_data[selected_index])
+	elif is_creating:
+		_refresh_skill_list(create_data)
+
+	print("[DevSpiritPanel] 已删除技能")
 
 func _close_skill_edit_panel() -> void:
 	if skill_edit_panel and is_instance_valid(skill_edit_panel):

@@ -805,149 +805,144 @@ func _decide_carrying(ap: Dictionary) -> void:
 		ap.hold_duration = randf_range(profile.hold_duration_min, profile.hold_duration_max)
 
 
+# ============================================================================
+# 【外场AI重写 2026-06-15】效用驱动版
+# 背景：原逻辑"内场思维残留"（靠距离抢球、追球到隔离墙卡线、跑位基准固定）
+# 设计原则（主人定）：
+#   1. 团队策略权重>个人策略，但极端情况允许个人反超（无固定上下限）
+#   2. 接不接球=全局评估（体力撑比赛+球权价值+球威胁），不是看距离
+#   3. 外场互转概率顺应场上变化（非固定减分），极端情况反而+概率
+#   4. 主动技能就绪度影响决策（自己+队友的 active 技能）
+# 数据依赖：ball.active_skill_data/ball_damage、player.stamina/skill_cooldowns
+# 日后优化点：
+#   - 局势因子可加入"分差"（落后方进攻权重提升）
+#   - 效用公式系数可按难度 profile 化（当前写在函数内）
+# ============================================================================
+
+## 外场AI主决策（替代内场思维，基于态势效用计算）
 func _decide_penalty_move(ap: Dictionary) -> void:
-	"""外场球员AI：与内场同等角色分化+视野感知，只是空间在外场"""
 	var p: CharacterBody2D = ap.player
 	var team: String = ap.team
 	var profile: AIProfile = ap.profile
 	var my_pos: Vector2 = p.global_position
 
-	# === 持球 ===
+	# 每决策周期计算一次态势因子（省性能，够用）
+	var situation: Dictionary = _evaluate_situation(ap)
+
+	# === ① 持球：效用计算选 PASS 还是 ATTACK ===
 	if p.is_carrying_ball:
 		ap.total_carry_time += profile.think_interval
-
-		if ap.total_carry_time >= profile.max_carry_time:
-			var pass_result: Dictionary = _eval_best_pass(ap)
-			var pass_target: CharacterBody2D = pass_result.get("target") as CharacterBody2D if pass_result.has("target") else null
-			var shoot_target: CharacterBody2D = _find_nearest_enemy(ap)
-
-			if pass_target and randf() < 0.7:
-				ap.state = State.PASS
-				ap.target_pos = pass_target.global_position
-			elif shoot_target:
-				ap.state = State.ATTACK
-				ap.target_pos = shoot_target.global_position
-			else:
-				var fwd: Vector2 = Vector2(1, 0) if team == "a" else Vector2(-1, 0)
-				ap.state = State.ATTACK
-				# 无目标时朝内场方向投（不是朝外场围墙）
-				var fallback: Vector2 = Vector2(-190.0, 0.0) if team == "a" else Vector2(190.0, 0.0)
-				ap.target_pos = fallback
-			return
-
-		# 观察期
+		# 观察期未满：在外场内游走寻找机会
 		ap.hold_timer += profile.think_interval
-		if ap.hold_timer < ap.hold_duration:
+		if ap.hold_timer < ap.hold_duration and ap.total_carry_time < profile.max_carry_time:
 			var random_dir: Vector2 = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized()
 			ap.state = State.PENALTY_MOVE
 			ap.target_pos = _clamp_to_outer_field(my_pos + random_dir * 50.0, team)
 			return
 
-		# 决策传球或攻击
-		var pass_result: Dictionary = _eval_best_pass(ap)
-		var pass_target: CharacterBody2D = pass_result.get("target") as CharacterBody2D if pass_result.has("target") else null
-		var pass_score: float = pass_result.get("score", -INF) if pass_result.has("score") else -INF
-		var shoot_target: CharacterBody2D = _find_nearest_enemy(ap)
-		var shoot_score: float = _eval_shoot(ap, shoot_target, my_pos.distance_to(Vector2.ZERO))
-
-		pass_score += 20.0  # 外场偏向传球
-
-		if pass_score >= shoot_score and pass_target:
-			ap.state = State.PASS
-			ap.target_pos = pass_target.global_position
-		else:
-			ap.state = State.ATTACK
-			if shoot_target:
-				ap.target_pos = shoot_target.global_position
+		# 效用计算：pass_utility vs shoot_utility
+		var carry_util: Dictionary = _utility_carrying(ap, situation)
+		if carry_util.pass_score >= carry_util.shoot_score:
+			# PASS：传内场队友（外场互转概率低，_eval_best_pass 内部已修正）
+			var pass_result: Dictionary = _eval_best_pass(ap)
+			var pass_target: CharacterBody2D = pass_result.get("target") as CharacterBody2D if pass_result.has("target") else null
+			if pass_target:
+				ap.state = State.PASS
+				ap.target_pos = pass_target.global_position
 			else:
-				# 外场无目标：朝内场中心投
-				var fallback: Vector2 = Vector2(-190.0, 0.0) if team == "a" else Vector2(190.0, 0.0)
-				ap.target_pos = fallback
+				# 无可传目标：退化为 ATTACK 朝内场对方
+				ap.state = State.ATTACK
+				ap.target_pos = _nearest_inner_enemy_pos(ap)
+		else:
+			# ATTACK：投内场对方（球员自己留外场，目标点=敌人位置）
+			ap.state = State.ATTACK
+			ap.target_pos = _nearest_inner_enemy_pos(ap)
 		return
 
 	# === 无球 ===
 	var ball_pos: Vector2 = ball_node.global_position
 	var ball_active: bool = ball_node.is_active
-	var dist_to_ball: float = my_pos.distance_to(ball_pos)
 
-	# === 球飞向外场：根据角色判断行为 ===
-	# 外场球员接球范围扩大（外场离内场远）
-	var outer_aggro: float = profile.aggro_range * 1.5  # 外场追球范围1.5倍
+	# === ② 球激活飞向外场→先评估球威胁，再判定接不接 ===
 	if ball_active:
-		var ball_dir: Vector2 = ball_node.ball_direction
-		if ball_dir == Vector2.ZERO:
-			ball_dir = Vector2(-1, 0) if team == "a" else Vector2(1, 0)
-
-		# 防御手/辅助手：尝试拦截飞经外场的球
-		if profile.role == "defender" or profile.role == "supporter":
-			if _should_intercept_for_team(ap, ball_pos):
-				ap.state = State.READY_CATCH
-				ap.target_pos = my_pos
-				if p.has_method("enter_catch_state"):
-					p.enter_catch_state()
-				return
-
-		# 所有角色：看球是否飞向外场方向，预测落点拦截
-		for i in range(30):  # 增加预测步数
-			var predicted_pos: Vector2 = ball_pos + ball_dir * (i * 30.0)
-			if predicted_pos.distance_to(my_pos) < outer_aggro:
-				var intercept_pos: Vector2 = ball_pos + ball_dir * 60.0
-				ap.state = State.PENALTY_MOVE
-				ap.target_pos = _clamp_to_outer_field(intercept_pos, team)
-				return
-			# 球飞出场地范围就停止预测
-			if abs(predicted_pos.x) > 600.0 or abs(predicted_pos.y) > 400.0:
-				break
-
-	# 球落地没人拿且在外场附近（扩大追球范围）
-	if not ball_node.owner_player:
-		if dist_to_ball < outer_aggro:
-			ap.state = State.GOTO_BALL
-			ap.target_pos = _clamp_to_outer_field(ball_pos, team)
+		var threat: float = _eval_ball_threat(ap)
+		var catch_util: float = _utility_catch(ap, situation, threat, ball_pos)
+		# 球的方向是否指向我方外场（预判会进来）
+		var ball_to_outer: bool = _is_ball_heading_to_outer(team)
+		if ball_to_outer and catch_util > 0.0:
+			# 安全球 + 飞向外场→预判落点待接
+			var intercept_pos: Vector2 = _predict_outer_intercept_pos(ap)
+			ap.state = State.READY_CATCH
+			ap.target_pos = intercept_pos
+			if p.has_method("enter_catch_state"):
+				p.enter_catch_state()
 			return
+		elif ball_to_outer and catch_util <= 0.0:
+			# 危险球→拒绝接，转跑位让位（不浪费体力/不被击倒）
+			_move_to_outer_hold(ap, situation)
+			return
+		# 球不飞向外场→继续往下走
 
-	# === 按角色跑位（与内场同等逻辑） ===
-	var outer_base: Vector2
+	# === ③ 球在外场（落地/持球者在外场）→评估接不接 ===
+	var ball_in_outer: bool = _is_pos_in_outer(ball_pos, team)
+	if ball_in_outer and not ball_node.owner_player:
+		var threat2: float = _eval_ball_threat(ap)
+		var catch_util2: float = _utility_catch(ap, situation, threat2, ball_pos)
+		if catch_util2 > 0.0 and _am_i_closest_in_outer(ap, ball_pos):
+			# 安全球 + 我是外场最近者→追球（仅在外场内）
+			ap.state = State.PENALTY_MOVE
+			ap.target_pos = _clamp_to_outer_field(ball_pos, team)
+		else:
+			_move_to_outer_hold(ap, situation)
+		return
+
+	# === ④ 无球跑位（球不在外场）→按球权+团队策略 ===
+	_move_to_outer_hold(ap, situation)
+
+
+## 外场无球跑位（按球权归属 + 团队策略动态站边，不再用固定 outer_base）
+func _move_to_outer_hold(ap: Dictionary, situation: Dictionary) -> void:
+	var team: String = ap.team
+	var profile: AIProfile = ap.profile
+	var ball_owner_team: String = _get_ball_owner_team()
+	var base_x_inner: float = 400.0   # 靠近内场边（接应用）
+	var base_x_deep: float = 460.0    # 退守外场深处
+	var base_x_mid: float = 430.0     # 待机位
+	if team == "b":
+		base_x_inner = -400.0
+		base_x_deep = -460.0
+		base_x_mid = -430.0
+
+	# 主球权状态决定站位区域
+	var hold_x: float = base_x_mid
+	if ball_owner_team == team:
+		# 我方持球→靠近内场边接应（准备接回传）
+		hold_x = base_x_inner
+	elif ball_owner_team != "" and ball_owner_team != team:
+		# 对方持球→按团队策略：defensive 退守，其他观察
+		if profile.team_strategy_name == "defensive":
+			hold_x = base_x_deep
+		else:
+			hold_x = base_x_mid
+
+	# y 偏移按角色（防御/辅助保持宽度，主攻中）
+	var hold_y: float = 0.0
 	match profile.role:
 		"defender":
-			# 防御手：外场主体中心偏后，观察内场
-			if team == "a":
-				outer_base = Vector2(460.0, 0.0)
-			else:
-				outer_base = Vector2(-460.0, 0.0)
+			hold_y = 0.0
 		"supporter":
-			# 辅助手：外场主体偏侧，保持宽度
-			if team == "a":
-				outer_base = Vector2(450.0, 100.0) if (ap.index % 2 == 0) else Vector2(450.0, -100.0)
-			else:
-				outer_base = Vector2(-450.0, 100.0) if (ap.index % 2 == 0) else Vector2(-450.0, -100.0)
+			hold_y = 100.0 if (ap.index % 2 == 0) else -100.0
 		_:
-			# 主攻手：外场主体前侧(靠近主体内壁)
-			if team == "a":
-				outer_base = Vector2(400.0, 0.0)
-			else:
-				outer_base = Vector2(-400.0, 0.0)
+			hold_y = 0.0
 
-	# 球吸引偏移
-	var ball_pull: Vector2 = Vector2.ZERO
-	var ball_coming_to_outer: bool = false
-	var ball_dir_to_me: Vector2 = (ball_pos - my_pos)
-	if ball_dir_to_me.length() > 0:
-		ball_dir_to_me = ball_dir_to_me.normalized()
-		if team == "a" and ball_dir_to_me.x > 0.3:
-			ball_coming_to_outer = true
-		elif team == "b" and ball_dir_to_me.x < -0.3:
-			ball_coming_to_outer = true
-	if ball_coming_to_outer and dist_to_ball < 300.0:
-		ball_pull = ball_dir_to_me * 30.0 * profile.ball_attract_weight
-
-	var smart_pos: Vector2 = outer_base + ball_pull
+	var smart_pos: Vector2 = Vector2(hold_x, hold_y)
 	var random_offset: Vector2 = Vector2(randf_range(-30.0, 30.0), randf_range(-40.0, 40.0))
 
-	# 避让玩家控制球员（外场空间小，不要挡路）
+	# 避让玩家控制球员（外场空间小不挡路）
+	var p: CharacterBody2D = ap.player
 	if input_manager and input_manager.controlled_player:
 		var ctrl_p: CharacterBody2D = input_manager.controlled_player
-		if ctrl_p.team == ap.team and ctrl_p != p:
+		if ctrl_p.team == team and ctrl_p != p:
 			var to_ctrl: Vector2 = ctrl_p.global_position - smart_pos
 			if to_ctrl.length() < 80.0 and to_ctrl.length() > 0.0:
 				smart_pos -= to_ctrl.normalized() * (80.0 - to_ctrl.length()) * 0.8
@@ -955,6 +950,276 @@ func _decide_penalty_move(ap: Dictionary) -> void:
 	ap.state = State.PENALTY_MOVE
 	ap.target_pos = _clamp_to_outer_field(smart_pos + random_offset, team)
 
+
+# ============================================================================
+# 【态势感知系统】返回全局动态因子字典（内外场可共用）
+# ============================================================================
+
+func _evaluate_situation(ap: Dictionary) -> Dictionary:
+	var p: CharacterBody2D = ap.player
+	var team: String = ap.team
+	var s: Dictionary = {}
+
+	# 因子1：比赛进度 0~1（上半场0~0.5，下半场0.5~1）
+	var total_time: float = 600.0  # FIRST_HALF+SECOND_HALF
+	var elapsed: float = 0.0
+	if GameManager:
+		elapsed = (GameManager.FIRST_HALF_DURATION + GameManager.SECOND_HALF_DURATION) - maxf(GameManager.match_time, 0.0)
+		if GameManager.match_phase == GameManager.MatchPhase.FIRST_HALF:
+			elapsed = GameManager.FIRST_HALF_DURATION - maxf(GameManager.match_time, 0.0)
+	s["match_progress"] = clampf(elapsed / total_time, 0.0, 1.0)
+
+	# 因子2：自身体力健康度（按比赛进度预留）
+	var my_stam_ratio: float = p.stamina / p.max_stamina if p.max_stamina > 0.0 else 0.0
+	var reserve: float = (1.0 - s.match_progress) * 0.3  # 后半段预留30%
+	s["my_stamina_health"] = clampf(my_stam_ratio - reserve, -0.5, 1.0)
+
+	# 因子3：球权价值 0~1
+	s["possession_value"] = _eval_possession_value(ap)
+
+	# 因子4：队友状态（仅算内场存活）
+	s["team_state"] = _eval_team_state(team)
+
+	# 因子5：对手状态
+	s["enemy_state"] = _eval_team_state("b" if team == "a" else "a")
+
+	# 因子6：主动技能就绪度（自己+内场队友的 active 技能）
+	s["active_skill_ready"] = _eval_active_skill_ready(ap)
+
+	return s
+
+
+## 球权价值：己方控球多→接球意愿低，对方控球→急需夺回
+func _eval_possession_value(ap: Dictionary) -> float:
+	var team: String = ap.team
+	if not ball_node:
+		return 0.5
+	# 球有人持
+	if ball_node.owner_player:
+		if ball_node.owner_player.team != team:
+			return 0.9  # 对方持球→急需夺回
+		else:
+			return 0.3  # 己方持球→不缺球权
+	# 球飞行中：按攻击者归属
+	if ball_node.attacker_player:
+		if ball_node.attacker_player.team != team:
+			return 0.8
+		else:
+			return 0.5
+	# 球完全无人持→看半场人数优势
+	var my_count: int = _count_alive_in_inner(team)
+	var enemy_count: int = _count_alive_in_inner("b" if team == "a" else "a")
+	if my_count > enemy_count:
+		return 0.9
+	elif my_count < enemy_count:
+		return 0.5
+	return 0.7
+
+
+## 队伍状态：内场存活球员平均体力比 × (1 - 被击败人数*0.2)
+func _eval_team_state(team: String) -> float:
+	var players: Array = ai_players
+	var total_stam: float = 0.0
+	var alive_inner: int = 0
+	var defeated: int = 0
+	for ap in players:
+		if ap.team != team:
+			continue
+		if not _is_valid(ap):
+			continue
+		if ap.player.is_defeated or ap.player.is_penalized:
+			defeated += 1
+			continue
+		total_stam += ap.player.stamina / ap.player.max_stamina if ap.player.max_stamina > 0.0 else 0.0
+		alive_inner += 1
+	if alive_inner == 0:
+		return 0.1
+	var avg: float = total_stam / float(alive_inner)
+	return clampf(avg * (1.0 - defeated * 0.2), 0.0, 1.0)
+
+
+## 主动技能就绪度：自己+内场队友的 active 技能冷却全0的比例
+func _eval_active_skill_ready(ap: Dictionary) -> float:
+	var team: String = ap.team
+	var total_active: int = 0
+	var ready_active: int = 0
+	for entry in ai_players:
+		if entry.team != team:
+			continue
+		if not _is_valid(entry):
+			continue
+		if entry.player.is_defeated or entry.player.is_penalized:
+			continue
+		for sid in entry.player.equipped_skills:
+			var sk: Dictionary = DataManager.get_skill_by_id(str(sid))
+			if str(sk.get("type", "active")) != "active":
+				continue
+			total_active += 1
+			var cd: float = entry.player.skill_cooldowns.get(str(sid), 0.0)
+			if cd <= 0.0:
+				ready_active += 1
+	if total_active == 0:
+		return 0.5
+	return float(ready_active) / float(total_active)
+
+
+# ============================================================================
+# 【效用计算函数】
+# ============================================================================
+
+## 持球效用：返回 {pass_score, shoot_score}，极端情况允许个人反超团队
+func _utility_carrying(ap: Dictionary, situation: Dictionary) -> Dictionary:
+	var profile: AIProfile = ap.profile
+	var boost: float = profile.outer_personal_boost  # 外场增益
+
+	var pass_score: float = float(profile.weight_pass)
+	pass_score += situation.get("team_state", 0.5) * 50.0      # 队友强→多传
+	pass_score -= situation.get("enemy_state", 0.5) * 30.0     # 对手弱→少传直接打
+	pass_score += situation.get("active_skill_ready", 0.5) * 40.0  # 技能好→配合
+
+	var shoot_score: float = float(profile.weight_shoot)
+	shoot_score += situation.get("enemy_state", 0.5) * 60.0    # 对手弱→猛打
+	shoot_score -= situation.get("team_state", 0.5) * 20.0     # 队友强→传给他们
+
+	# 个人策略加权（外场增益放大，允许反超）
+	match profile.player_strategy_name:
+		"breakthrough":
+			shoot_score += 30.0 * boost
+		"passing":
+			pass_score += 30.0 * boost
+		"defense":
+			pass_score += 20.0 * boost  # 防守反击偏稳传
+
+	return {"pass_score": pass_score, "shoot_score": shoot_score}
+
+
+## 接球效用：< 0 拒绝接球（体力撑不住/球威胁大/球权本在己方）
+func _utility_catch(ap: Dictionary, situation: Dictionary, ball_threat: float, _ball_pos: Vector2) -> float:
+	var profile: AIProfile = ap.profile
+	var util: float = 0.0
+	util += situation.get("possession_value", 0.5) * 60.0     # 球权价值（急需夺回→积极接）
+	util += situation.get("my_stamina_health", 0.5) * 40.0    # 体力撑得住
+	util -= ball_threat * 50.0                                # 球威胁（技能/伤害）
+	# 角色加分：防御/辅助主动接，主攻看个人策略
+	match profile.role:
+		"defender", "supporter":
+			util += 30.0
+		"attacker":
+			if profile.player_strategy_name == "breakthrough":
+				util += 10.0
+	return util
+
+
+## 球的威胁评估：伤害占体力比 + 主动技能加成 + 投球者归属
+func _eval_ball_threat(ap: Dictionary) -> float:
+	if not ball_node:
+		return 0.2
+	var p: CharacterBody2D = ap.player
+	var dmg_ratio: float = 0.0
+	if p.max_stamina > 0.0:
+		dmg_ratio = ball_node.ball_damage / p.max_stamina
+	var threat: float = clampf(dmg_ratio, 0.0, 1.0)
+	# 球带主动技能→更危险
+	if ball_node.active_skill_data.size() > 0:
+		threat += 0.3
+	# 投球者是对方→更危险
+	if ball_node.attacker_player and ball_node.attacker_player.team != ap.team:
+		threat += 0.2
+	return clampf(threat, 0.0, 1.0)
+
+
+# ============================================================================
+# 【外场辅助判定函数】
+# ============================================================================
+
+## 球的方向是否指向我方外场（不再用距离判据）
+func _is_ball_heading_to_outer(team: String) -> bool:
+	if not ball_node or not ball_node.is_active:
+		return false
+	var ball_dir: Vector2 = ball_node.ball_direction
+	if ball_dir == Vector2.ZERO:
+		return false
+	# 队A外场在右(x>0)，球向右飞→指向队A外场；队B同理
+	if team == "a":
+		return ball_dir.x > 0.3
+	else:
+		return ball_dir.x < -0.3
+
+
+## 预判球进入外场的接球点（沿球方向投到外场边界内侧）
+func _predict_outer_intercept_pos(ap: Dictionary) -> Vector2:
+	var team: String = ap.team
+	var my_pos: Vector2 = ap.player.global_position
+	if not ball_node or not ball_node.is_active:
+		return my_pos
+	var ball_pos: Vector2 = ball_node.global_position
+	var ball_dir: Vector2 = ball_node.ball_direction
+	if ball_dir == Vector2.ZERO:
+		return my_pos
+	# 沿球方向推进，找第一个落在外场内的点
+	for i in range(20):
+		var pred: Vector2 = ball_pos + ball_dir * (i * 30.0)
+		if _is_pos_in_outer(pred, team):
+			return _clamp_to_outer_field(pred, team)
+		if abs(pred.x) > 600.0 or abs(pred.y) > 400.0:
+			break
+	return my_pos
+
+
+## 坐标是否在我方外场矩形内
+func _is_pos_in_outer(pos: Vector2, team: String) -> bool:
+	if team == "a":
+		return pos.x >= RIGHT_OUTER_X_MIN and pos.x <= RIGHT_OUTER_X_MAX and pos.y >= RIGHT_OUTER_Y_MIN and pos.y <= RIGHT_OUTER_Y_MAX
+	else:
+		return pos.x >= LEFT_OUTER_X_MIN and pos.x <= LEFT_OUTER_X_MAX and pos.y >= LEFT_OUTER_Y_MIN and pos.y <= LEFT_OUTER_Y_MAX
+
+
+## 我是外场内距球最近者（只在同队外场球员中比）
+func _am_i_closest_in_outer(ap: Dictionary, ball_pos: Vector2) -> bool:
+	var my_dist: float = ap.player.global_position.distance_to(ball_pos)
+	for other in ai_players:
+		if other.team != ap.team or other.player == ap.player:
+			continue
+		if not _is_valid(other):
+			continue
+		if not other.player.is_penalized:
+			continue  # 只和同样在外场的队友比
+		if other.player.global_position.distance_to(ball_pos) < my_dist:
+			return false
+	return true
+
+
+## 球权归属队伍（""=无人持）
+func _get_ball_owner_team() -> String:
+	if not ball_node:
+		return ""
+	if ball_node.owner_player:
+		return ball_node.owner_player.team
+	if ball_node.attacker_player:
+		return ball_node.attacker_player.team
+	return ""
+
+
+## 内场存活球员数（外场/被击败不算）
+func _count_alive_in_inner(team: String) -> int:
+	var n: int = 0
+	for ap in ai_players:
+		if ap.team != team:
+			continue
+		if not _is_valid(ap):
+			continue
+		if not ap.player.is_defeated and not ap.player.is_penalized:
+			n += 1
+	return n
+
+
+## 内场最近敌方位置（外场投球目标，找不到则朝内场中心）
+func _nearest_inner_enemy_pos(ap: Dictionary) -> Vector2:
+	var nearest: CharacterBody2D = _find_nearest_enemy(ap)
+	if nearest and is_instance_valid(nearest):
+		return nearest.global_position
+	# 无目标→朝内场中心（确保球回内场，不是撞外场墙）
+	return Vector2(-190.0, 0.0) if ap.team == "a" else Vector2(190.0, 0.0)
 
 
 # ==============================
@@ -1022,6 +1287,25 @@ func _eval_best_pass(ap: Dictionary) -> Dictionary:
 			score += battle_manager.comm_system.get_pass_to_me_bonus(tm)
 			if battle_manager.comm_system.is_dont_pass_active(tm):
 				score -= 30.0  # 有人喊了"别传"
+
+		# 7) 【外场互转 2026-06-15】目标也在外场→动态减分（顺应场上变化）
+		# 默认低概率：-60；但内场全被击败/内场全超出传球范围时回补（必须外场互转）
+		if tm.is_penalized:
+			var inner_alive: int = _count_alive_in_inner(team)
+			var inner_reachable: bool = false
+			for other_info in known_teammates:
+				var other_tm: CharacterBody2D = other_info["ref"]
+				if other_tm == tm or other_tm.is_penalized:
+					continue
+				if p.global_position.distance_to(other_info["pos"]) <= profile.pass_range:
+					inner_reachable = true
+					break
+			if inner_alive == 0:
+				score += 100.0   # 内场全灭→必须外场互转
+			elif not inner_reachable:
+				score += 50.0    # 内场传不到→退而求其次
+			else:
+				score -= 60.0    # 默认低概率（有内场选项时优先内场）
 
 		if score > best_score:
 			best_score = score
@@ -1222,6 +1506,21 @@ func _move(ap: Dictionary, delta: float) -> void:
 				p.move_and_slide()
 
 		State.PENALTY_MOVE:
+			# 【卡死检测 2026-06-15】外场空间小易被隔离墙/队友挡，卡住则换镜像位
+			var pm_current_pos: Vector2 = p.global_position
+			var pm_moved: float = pm_current_pos.distance_to(ap.get("last_pos", Vector2.ZERO))
+			ap.last_pos = pm_current_pos
+			if pm_moved < 2.0 and dist > arrive:
+				ap.stuck_timer = ap.get("stuck_timer", 0.0) + delta
+			else:
+				ap.stuck_timer = 0.0
+			if ap.get("stuck_timer", 0.0) > 1.0:
+				# 外场卡住→切换到 y 镜像待机位（避开当前阻挡物）
+				var hold_x: float = 430.0 if ap.team == "a" else -430.0
+				var mirror_y: float = -pm_current_pos.y
+				ap.target_pos = _clamp_to_outer_field(Vector2(hold_x, mirror_y + randf_range(-60.0, 60.0)), ap.team)
+				ap.stuck_timer = 0.0
+				print("[AI] %s 外场卡住,切镜像位" % _pname(p))
 			if dist < arrive:
 				p.velocity = Vector2.ZERO
 				if randf() < 0.05:
@@ -1466,11 +1765,39 @@ func _should_enter_catch_state(ap: Dictionary, ball_pos: Vector2, ball_dir: Vect
 	return false
 
 
+# ============================================================================
+# 【中线抢球分工优化 2026-06-15】
+# 背景：球落在中线(x≈0)时，两队最近球员判定都该追→挤到同一点→物理碰撞
+#       推搡→抢到球又被碰掉→死循环抽搐。
+# 设计原则（6大原则之行为/战术原则）：
+#   1. 职责分工：防御手守转攻第一点 > 辅助手 > 主攻手（保留前压威胁）
+#   2. 让位原则：球飞向对方或对手更近→放弃前压，保持防守站位
+#   3. 球权确定：让位后由调用方_decide自动走_decide_off_ball_role防守站位
+# 日后优化点：
+#   - 可加入球飞行方向(ball_direction)精确预判"飞向对方"
+#   - ENEMY_ADVANTAGE_DIST阈值可按难度/平衡性调整
+# ============================================================================
+
+## 内场中线抢球的职责优先级（数值越小越优先抢球）
+const ROLE_CHASE_PRIORITY: Dictionary = {
+	"defender": 0,   # 防御手最优先（最靠后，守转攻抢第一点）
+	"supporter": 1,  # 辅助手次之
+	"attacker": 2,   # 主攻手最后（保留前压进攻威胁，不回撤抢球）
+}
+
+## 对方距离优势阈值：对方最近者比我近超过此值→球权倾向对方→我放弃
+const ENEMY_ADVANTAGE_DIST: float = 60.0
+
+
+## 判断我是否应该去抢球（含职责分工 + 让位原则）
 func _am_i_closest_to_ball(ap: Dictionary, team: String) -> bool:
 	var p: CharacterBody2D = ap.player
 	var ball_pos: Vector2 = ball_node.global_position
 	var my_dist: float = p.global_position.distance_to(ball_pos)
+	var my_priority: int = ROLE_CHASE_PRIORITY.get(ap.profile.role, 1)
 
+	# === 1. 同队职责优先级判定 ===
+	# 高优先级队友(数值更小)在抢球范围内→我让位，避免和队友抢同一点
 	for other in ai_players:
 		if other.team != team:
 			continue
@@ -1478,8 +1805,40 @@ func _am_i_closest_to_ball(ap: Dictionary, team: String) -> bool:
 			continue
 		if not _is_valid(other):
 			continue
-		if other.player.global_position.distance_to(ball_pos) < my_dist:
-			return false
+		var other_priority: int = ROLE_CHASE_PRIORITY.get(other.profile.role, 1)
+		var other_dist: float = other.player.global_position.distance_to(ball_pos)
+		if other_priority < my_priority and other_dist < other.profile.aggro_range:
+			return false  # 更高优先级队友会去抢，我让位
+
+	# === 2. 同职责比距离（原逻辑保留）===
+	# 同优先级队友中，我必须是最近的才去抢
+	for other in ai_players:
+		if other.team != team:
+			continue
+		if other.player == p:
+			continue
+		if not _is_valid(other):
+			continue
+		var other_priority: int = ROLE_CHASE_PRIORITY.get(other.profile.role, 1)
+		if other_priority == my_priority:
+			if other.player.global_position.distance_to(ball_pos) < my_dist:
+				return false  # 同级队友更近，我让位
+
+	# === 3. 对方优势判定（球权倾向对方→放弃前压，转防守站位）===
+	# 找对方最近者。若对方明显比我近(优势>阈值)→球权将稳定在对方
+	# →我前压无意义且会造成挤兑，返回false走_decide_off_ball_role防守
+	var best_enemy_dist: float = INF
+	for other in ai_players:
+		if other.team == team:
+			continue
+		if not _is_valid(other):
+			continue
+		var ed: float = other.player.global_position.distance_to(ball_pos)
+		if ed < best_enemy_dist:
+			best_enemy_dist = ed
+	if best_enemy_dist < my_dist - ENEMY_ADVANTAGE_DIST:
+		return false  # 球权倾向对方，我放弃抢球转防守站位
+
 	return true
 
 

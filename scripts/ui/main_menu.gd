@@ -90,8 +90,10 @@ func _on_open_spirits() -> void:
 		spirit_ui.visible = false
 		return
 
-	# 已打开但隐藏 → 显示
+	# 已打开但隐藏 → 显示并刷新数据
 	if spirit_ui and is_instance_valid(spirit_ui):
+		if spirit_ui.has_method("refresh_data"):
+			spirit_ui.refresh_data()
 		spirit_ui.visible = true
 		return
 

@@ -52,6 +52,14 @@ var ball_attract_weight: float = 0.25
 var spread_force: float = 0.5
 var team_strategy_name: String = "balanced"  # 团队策略名称（阵型选择用）
 
+# ──── 个人策略名称（外场效用计算用，2026-06-15 新增）────
+# "breakthrough"(突破进攻) / "defense"(防守反击) / "passing"(传球配合)
+# 备战面板选择后存入，外场持球决策读此字段决定 PASS 还是 ATTACK
+var player_strategy_name: String = "passing"
+
+# 外场增益系数：外场球员个人策略权重放大倍数（外场独立性强）
+var outer_personal_boost: float = 1.5
+
 # ──── 传球偏好 ────
 var prefer_forward_pass: bool = true
 var prefer_distance_min: float = 100.0

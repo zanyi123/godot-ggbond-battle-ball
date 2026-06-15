@@ -269,6 +269,17 @@ func _build_spirit_card(index: int, x: float, y: float) -> void:
 	change_btn.pressed.connect(_on_change_spirit.bind(index))
 	card.add_child(change_btn)
 	
+	# 卸下按钮（默认未装备时禁用）
+	var unequip_btn := Button.new()
+	unequip_btn.text = "卸下"
+	unequip_btn.position = Vector2(160, 88)
+	unequip_btn.size = Vector2(70, 38)
+	unequip_btn.add_theme_font_size_override("font_size", 14)
+	unequip_btn.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
+	unequip_btn.disabled = true  # 未装备时禁用
+	unequip_btn.pressed.connect(_on_unequip_spirit.bind(index))
+	card.add_child(unequip_btn)
+	
 	# 元灵图标（用Panel显示元素颜色圆形）
 	var icon_panel := Panel.new()
 	icon_panel.position = Vector2(280, 15)
@@ -316,6 +327,7 @@ func _build_spirit_card(index: int, x: float, y: float) -> void:
 		"current_label": current_label,
 		"attr_label": attr_label,
 		"change_btn": change_btn,
+		"unequip_btn": unequip_btn,
 		"icon_panel": icon_panel,
 		"icon_label": icon_label,
 		"skill_boxes": skill_boxes,
@@ -434,6 +446,15 @@ func _on_strategy_selected(strategy: int) -> void:
 	print("[备战] 策略: 个人=%s 团队=%s" % [current_role, current_team_strategy_str])
 
 
+## 个人策略枚举转名称（外场效用计算用）
+func _player_strategy_to_name(s: int) -> String:
+	match s:
+		0: return "breakthrough"
+		1: return "defense"
+		2: return "passing"
+		_: return "passing"
+
+
 func _rebuild_team_a_profiles() -> void:
 	"""重建队A所有AI队友的profile（保持各自角色分工，只更新团队策略）"""
 	if not ai_manager:
@@ -444,6 +465,7 @@ func _rebuild_team_a_profiles() -> void:
 		var profile: AIProfile = AIProfile.get_role_preset(roles[i])
 		AIProfile.apply_team_strategy(profile, current_team_strategy_str)
 		AIProfile.apply_difficulty(profile, current_difficulty)
+		profile.player_strategy_name = _player_strategy_to_name(current_player_strategy)  # 个人策略同步到外场
 		ai_manager.update_player_profile(i, profile)
 
 
@@ -632,6 +654,54 @@ func _on_spirit_selected(spirit_data: Dictionary) -> void:
 	_close_spirit_popup()
 
 
+func _on_unequip_spirit(index: int) -> void:
+	"""卸下元灵：清空球员技能并重置UI"""
+	if index < 0 or index >= team_a_players.size():
+		return
+	var player: CharacterBody2D = team_a_players[index]
+	if not player or not is_instance_valid(player):
+		return
+	player.unequip_spirit()
+	_reset_spirit_widget(index)
+	spirit_changed.emit(index, "")
+	print("[备战] 位置%d 卸下元灵" % (index + 1))
+
+
+func _reset_spirit_widget(index: int) -> void:
+	"""重置元灵卡片为未装备状态"""
+	if index >= spirit_widgets.size():
+		return
+	var w: Dictionary = spirit_widgets[index]
+	w.current_label.text = "当前: 未装备"
+	w.attr_label.text = "加成: 无"
+	if w.icon_panel:
+		var reset_style := StyleBoxFlat.new()
+		reset_style.bg_color = Color(0.3, 0.3, 0.4)
+		reset_style.set_corner_radius_all(35)
+		w.icon_panel.add_theme_stylebox_override("panel", reset_style)
+	if w.icon_label:
+		w.icon_label.text = "未\n装备"
+		w.icon_label.position = Vector2(285, 28)
+	# 清空技能色块
+	if w.has("skill_boxes"):
+		var skill_boxes: Array = w.skill_boxes
+		var skill_chars: Array = w.skill_chars
+		for slot in range(3):
+			if slot >= skill_boxes.size():
+				break
+			var sbox: Control = skill_boxes[slot]
+			var schar: Label = skill_chars[slot]
+			var sbg: ColorRect = sbox.get_child(0)
+			for child in sbox.get_children():
+				if child is TextureRect:
+					child.queue_free()
+			sbg.color = Color(0.18, 0.18, 0.18)
+			schar.text = ""
+	# 禁用卸下按钮
+	if w.has("unequip_btn"):
+		w.unequip_btn.disabled = true
+
+
 func _update_spirit_widget(index: int, spirit_data: Dictionary) -> void:
 	"""更新元灵卡片显示"""
 	if index >= spirit_widgets.size():
@@ -717,6 +787,9 @@ func _update_spirit_widget(index: int, spirit_data: Dictionary) -> void:
 					tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 					sbox.add_child(tex_rect)
 					schar.visible = false  # 有图隐藏首字
+	# 启用卸下按钮
+	if w.has("unequip_btn"):
+		w.unequip_btn.disabled = false
 
 
 func _on_spirit_popup_bg_input(event: InputEvent) -> void:

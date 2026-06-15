@@ -9,9 +9,7 @@
 			"max_level": 10.0,
 			"name": "阿五",
 			"skills": [
-				"skill_jingang_1",
-				"skill_jingang_2",
-				"skill_jingang_3"
+				"skill_金刚_1"
 			]
 		},
 		{
@@ -23,8 +21,6 @@
 			"max_level": 10.0,
 			"name": "岩灵",
 			"skills": [
-				"skill_dadi_1",
-				"skill_dadi_2",
 				"skill_大地_1"
 			]
 		},
@@ -36,11 +32,7 @@
 			"level": 1.0,
 			"max_level": 10.0,
 			"name": "炎雷",
-			"skills": [
-				"skill_leihuo_1",
-				"skill_leihuo_2",
-				"skill_leihuo_3"
-			]
+			"skills": []
 		},
 		{
 			"description": "冰雪元灵，冰封千里，擅长控制减速",
@@ -50,10 +42,7 @@
 			"level": 1.0,
 			"max_level": 10.0,
 			"name": "霜灵",
-			"skills": [
-				"skill_bingxue_1",
-				"skill_bingxue_2"
-			]
+			"skills": []
 		},
 		{
 			"description": "草木元灵，生生不息，擅长恢复辅助",
@@ -63,11 +52,7 @@
 			"level": 1.0,
 			"max_level": 10.0,
 			"name": "藤灵",
-			"skills": [
-				"skill_caomu_1",
-				"skill_caomu_2",
-				"skill_caomu_3"
-			]
+			"skills": []
 		},
 		{
 			"description": "梦幻元灵，虚实难辨，擅长幻术干扰",
@@ -77,10 +62,7 @@
 			"level": 1.0,
 			"max_level": 10.0,
 			"name": "幻灵",
-			"skills": [
-				"skill_menghuan_1",
-				"skill_menghuan_2"
-			]
+			"skills": []
 		}
 	]
 }

@@ -5,6 +5,7 @@ extends Node
 var characters: Array[Dictionary] = []
 var spirits: Array[Dictionary] = []
 var skills: Array[Dictionary] = []
+var tags: Array[Dictionary] = []
 var elements: Dictionary = {}
 
 signal data_loaded
@@ -18,9 +19,10 @@ func load_all_data() -> void:
 	characters = _load_json_array("res://data/characters/characters.json")
 	spirits = _load_spirits_array()
 	skills = _load_spirits_skills()
+	tags = _load_tags()
 	elements = _load_json_dict("res://data/spirits/elements.json")
 	data_loaded.emit()
-	print("[DataManager] 数据加载完成: %d 角色, %d 元灵, %d 技能" % [characters.size(), spirits.size(), skills.size()])
+	print("[DataManager] 数据加载完成: %d 角色, %d 元灵, %d 技能, %d 标签" % [characters.size(), spirits.size(), skills.size(), tags.size()])
 
 
 func _load_json_raw(path: String) -> Variant:
@@ -109,6 +111,25 @@ func get_skill_by_id(skill_id: String) -> Dictionary:
 	for s in skills:
 		if s.get("id") == skill_id:
 			return s
+	return {}
+
+
+func _load_tags() -> Array[Dictionary]:
+	"""从 spirits/tags_registry.json 加载标签"""
+	var result = _load_json_raw("res://data/spirits/tags_registry.json")
+	if result is Dictionary and result.has("tags"):
+		var typed_array: Array[Dictionary] = []
+		for item in result["tags"]:
+			if item is Dictionary:
+				typed_array.append(item)
+		return typed_array
+	return []
+
+
+func get_tag_by_id(tag_id: String) -> Dictionary:
+	for t in tags:
+		if t.get("id") == tag_id:
+			return t
 	return {}
 
 

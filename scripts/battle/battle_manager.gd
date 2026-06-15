@@ -1180,6 +1180,15 @@ func _on_spirit_changed(index: int, spirit_id: String) -> void:
 		spirit_system.set_player_skills(pid, skill_ids)
 		print("[BattleManager] 元灵切换后更新技能: %s" % str(skill_ids))
 
+	# 同步刷新 HUD 技能栏
+	var hud = ui_layer.get_node_or_null("HUD")
+	if hud and hud.has_method("_update_player_skill_icons"):
+		hud._update_player_skill_icons(index)
+
+	# 同步刷新技能状态机（备战时选/卸元灵后，重新读取最新 equipped_skills）
+	if input_mgr and input_mgr.has_method("refresh_controlled_skills"):
+		input_mgr.refresh_controlled_skills()
+
 
 func _on_prep_match_started() -> void:
 	"""备战界面点击开始比赛后:恢复场地、开始比赛、发球、解锁输入"""
@@ -1208,6 +1217,9 @@ func _on_prep_match_started() -> void:
 	match_started = true
 	if input_mgr:
 		input_mgr.match_started = true
+		# 比赛正式开始：重新读取主控球员最新装备的技能（修复setup时机早于选元灵）
+		if input_mgr.has_method("refresh_controlled_skills"):
+			input_mgr.refresh_controlled_skills()
 
 	# 正式开始比赛
 	GameManager.start_match()

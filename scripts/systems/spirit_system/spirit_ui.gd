@@ -42,29 +42,49 @@ func _ready() -> void:
 
 
 func _load_data() -> void:
-	var file := FileAccess.open("res://data/spirits/spirits.json", FileAccess.READ)
-	if file:
-		var json = JSON.new()
-		json.parse(file.get_as_text())
-		spirits_data = json.data["spirits"]
-		file.close()
-
-	file = FileAccess.open("res://data/spirits/skills.json", FileAccess.READ)
-	if file:
-		var json = JSON.new()
-		json.parse(file.get_as_text())
-		skills_data = json.data["skills"]
-		file.close()
+	# 统一数据源：走 DataManager（Autoload），确保与开发面板保存的数据一致
+	# 开发面板保存后会写文件，这里强制重新加载拿最新缓存
+	if DataManager:
+		DataManager.load_all_data()
+		spirits_data = DataManager.spirits
+		skills_data = DataManager.skills
+	else:
+		# 兜底：直接读文件（不应发生，DataManager 是 Autoload）
+		var f1 := FileAccess.open("res://data/spirits/spirits.json", FileAccess.READ)
+		if f1:
+			var j1 := JSON.new()
+			j1.parse(f1.get_as_text())
+			spirits_data = j1.data["spirits"]
+			f1.close()
+		var f2 := FileAccess.open("res://data/spirits/skills.json", FileAccess.READ)
+		if f2:
+			var j2 := JSON.new()
+			j2.parse(f2.get_as_text())
+			skills_data = j2.data["skills"]
+			f2.close()
 
 	# 测试数据：每个元灵默认解锁第一个技能
 	for s in spirits_data:
+		var skills_arr: Array = s.get("skills", [])
+		var first_skill: String = str(skills_arr[0]) if skills_arr.size() > 0 else ""
 		if not s.has("unlocked_skills"):
-			s["unlocked_skills"] = [s["skills"][0]]
+			s["unlocked_skills"] = [first_skill] if first_skill != "" else []
 		if not s.has("equipped_actives"):
-			s["equipped_actives"] = [s["skills"][0], "", ""]
+			s["equipped_actives"] = [first_skill, "", ""] if first_skill != "" else ["", "", ""]
 		if not s.has("equipped_passive"):
 			s["equipped_passive"] = ""
 	print("[SpiritUI] 加载 %d 元灵, %d 技能" % [spirits_data.size(), skills_data.size()])
+
+
+## 重新加载数据并刷新UI（供外部调用，如开发面板保存后）
+func refresh_data() -> void:
+	var prev_index: int = selected_spirit_index
+	_load_data()
+	_update_skill_library()
+	# 恢复选中状态（越界保护）
+	if spirits_data.size() > 0:
+		_select_spirit(clamp(prev_index, 0, spirits_data.size() - 1))
+	print("[SpiritUI] 数据已刷新")
 
 
 # ============================================================
@@ -395,7 +415,7 @@ func _update_equipped_slots() -> void:
 
 func _fill_skill_slot(slot: Panel, skill: Dictionary) -> void:
 	"""填充技能槽位（方形图标+名称缩写）"""
-	var icon_color := Color.from_string(skill.get("icon_color", "#888"), Color.GRAY)
+	var icon_color := _get_skill_icon_color(skill)
 	_set_panel_color(slot, icon_color, 4)
 
 	var abbr := Label.new()
@@ -436,7 +456,7 @@ func _create_library_entry(skill: Dictionary, is_unlocked: bool, skill_id: Strin
 	row.size = Vector2(950, 65)
 
 	# 方形图标
-	var icon_color := Color.from_string(skill.get("icon_color", "#888"), Color.GRAY)
+	var icon_color := _get_skill_icon_color(skill)
 	var icon := Panel.new()
 	icon.position = Vector2(0, 5)
 	icon.size = Vector2(52, 52)
@@ -657,6 +677,28 @@ func _get_skill_by_id(skill_id: String) -> Dictionary:
 		if s["id"] == skill_id:
 			return s
 	return {}
+
+
+## 获取技能色块颜色：优先 icon_color，为白色/空时用技能元素色兜底（与开发面板/HUD/备战面板统一规则）
+func _get_skill_icon_color(skill: Dictionary) -> Color:
+	var color_str: String = str(skill.get("icon_color", "#FFFFFF"))
+	if color_str != "" and color_str != "#FFFFFF":
+		return Color.from_string(color_str, Color.GRAY)
+	# 白色/空 → 元素色兜底
+	return _get_element_color(str(skill.get("element", "")))
+
+
+## 元素颜色映射（与开发面板/HUD 一致）
+func _get_element_color(element: String) -> Color:
+	var colors: Dictionary = {
+		"金刚": Color(0.85, 0.75, 0.3),
+		"大地": Color(0.7, 0.55, 0.35),
+		"雷火": Color(1.0, 0.4, 0.2),
+		"冰雪": Color(0.4, 0.8, 1.0),
+		"草木": Color(0.3, 0.8, 0.3),
+		"梦幻": Color(0.7, 0.5, 0.9),
+	}
+	return colors.get(element, Color(0.6, 0.6, 0.6))
 
 
 func _clear_panel(panel: Panel) -> void:

@@ -105,6 +105,7 @@ func initialize(data_id: String, team_name: String, controlled: bool) -> void:
 	# 设置属性
 	max_stamina = char_data["stamina"] if char_data.has("stamina") else 100.0
 	stamina = max_stamina
+	spirit_energy = max_spirit_energy  # 元灵能量初始满（与体力一致，可立即释放技能）
 	defense = char_data["defense"] if char_data.has("defense") else 50.0
 	# speed 统一从角色数据出发,全局缩放
 	# 原始范围50~85,缩放后150~255,让场地移动节奏合理
@@ -116,12 +117,21 @@ func initialize(data_id: String, team_name: String, controlled: bool) -> void:
 	talent_name = char_data["talent_name"] if char_data.has("talent_name") else ""
 	talent_desc = char_data["talent_desc"] if char_data.has("talent_desc") else ""
 
-	# 加载元灵偏好 → 获取元灵技能
-	var spirit_pref: String = str(char_data.get("spirit_preference", ""))
-	if spirit_pref != "":
-		load_spirit_by_element(spirit_pref)
+	# 元灵偏好在 char_data.spirit_preference 中
+	# 技能与元灵绑定：球员创建时不自动装备技能，必须在备战面板手动选择元灵后才获得技能
+	# 备战面板可据此偏好高亮推荐元灵
 
 	_setup_visuals()
+
+	# 监听比赛阶段切换（中场休息恢复能量）
+	if GameManager and not GameManager.phase_changed.is_connected(_on_phase_changed):
+		GameManager.phase_changed.connect(_on_phase_changed)
+
+
+## 中场休息时场上元灵能量恢复20点
+func _on_phase_changed(phase) -> void:
+	if phase == GameManager.MatchPhase.HALF_TIME:
+		spirit_energy = minf(max_spirit_energy, spirit_energy + 20.0)
 
 
 ## ==================== 发球特性 ====================
@@ -628,13 +638,26 @@ func use_skill(slot_index: int) -> void:
 		return
 
 	# 检查能量（应用消耗折扣卡）
-	var cost: float = float(skill_data["energy_cost"] if skill_data.has("energy_cost") else 0) * get_skill_cost_mult()
-	# [标签整合测试] 临时跳过能量检查（能量回复机制未实现，待后续设计）
-	if spirit_energy < cost:
-		print("[Player][测试] 能量不足但跳过: %s (需要%.1f, 当前%.1f)" % [(skill_data.get("name") if skill_data.has("name") else ""), cost, spirit_energy])
+	# 总能量消耗 = 技能基础消耗 + 所有标签能量消耗
+	var base_cost: float = float(skill_data["energy_cost"] if skill_data.has("energy_cost") else 0)
+	var tags: Array = skill_data.get("tags", [])
+	var tags_cost: float = 0.0
 
-	# 消耗能量（测试阶段不扣）
-	# spirit_energy -= cost
+	# 累加标签能量消耗
+	for tag_id in tags:
+		var tag_data: Dictionary = DataManager.get_tag_by_id(tag_id)
+		if not tag_data.is_empty() and tag_data.has("energy_cost"):
+			tags_cost += float(tag_data["energy_cost"])
+
+	var total_cost: float = (base_cost + tags_cost) * get_skill_cost_mult()
+
+	if spirit_energy < total_cost:
+		print("[Player] 能量不足: %s (需要%.1f, 当前%.1f)" % [(skill_data.get("name") if skill_data.has("name") else ""), total_cost, spirit_energy])
+		return
+
+	# 消耗能量
+	spirit_energy -= total_cost
+	print("[Player] 扣除能量: %.1f (基础:%.1f + 标签:%.1f)" % [total_cost, base_cost, tags_cost])
 	# 能量条由下方球员栏更新，此处不处理
 
 	# 设置CD（应用CD折扣卡）
@@ -737,6 +760,17 @@ func get_equipped_skills() -> Array[String]:
 	return result
 
 
+## 返回某技能的冷却进度（0=可用，1=刚释放满冷却）
+func get_skill_cooldown_ratio(skill_id: String) -> float:
+	if not skill_cooldowns.has(skill_id) or skill_cooldowns[skill_id] <= 0.0:
+		return 0.0
+	var skill_data: Dictionary = DataManager.get_skill_by_id(skill_id)
+	var base_cd: float = float(skill_data.get("cooldown", 5.0))
+	if base_cd <= 0.0:
+		return 0.0
+	return clampf(skill_cooldowns[skill_id] / base_cd, 0.0, 1.0)
+
+
 func load_spirit_by_element(element: String) -> void:
 	"""根据元素类型加载元灵及其技能"""
 	if not DataManager:
@@ -766,6 +800,14 @@ func equip_spirit(spirit_data: Dictionary) -> void:
 	for sid in equipped_skills:
 		skill_cooldowns[str(sid)] = 0.0
 	print("[Player] %s 装备元灵: %s 技能=%s" % [char_data.get("name", "?"), spirit_data.get("name", "?"), str(skill_ids)])
+
+
+func unequip_spirit() -> void:
+	"""卸下元灵，清空 equipped_skills"""
+	spirit_id = ""
+	equipped_skills.clear()
+	skill_cooldowns.clear()
+	print("[Player] %s 卸下元灵" % char_data.get("name", "?"))
 
 
 ## ==================== 状态灯系统（第2步：控制状态）====================
@@ -887,7 +929,15 @@ func get_total_tick_rate(type: String) -> float:
 
 
 func _tick_all_timers(delta: float) -> void:
-	"""统一更新所有持续效果计时器（状态灯/闹钟/buff/折扣卡）"""
+	"""统一更新所有持续效果计时器（状态灯/闹钟/buff/折扣卡/技能CD）"""
+	# 技能冷却递减（每帧）
+	if not skill_cooldowns.is_empty():
+		for sid in skill_cooldowns:
+			var cd: float = skill_cooldowns[sid] - delta
+			skill_cooldowns[sid] = cd if cd > 0.0 else 0.0
+	# 场上元灵能量每秒恢复1点
+	if spirit_energy < max_spirit_energy:
+		spirit_energy = minf(max_spirit_energy, spirit_energy + delta)
 	_tick_status_lights(delta)
 	_process_tick_effects(delta)
 	_tick_buffs(delta)

@@ -265,6 +265,12 @@ func _init_skill_state_manager() -> void:
 		print("[InputManager] 已设置玩家技能: player=%d %d个" % [player_id, skill_ids.size()])
 
 
+## 公开方法：重新读取当前主控球员的最新装备技能并刷新技能状态机
+## 用于备战面板选/卸元灵后、比赛开始时同步（避免setup时机过早读到空数据）
+func refresh_controlled_skills() -> void:
+	_init_skill_state_manager()
+
+
 func _handle_skill_key_press(slot: int) -> void:
 	"""处理技能键按下（检测双击）"""
 	if not controlled_player:

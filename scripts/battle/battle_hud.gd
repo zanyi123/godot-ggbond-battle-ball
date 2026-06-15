@@ -14,6 +14,7 @@ var player_name_labels: Array[Label] = []
 # 每个球员的技能图标容器：player_skill_boxes[i] = [ColorRect, ColorRect, ColorRect]
 var player_skill_boxes: Array = []
 var player_skill_labels: Array = []  # 技能首字标签 [i]=[Label,Label,Label]
+var player_skill_cd_overlays: Array = []  # 技能圆形冷却遮罩 [i]=[TextureProgressBar x3]
 
 var enemy_stamina_bars: Array[ProgressBar] = []
 var enemy_name_labels: Array[Label] = []
@@ -163,6 +164,17 @@ func _update_bars() -> void:
 		player_stamina_bars[i].value = p.stamina
 		player_energy_bars[i].max_value = p.max_spirit_energy
 		player_energy_bars[i].value = p.spirit_energy
+		# 技能圆形冷却遮罩更新（0=可用，1=满冷却）
+		if i < player_skill_cd_overlays.size():
+			var skills: Array[String] = p.get_equipped_skills()
+			var overlays: Array = player_skill_cd_overlays[i]
+			for slot in range(3):
+				if slot >= overlays.size():
+					continue
+				if slot < skills.size():
+					overlays[slot].value = p.get_skill_cooldown_ratio(skills[slot])
+				else:
+					overlays[slot].value = 0.0
 
 	# 顶部：对方体力
 	for i in range(min(3, enemy_players.size())):
@@ -356,6 +368,7 @@ func _create_single_panel(index: int, pos: Vector2, width: float, height: float)
 	# 技能图标占位 x3
 	var this_player_skill_boxes: Array = []
 	var this_player_skill_labels: Array = []
+	var this_player_skill_cd_overlays: Array = []
 	for s in range(3):
 		var skill_box := ColorRect.new()
 		skill_box.size = Vector2(30, 30)
@@ -363,6 +376,22 @@ func _create_single_panel(index: int, pos: Vector2, width: float, height: float)
 		skill_box.color = Color(0.25, 0.25, 0.25)  # 默认深灰（无技能）
 		panel.add_child(skill_box)
 		this_player_skill_boxes.append(skill_box)
+
+		# 圆形冷却遮罩（叠在色块上，半透明黑灰）
+		var cd_overlay := TextureProgressBar.new()
+		cd_overlay.size = Vector2(30, 30)
+		cd_overlay.position = Vector2(70 + s * 35, 48)
+		cd_overlay.min_value = 0
+		cd_overlay.max_value = 1
+		cd_overlay.value = 0
+		cd_overlay.fill_mode = TextureProgressBar.FILL_CLOCKWISE
+		cd_overlay.radial_center_offset = Vector2.ZERO
+		cd_overlay.radial_fill_degrees = 360
+		var cd_img := Image.create(30, 30, false, Image.FORMAT_RGBA8)
+		cd_img.fill(Color(0.1, 0.1, 0.1, 0.72))
+		cd_overlay.texture_progress = ImageTexture.create_from_image(cd_img)
+		panel.add_child(cd_overlay)
+		this_player_skill_cd_overlays.append(cd_overlay)
 
 		# 技能首字标签（叠在色块上）
 		var skill_char_label := Label.new()
@@ -384,6 +413,7 @@ func _create_single_panel(index: int, pos: Vector2, width: float, height: float)
 
 	player_skill_boxes.append(this_player_skill_boxes)
 	player_skill_labels.append(this_player_skill_labels)
+	player_skill_cd_overlays.append(this_player_skill_cd_overlays)
 
 	# 快捷键提示
 	var key_label := Label.new()
