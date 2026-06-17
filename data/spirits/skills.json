@@ -51,6 +51,115 @@
 			"type": "active",
 			"unlock_cost": 0,
 			"unlock_level": 1
+		},
+		{
+			"cooldown": 8.0,
+			"description": "为球注入雷霆之力，伤害提升30%，球速提升40%",
+			"detail": "雷火元灵的远程爆发技：投出高速重击球，压制远距离目标",
+			"element": "雷火",
+			"energy_cost": 25,
+			"icon_color": "#FF4500",
+			"icon_path": "",
+			"id": "skill_雷火_1",
+			"name": "雷霆投掷",
+			"tag_params": {
+				"ball_dmg_up_pct": {
+					"value": 30.0
+				},
+				"ball_speed_up_pct": {
+					"multiplier": 40.0
+				}
+			},
+			"tags": [
+				"ball_dmg_up_pct",
+				"ball_speed_up_pct"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
+		},
+		{
+			"cooldown": 9.0,
+			"description": "寒冰凝于球身，命中后敌人减速50%持续3秒，且球伤降低20%",
+			"detail": "冰雪元灵的控制技：减速敌人创造击杀窗口，同时弱化敌方反击球",
+			"element": "冰雪",
+			"energy_cost": 22,
+			"icon_color": "#87CEEB",
+			"icon_path": "",
+			"id": "skill_冰雪_1",
+			"name": "寒冰减速",
+			"tag_params": {
+				"player_move_slow": {
+					"multiplier": 50.0,
+					"duration": 3.0
+				},
+				"ball_dmg_down_pct": {
+					"value": 20.0
+				}
+			},
+			"tags": [
+				"player_move_slow",
+				"ball_dmg_down_pct"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
+		},
+		{
+			"cooldown": 12.0,
+			"description": "草木之力护体，每秒恢复8点体力持续5秒，防御提升25%",
+			"detail": "草木元灵的恢复辅助技：续航生存，防御提升抵挡敌方进攻",
+			"element": "草木",
+			"energy_cost": 20,
+			"icon_color": "#32CD32",
+			"icon_path": "",
+			"id": "skill_草木_1",
+			"name": "生机护体",
+			"tag_params": {
+				"player_hp_regen": {
+					"value": 8.0,
+					"duration": 5.0,
+					"target": "self"
+				},
+				"player_def_up_pct": {
+					"value": 25.0,
+					"duration": 5.0
+				}
+			},
+			"tags": [
+				"player_hp_regen",
+				"player_def_up_pct"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
+		},
+		{
+			"cooldown": 14.0,
+			"description": "化身虚影，隐身3秒不被锁定，同时速度提升30%",
+			"detail": "梦幻元灵的幻术技：隐身规避敌方技能，加速重新走位",
+			"element": "梦幻",
+			"energy_cost": 28,
+			"icon_color": "#DA70D6",
+			"icon_path": "",
+			"id": "skill_梦幻_1",
+			"name": "虚幻迷踪",
+			"tag_params": {
+				"player_stealth": {
+					"duration": 3.0
+				},
+				"player_spd_up_pct": {
+					"value": 30.0,
+					"duration": 3.0
+				}
+			},
+			"tags": [
+				"player_stealth",
+				"player_spd_up_pct"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
 		}
 	]
 }

@@ -5,8 +5,8 @@
 			"element": "金刚",
 			"icon_color": "#FFD700",
 			"id": "spirit_jingang",
-			"level": 1.0,
-			"max_level": 10.0,
+			"level": 1,
+			"max_level": 10,
 			"name": "阿五",
 			"skills": [
 				"skill_金刚_1"
@@ -17,8 +17,8 @@
 			"element": "大地",
 			"icon_color": "#8B4513",
 			"id": "spirit_dadi",
-			"level": 1.0,
-			"max_level": 10.0,
+			"level": 1,
+			"max_level": 10,
 			"name": "岩灵",
 			"skills": [
 				"skill_大地_1"
@@ -29,40 +29,48 @@
 			"element": "雷火",
 			"icon_color": "#FF4500",
 			"id": "spirit_leihuo",
-			"level": 1.0,
-			"max_level": 10.0,
+			"level": 1,
+			"max_level": 10,
 			"name": "炎雷",
-			"skills": []
+			"skills": [
+				"skill_雷火_1"
+			]
 		},
 		{
 			"description": "冰雪元灵，冰封千里，擅长控制减速",
 			"element": "冰雪",
 			"icon_color": "#87CEEB",
 			"id": "spirit_bingxue",
-			"level": 1.0,
-			"max_level": 10.0,
+			"level": 1,
+			"max_level": 10,
 			"name": "霜灵",
-			"skills": []
+			"skills": [
+				"skill_冰雪_1"
+			]
 		},
 		{
 			"description": "草木元灵，生生不息，擅长恢复辅助",
 			"element": "草木",
 			"icon_color": "#32CD32",
 			"id": "spirit_caomu",
-			"level": 1.0,
-			"max_level": 10.0,
+			"level": 1,
+			"max_level": 10,
 			"name": "藤灵",
-			"skills": []
+			"skills": [
+				"skill_草木_1"
+			]
 		},
 		{
 			"description": "梦幻元灵，虚实难辨，擅长幻术干扰",
 			"element": "梦幻",
 			"icon_color": "#DA70D6",
 			"id": "spirit_menghuan",
-			"level": 1.0,
-			"max_level": 10.0,
+			"level": 1,
+			"max_level": 10,
 			"name": "幻灵",
-			"skills": []
+			"skills": [
+				"skill_梦幻_1"
+			]
 		}
 	]
 }
