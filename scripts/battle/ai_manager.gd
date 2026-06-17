@@ -8,6 +8,7 @@ const AIProfile = preload("res://scripts/battle/ai_profile.gd")
 var battle_manager: Node2D
 var input_manager: Node
 var ball_node: Area2D
+var match_stats: Node = null  # P1方案A：指标采集器引用（可选，sim模式用）
 
 enum State {
 	IDLE,
@@ -94,7 +95,10 @@ func _physics_process(delta: float) -> void:
 		var do_think: bool = ap.think_timer >= profile.think_interval
 		if do_think:
 			ap.think_timer = 0.0
+			var _prev_state: int = ap.state  # P1方案A：采集决策驱动的状态切换（抖动指标）
 			_decide(ap)
+			if match_stats and ap.state != _prev_state:
+				match_stats.record_state_change(ap.team)
 
 		# 朝向更新
 		_update_facing(ap, delta)
@@ -131,6 +135,7 @@ func register_player(player: CharacterBody2D, team_name: String, index: int, pro
 		"dribble_target": Vector2.ZERO,
 		"total_carry_time": 0.0,
 		"last_pos": player.global_position,
+		"last_state": State.IDLE,  # P0：Hysteresis 防抖用，记录上次状态
 		"stuck_timer": 0.0,
 		"think_timer": randf() * profile.think_interval,  # 错开初始决策时间
 		"known_positions": {},
@@ -400,7 +405,10 @@ func _decide(ap: Dictionary) -> void:
 
 	# 球在飞行中
 	if ball_active:
-		if _am_i_closest_to_ball(ap, team) and dist_to_ball < aggro:
+		# 2026-06-17：球在对方半场时不主动追（避免被中线 clamp 卡死）
+		# 对方半场的飞球由 _should_enter_catch_state 接球状态处理，或球进己方半场后再追
+		var ball_reachable: bool = _ball_in_reachable_half(ball_pos, team)
+		if ball_reachable and _am_i_closest_to_ball(ap, team) and dist_to_ball < aggro:
 			# over_chase 弱点：允许过半场追球
 			var chase_pos: Vector2
 			if profile.weakness_overextend:
@@ -789,6 +797,16 @@ func _decide_carrying(ap: Dictionary) -> void:
 			# 支援者：斜前方
 			dribble_target = _clamp_forward_to_boundary(my_pos + forward * 70.0 + Vector2(0, randf() * 100.0 - 50.0), team, forward)
 
+	# === P0 Hysteresis 防抖：当前状态对应的行为需达到 margin 才被顶替 ===
+	# 决竞球场景：pass/shoot 分数接近时反复切换会造成出手节奏乱，按角色给容差
+	var hysteresis: float = profile.decision_hysteresis
+	if ap.state == State.ATTACK:
+		shoot_score += hysteresis  # 当前投球，射击需高出 margin 才会被抢走优先
+	elif ap.state == State.PASS:
+		pass_score += hysteresis
+	elif ap.state == State.DRIBBLE:
+		dribble_score += hysteresis
+
 	if pass_score >= shoot_score and pass_score >= dribble_score and pass_target:
 		ap.state = State.PASS
 		ap.target_pos = pass_target.global_position
@@ -862,6 +880,29 @@ func _decide_penalty_move(ap: Dictionary) -> void:
 	# === 无球 ===
 	var ball_pos: Vector2 = ball_node.global_position
 	var ball_active: bool = ball_node.is_active
+
+	# === ①.5 队友传球优先识别（2026-06-17：修复外场接不到队友传球）===
+	# 决竞球场景：内场队友主动传球给外场队友是合法战术（守转攻/二次进攻）
+	# 原bug：传球方向偏垂直时 ball_dir.x<0.3 不触发"飞向外场"判定，
+	#        或 catch_util≤0 误判危险球拒接→飞到脸上也躲开
+	# 修复：只要 attacker_player 是同队队友 + 球朝我附近飞→直接 READY_CATCH
+	#       （物理层 _on_body_entered 同队碰球即接住，只需 AI 摆出接球姿态）
+	if ball_active and ball_node.attacker_player:
+		var passer: CharacterBody2D = ball_node.attacker_player
+		if passer.team == team and passer != p:
+			# 球朝我方向飞（球→我 的向量与球飞行方向同向）或球已在我附近
+			var to_me: Vector2 = p.global_position - ball_pos
+			var ball_dir_vec: Vector2 = ball_node.ball_direction
+			var approaching: bool = false
+			if ball_dir_vec != Vector2.ZERO and to_me != Vector2.ZERO:
+				approaching = ball_dir_vec.dot(to_me.normalized()) > 0.3
+			var ball_near_me: bool = to_me.length() < 200.0
+			if approaching or ball_near_me:
+				ap.state = State.READY_CATCH
+				ap.target_pos = p.global_position  # 原地接球，不预测落点（防跑过头）
+				if p.has_method("enter_catch_state"):
+					p.enter_catch_state()
+				return
 
 	# === ② 球激活飞向外场→先评估球威胁，再判定接不接 ===
 	if ball_active:
@@ -961,7 +1002,9 @@ func _evaluate_situation(ap: Dictionary) -> Dictionary:
 	var s: Dictionary = {}
 
 	# 因子1：比赛进度 0~1（上半场0~0.5，下半场0.5~1）
-	var total_time: float = 600.0  # FIRST_HALF+SECOND_HALF
+	var total_time: float = 600.0  # FIRST_HALF+SECOND_HALF（P1方案A：读真实时长避免 sim 缩短后失真）
+	if GameManager:
+		total_time = GameManager.get_first_half_duration() + GameManager.get_second_half_duration()
 	var elapsed: float = 0.0
 	if GameManager:
 		elapsed = (GameManager.FIRST_HALF_DURATION + GameManager.SECOND_HALF_DURATION) - maxf(GameManager.match_time, 0.0)
@@ -1067,19 +1110,47 @@ func _eval_active_skill_ready(ap: Dictionary) -> float:
 # 【效用计算函数】
 # ============================================================================
 
+## Response Curve：把 0~1 的因子过曲线，让决策更拟人（P1，参考 Dave Mark Utility AI）
+## 决竞球场景：线性加权会让对手残血 50%→60% 和 90%→100% 反应一样，不像真人
+## 过曲线后，特定阈值才有明显变化（如对手残血到 70% 才开始猛攻）
+## linear=线性 / logistic=S形（中段急升，适合有阈值的因子）/
+## exp=凸（越高越极端，无饱和，适合“越好越极端”）/ inv_log=反S（高忽略低急升）
+func _curve(x: float, type: String, k: float = 1.0) -> float:
+	x = clampf(x, 0.0, 1.0)
+	match type:
+		"logistic":
+			# S形：x=0.5时y=0.5，k越大越陡；低值压低、高值拉高、中段急转
+			return 1.0 / (1.0 + exp(-k * (x - 0.5) * 8.0))
+		"exp":
+			# 凸：y=x²，高值变化快、低值平缓（无上端饱和）
+			return x * x
+		"inv_log":
+			# 反S：高值压低、低值拉高（用于“领先松懈”等反向场景）
+			return 1.0 - 1.0 / (1.0 + exp(-k * (x - 0.5) * 8.0))
+		_:  # linear 默认
+			return x
+
+
 ## 持球效用：返回 {pass_score, shoot_score}，极端情况允许个人反超团队
+## P1：situation 因子过 Response Curve + 系数从 profile 读（原魔法数字 50/60/30/40/20）
 func _utility_carrying(ap: Dictionary, situation: Dictionary) -> Dictionary:
 	var profile: AIProfile = ap.profile
 	var boost: float = profile.outer_personal_boost  # 外场增益
+	var k: float = profile.curve_k
+
+	# 因子过曲线（enemy_state 用 logistic：对手残血到阈值才影响决策）
+	var team_factor: float = situation.get("team_state", 0.5)  # 队友状态保持线性
+	var enemy_factor: float = _curve(situation.get("enemy_state", 0.5), profile.curve_enemy_state, k)
+	var skill_factor: float = situation.get("active_skill_ready", 0.5)  # 技能就绪保持线性
 
 	var pass_score: float = float(profile.weight_pass)
-	pass_score += situation.get("team_state", 0.5) * 50.0      # 队友强→多传
-	pass_score -= situation.get("enemy_state", 0.5) * 30.0     # 对手弱→少传直接打
-	pass_score += situation.get("active_skill_ready", 0.5) * 40.0  # 技能好→配合
+	pass_score += team_factor * profile.util_pass_team_w      # 队友强→多传
+	pass_score += enemy_factor * profile.util_pass_enemy_w    # 对手弱→少传直接打
+	pass_score += skill_factor * profile.util_pass_skill_w    # 技能好→配合
 
 	var shoot_score: float = float(profile.weight_shoot)
-	shoot_score += situation.get("enemy_state", 0.5) * 60.0    # 对手弱→猛打
-	shoot_score -= situation.get("team_state", 0.5) * 20.0     # 队友强→传给他们
+	shoot_score += enemy_factor * profile.util_shoot_enemy_w  # 对手弱→猛打
+	shoot_score += team_factor * profile.util_shoot_team_w    # 队友强→传给他们
 
 	# 个人策略加权（外场增益放大，允许反超）
 	match profile.player_strategy_name:
@@ -1094,12 +1165,20 @@ func _utility_carrying(ap: Dictionary, situation: Dictionary) -> Dictionary:
 
 
 ## 接球效用：< 0 拒绝接球（体力撑不住/球威胁大/球权本在己方）
+## P1：因子过曲线 + 系数从 profile 读
 func _utility_catch(ap: Dictionary, situation: Dictionary, ball_threat: float, _ball_pos: Vector2) -> float:
 	var profile: AIProfile = ap.profile
+	var k: float = profile.curve_k
 	var util: float = 0.0
-	util += situation.get("possession_value", 0.5) * 60.0     # 球权价值（急需夺回→积极接）
-	util += situation.get("my_stamina_health", 0.5) * 40.0    # 体力撑得住
-	util -= ball_threat * 50.0                                # 球威胁（技能/伤害）
+
+	# 因子过曲线
+	var possession_factor: float = situation.get("possession_value", 0.5)  # 球权价值保持线性
+	var stamina_factor: float = _curve(situation.get("my_stamina_health", 0.5), profile.curve_stamina, k)
+	var threat_factor: float = _curve(ball_threat, profile.curve_threat, k)
+
+	util += possession_factor * profile.util_catch_possession_w  # 球权价值（急需夺回→积极接）
+	util += stamina_factor * profile.util_catch_stamina_w        # 体力撑得住
+	util += threat_factor * profile.util_catch_threat_w          # 球威胁（技能/伤害，负值）
 	# 角色加分：防御/辅助主动接，主攻看个人策略
 	match profile.role:
 		"defender", "supporter":
@@ -1370,6 +1449,90 @@ func _eval_dribble(ap: Dictionary, dist_to_goal: float, enemy_near: bool) -> flo
 	return score
 
 
+# ============================================================================
+# 【P0 Steering 避障工具函数 2026-06-17】
+# 借鉴 GDQuest godot-steering-ai-framework（GSAISeparation/GSAIAvoidCollisions），
+# 结合决竞球规则改造：
+#   - 内/外场分离力不同（外场狭小，需更强排斥防卡死）
+#   - 仅对队友施分离力（敌人是攻击目标，不能排斥开）
+#   - 带球状态额外做碰撞预测绕行（避开截球敌人）
+# ============================================================================
+
+## 计算分离力（排斥向量）：内场弱、外场强，仅施于队友
+## 参考 GSAISeparation._report_neighbor：strength = decay_coeff / distance²（反平方）
+func _calc_separation(ap: Dictionary) -> Vector2:
+	var p: CharacterBody2D = ap.player
+	var profile: AIProfile = ap.profile
+	var penalized: bool = _is_penalized(ap)
+	# 内场弱、外场强（外场狭小需强力排斥）
+	var coeff: float = profile.separation_outer if penalized else profile.separation_inner
+	var radius: float = profile.separation_radius
+	var radius_sq: float = radius * radius
+	var sep := Vector2.ZERO
+	for other in ai_players:
+		if other.player == p or not _is_valid(other):
+			continue
+		# 仅对同队队友施分离力（敌人是攻击目标，不能排斥）
+		if other.team != ap.team:
+			continue
+		var to_me: Vector2 = p.global_position - other.player.global_position
+		var d_sq: float = to_me.length_squared()
+		if d_sq >= radius_sq or d_sq < 1.0:
+			continue  # 超出感知半径 / 重叠异常跳过
+		# 反平方衰减：越近排斥越强
+		var strength: float = coeff / d_sq
+		sep += to_me.normalized() * strength
+	# 封顶：避免极端情况加速度炸裂
+	return sep.limit_length(profile.speed_move * 1.5)
+
+
+## 带球碰撞预测绕行：预测前方 avoid_lookahead 秒会撞到的敌人，提前偏转
+## 参考 GSAIAvoidCollisions：计算 time_to_collision，加侧向避让力
+func _calc_avoid_velocity(ap: Dictionary, base_vel: Vector2) -> Vector2:
+	var p: CharacterBody2D = ap.player
+	var profile: AIProfile = ap.profile
+	var lookahead: float = profile.avoid_lookahead
+	var my_speed: float = base_vel.length()
+	if my_speed < 1.0:
+		return base_vel
+	# 预测前方位置
+	var future_pos: Vector2 = p.global_position + base_vel * lookahead
+	var avoid := Vector2.ZERO
+	for other in ai_players:
+		if other.player == p or not _is_valid(other):
+			continue
+		var enemy: CharacterBody2D = other.player
+		# 敌人提前预测（包括对手）
+		var enemy_future: Vector2 = enemy.global_position
+		if other.team != ap.team and enemy.velocity:
+			enemy_future = enemy.global_position + enemy.velocity * lookahead
+		var to_enemy: Vector2 = enemy_future - future_pos
+		var d_sq: float = to_enemy.length_squared()
+		# 预测点距敌人 < 50 像素 → 需避让
+		if d_sq < 50.0 * 50.0 and d_sq > 1.0:
+			# 侧向避让：取 base_vel 的垂直方向（哪侧更远走哪侧）
+			var perp: Vector2 = Vector2(-base_vel.y, base_vel.x).normalized()
+			var side_dot: float = perp.dot(to_enemy)
+			if side_dot > 0.0:
+				perp = -perp  # 选远离敌人的一侧
+			avoid += perp * my_speed * 0.6
+	return (base_vel + avoid).limit_length(my_speed)
+
+
+## 应用分离力到速度（通用：所有 _move 移动分支可调用）
+## 仅在非击退/非僵直/非接球状态下叠加
+func _apply_steering(ap: Dictionary, base_velocity: Vector2, use_avoid: bool = false) -> Vector2:
+	var sep := _calc_separation(ap)
+	var vel := base_velocity + sep
+	# 带球时额外做碰撞预测绕行
+	if use_avoid and ap.player.is_carrying_ball:
+		vel = _calc_avoid_velocity(ap, vel)
+	# 保持原速度上限（不超速）
+	var max_speed: float = base_velocity.length()
+	if max_speed > 1.0:
+		vel = vel.limit_length(max_speed)
+	return vel
+
 # ==============================
 # ===== 移动执行 ================
 # ==============================
@@ -1381,6 +1544,9 @@ func _move(ap: Dictionary, delta: float) -> void:
 	if p._knockback_timer > 0.0:
 		p.move_and_slide()
 		return
+
+	# 记录 last_state 供 Hysteresis 防抖用（P0）
+	var _prev_state: int = ap.state
 
 	# 僵直中：无法移动
 	if p._stagger_timer > 0.0:
@@ -1409,7 +1575,7 @@ func _move(ap: Dictionary, delta: float) -> void:
 				_try_pickup_ball(ap)
 				p.velocity = Vector2.ZERO
 			else:
-				p.velocity = (target - p.global_position).normalized() * profile.speed_chase
+				p.velocity = _apply_steering(ap, (target - p.global_position).normalized() * profile.speed_chase)
 				p.move_and_slide()
 
 		State.DRIBBLE:
@@ -1429,6 +1595,8 @@ func _move(ap: Dictionary, delta: float) -> void:
 				ap.stuck_timer = 0.0
 
 			if ap.get("stuck_timer", 0.0) > 1.0:
+				if match_stats:
+					match_stats.record_stuck(ap.team)  # P1方案A：卡死指标采集
 				print("[AI] %s 卡住,改变策略" % _pname(p))
 				var fwd: Vector2 = Vector2(1, 0) if ap.team == "a" else Vector2(-1, 0)
 				var midline_x: float = -10.0 if ap.team == "a" else 10.0
@@ -1454,7 +1622,8 @@ func _move(ap: Dictionary, delta: float) -> void:
 						ap.target_pos = pass_target.global_position
 					else:
 						var new_target: Vector2 = _clamp_forward_to_boundary(current_pos + fwd * 100.0 + Vector2(randf_range(-50.0, 50.0), randf_range(-80.0, 80.0)), ap.team, fwd)
-						if new_target.distance_to(current_pos) < 30.0:
+						# P0 Hysteresis：新目标距当前位置太近→跳过，避免抽搂（用 profile 字段）
+						if new_target.distance_to(current_pos) < profile.stuck_redecide_margin:
 							var shoot_target2: CharacterBody2D = _find_nearest_enemy(ap)
 							if shoot_target2:
 								ap.state = State.ATTACK
@@ -1472,7 +1641,8 @@ func _move(ap: Dictionary, delta: float) -> void:
 				p.velocity = Vector2.ZERO
 				_force_redecide_if_at_boundary(ap)
 			else:
-				p.velocity = (target - p.global_position).normalized() * profile.speed_dribble
+				# P0：带球时启用碰撞预测绕行 + 队友分离力，避免被堵卡死
+				p.velocity = _apply_steering(ap, (target - p.global_position).normalized() * profile.speed_dribble, true)
 				p.move_and_slide()
 
 		State.ATTACK:
@@ -1494,7 +1664,7 @@ func _move(ap: Dictionary, delta: float) -> void:
 				p.velocity = Vector2.ZERO
 				_force_redecide_if_at_boundary(ap)
 			else:
-				p.velocity = (target - p.global_position).normalized() * profile.speed_move
+				p.velocity = _apply_steering(ap, (target - p.global_position).normalized() * profile.speed_move)
 				p.move_and_slide()
 
 		State.SUPPORT:
@@ -1502,7 +1672,7 @@ func _move(ap: Dictionary, delta: float) -> void:
 				p.velocity = Vector2.ZERO
 				_force_redecide_if_at_boundary(ap)
 			else:
-				p.velocity = (target - p.global_position).normalized() * profile.speed_move
+				p.velocity = _apply_steering(ap, (target - p.global_position).normalized() * profile.speed_move)
 				p.move_and_slide()
 
 		State.PENALTY_MOVE:
@@ -1515,12 +1685,17 @@ func _move(ap: Dictionary, delta: float) -> void:
 			else:
 				ap.stuck_timer = 0.0
 			if ap.get("stuck_timer", 0.0) > 1.0:
+				if match_stats:
+					match_stats.record_stuck(ap.team)  # P1方案A：卡死指标采集
 				# 外场卡住→切换到 y 镜像待机位（避开当前阻挡物）
 				var hold_x: float = 430.0 if ap.team == "a" else -430.0
 				var mirror_y: float = -pm_current_pos.y
-				ap.target_pos = _clamp_to_outer_field(Vector2(hold_x, mirror_y + randf_range(-60.0, 60.0)), ap.team)
+				var candidate: Vector2 = _clamp_to_outer_field(Vector2(hold_x, mirror_y + randf_range(-60.0, 60.0)), ap.team)
+				# P0 Hysteresis：新位置距当前位置必须 > margin，否则保持原状（避免镜像抽搂）
+				if candidate.distance_to(pm_current_pos) > profile.stuck_redecide_margin:
+					ap.target_pos = candidate
+					print("[AI] %s 外场卡住,切镜像位" % _pname(p))
 				ap.stuck_timer = 0.0
-				print("[AI] %s 外场卡住,切镜像位" % _pname(p))
 			if dist < arrive:
 				p.velocity = Vector2.ZERO
 				if randf() < 0.05:
@@ -1540,7 +1715,7 @@ func _move(ap: Dictionary, delta: float) -> void:
 							var avoid_dir: Vector2 = -to_ctrl.normalized()
 							var avoid_strength: float = (70.0 - ctrl_dist) / 70.0  # 越近越强
 							move_dir = (move_dir + avoid_dir * avoid_strength * 2.0).normalized()
-				p.velocity = move_dir * profile.speed_move
+				p.velocity = _apply_steering(ap, move_dir * profile.speed_move)
 				p.move_and_slide()
 
 		State.READY_CATCH:
@@ -1789,6 +1964,16 @@ const ROLE_CHASE_PRIORITY: Dictionary = {
 const ENEMY_ADVANTAGE_DIST: float = 60.0
 
 
+## 球是否在己方可达的半场范围内（2026-06-17：避免追到对方半场球时被中线 clamp 卡死）
+## 决竞球规则：球员不能过中线，追对方半场的球→目标被clamp到中线→够不到→卡线
+## 球在己方半场（含中线）才值得主动追；对方半场的球交给接球状态处理
+func _ball_in_reachable_half(ball_pos: Vector2, team: String) -> bool:
+	if team == "a":
+		return ball_pos.x <= 0.0  # 队A可达中线及左侧己方半场
+	else:
+		return ball_pos.x >= 0.0  # 队B可达中线及右侧己方半场
+
+
 ## 判断我是否应该去抢球（含职责分工 + 让位原则）
 func _am_i_closest_to_ball(ap: Dictionary, team: String) -> bool:
 	var p: CharacterBody2D = ap.player
@@ -1796,8 +1981,10 @@ func _am_i_closest_to_ball(ap: Dictionary, team: String) -> bool:
 	var my_dist: float = p.global_position.distance_to(ball_pos)
 	var my_priority: int = ROLE_CHASE_PRIORITY.get(ap.profile.role, 1)
 
-	# === 1. 同队职责优先级判定 ===
-	# 高优先级队友(数值更小)在抢球范围内→我让位，避免和队友抢同一点
+	# === 1. 同队职责优先级判定（2026-06-17 加强：按职责分工，不看抢球范围）===
+	# 决竞球规则：主攻手(priority=2)不该亲自回撤抢球，球应来自防御手/辅助手传球
+	# 只要更高优先级队友(数值更小)有效存活且在内场→我让位
+	# 原bug：仅当队友在aggro_range内才让位→发球时队友站位靠后→主攻手自己抢球
 	for other in ai_players:
 		if other.team != team:
 			continue
@@ -1805,10 +1992,12 @@ func _am_i_closest_to_ball(ap: Dictionary, team: String) -> bool:
 			continue
 		if not _is_valid(other):
 			continue
+		# 队友被击败/外场惩罚→视为不可用，不据此让位（让主攻手能补位）
+		if other.player.is_defeated or other.player.is_penalized:
+			continue
 		var other_priority: int = ROLE_CHASE_PRIORITY.get(other.profile.role, 1)
-		var other_dist: float = other.player.global_position.distance_to(ball_pos)
-		if other_priority < my_priority and other_dist < other.profile.aggro_range:
-			return false  # 更高优先级队友会去抢，我让位
+		if other_priority < my_priority:
+			return false  # 更高优先级队友在场，我让位（职责分工优先，不看距离）
 
 	# === 2. 同职责比距离（原逻辑保留）===
 	# 同优先级队友中，我必须是最近的才去抢

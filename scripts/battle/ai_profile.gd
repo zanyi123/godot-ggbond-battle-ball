@@ -52,6 +52,43 @@ var ball_attract_weight: float = 0.25
 var spread_force: float = 0.5
 var team_strategy_name: String = "balanced"  # 团队策略名称（阵型选择用）
 
+# ──── Steering 避障参数（P0，借鉴 GDQuest GSAI，结合决竞球内外场规则）────
+# 内场分离力强度：决竞球内场有阵型约束（spread_force 已存在），分离力只做微调防撞
+var separation_inner: float = 600.0
+# 外场分离力强度：外场狭小（被罚下球员的隔离区），需强力排斥防卡死（>内场）
+var separation_outer: float = 1400.0
+# 队友感知半径（像素）：超出此距离的队友不施加分离力
+var separation_radius: float = 80.0
+# 带球碰撞预测时长（秒）：DRIBBLE 时预测前方此秒数内会撞到的敌人，提前绕行
+var avoid_lookahead: float = 0.4
+
+# ──── Hysteresis 防抖参数（P0，借鉴 InfluenceWalker 思路）────
+# 决竞球角色容差不同：attacker 容忍小（果断切换）、defender 容忍大（稳定）
+# 用法：新状态分数必须 >= 当前状态分数 + margin 才切换，消除 pass/shoot 抖动
+var decision_hysteresis: float = 8.0
+# 卡死换向的滞回：当前位置到新目标距离必须 > 此值，否则不切（避免 y 镜像抽搐）
+var stuck_redecide_margin: float = 30.0
+
+# ──── 效用权重（P1，situation 因子→行为分数，数值外置便于平衡调优）────
+# 原 _utility_carrying / _utility_catch 里的魔法数字（50/60/30/40/20）提到这里
+# 持球效用：pass/shoot 的 situation 因子权重
+var util_pass_team_w: float = 50.0      # 队友状态→传球加分
+var util_pass_enemy_w: float = -30.0    # 对手状态→传球减分（对手弱少传直接打）
+var util_pass_skill_w: float = 40.0     # 技能就绪→传球配合
+var util_shoot_enemy_w: float = 60.0    # 对手状态→投球加分（对手弱猛打）
+var util_shoot_team_w: float = -20.0    # 队友状态→投球减分（队友强传给他们）
+# 接球效用：_utility_catch 的 situation 因子权重
+var util_catch_possession_w: float = 60.0  # 球权价值→接球加分（急需夺回→积极接）
+var util_catch_stamina_w: float = 40.0     # 体力健康→接球加分
+var util_catch_threat_w: float = -50.0     # 球威胁→接球减分（负值，危险球拒接）
+
+# ──── Response Curve 曲线类型（P1，让因子过曲线更拟人，借鉴 Dave Mark Utility AI）────
+# linear=线性 / logistic=S形（达阈值才急升）/ exp=凸（越高越极端，无饱和）/ inv_log=反S（高忽略低急升）
+var curve_enemy_state: String = "logistic"  # 对手残血度：达阈值才猛攻（不匀速激进）
+var curve_stamina: String = "exp"            # 体力健康：越好越想接（无饱和，体力满时极积极）
+var curve_threat: String = "logistic"        # 球威胁：达阈值才躲（低威胁忽略）
+var curve_k: float = 1.0                     # 曲线斜率（越大越陡，默认1.0）
+
 # ──── 个人策略名称（外场效用计算用，2026-06-15 新增）────
 # "breakthrough"(突破进攻) / "defense"(防守反击) / "passing"(传球配合)
 # 备战面板选择后存入，外场持球决策读此字段决定 PASS 还是 ATTACK
@@ -96,6 +133,7 @@ static func get_role_preset(role_name: String) -> AIProfile:
 			p.weight_pass = -20.0       # 不爱传球
 			p.weight_shoot = 35.0       # 强烈倾向投球
 			p.weight_dribble = 20.0     # 带球意愿高
+			p.decision_hysteresis = 5.0   # 主攻手：小容差，果断切换（P0）
 			p.hold_duration_min = 0.15  # 果断出手
 			p.hold_duration_max = 0.35
 			p.think_interval = 0.15     # 决策快
@@ -127,6 +165,7 @@ static func get_role_preset(role_name: String) -> AIProfile:
 			p.weight_pass = 30.0        # 爱传球（安全）
 			p.weight_shoot = -10.0      # 不爱投球（但不会拒绝）
 			p.weight_dribble = -25.0    # 不爱带球
+			p.decision_hysteresis = 12.0  # 防御者：大容差，更稳定不乱切（P0）
 			p.hold_duration_min = 0.5   # 犹豫久
 			p.hold_duration_max = 1.2
 			p.think_interval = 0.3      # 决策慢
@@ -158,6 +197,7 @@ static func get_role_preset(role_name: String) -> AIProfile:
 			p.weight_pass = 40.0        # 最爱传球
 			p.weight_shoot = 0.0        # 中性投球
 			p.weight_dribble = 5.0      # 略微带球
+			p.decision_hysteresis = 8.0   # 支援者：中等容差（P0）
 			p.hold_duration_min = 0.25  # 中等节奏
 			p.hold_duration_max = 0.6
 			p.think_interval = 0.18     # 决策较快
