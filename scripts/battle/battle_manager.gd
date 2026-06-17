@@ -66,6 +66,11 @@ var player_arrows: Dictionary = {}  # {player: arrow_node}
 
 
 func _ready() -> void:
+	# === P1方案A：sim 种子必须最先设（抢在 Godot 自动 randomize() 后重新固化）===
+	_parse_sim_args()
+	if auto_simulate:
+		# sim 模式固定物理帧率，消除墙钟 delta 漂移导致的非确定性
+		Engine.physics_ticks_per_second = 60
 	_create_field()
 	_create_ball()
 	_setup_input_manager()
@@ -102,10 +107,9 @@ func _ready() -> void:
 		input_mgr.cursor_info_updated.connect(_on_cursor_info_updated)
 	# 箭头更新改为 _process 中统一处理,不再依赖信号
 
-	# === P1方案A：解析命令行，启用自动模拟模式 ===
-	_parse_sim_args()
+	# === P1方案A：自动模拟模式启动（种子已在 _ready 开头解析）===
 	if auto_simulate:
-		# 默认快速模式（每半场8秒→约30秒一场），除非命令行已指定 --half
+		# 默认快速模式（每半场80秒→约30秒一场），除非命令行已指定 --half
 		if GameManager.sim_half_duration_override <= 0.0:
 			GameManager.sim_half_duration_override = DEFAULT_SIM_HALF
 		# 连接比赛结束信号 → 采集结束 + 输出报告 + 退出
