@@ -559,6 +559,35 @@ func _decide_enemy_has_ball(ap: Dictionary) -> void:
 	ap.target_pos = _get_formation_hold_pos(ap)
 
 
+# ============================================================================
+# 【P2 影响力地图（简化版）2026-06-17】
+# 借鉴 tactical-intuition（Unity）影响力地图思路：无球站位时避开敌人密集区
+# 决竞球适配：不建全场网格（小场不需要），用反平方排斥叠加到阵型基准位
+# 参考 _calc_separation 的反平方公式，但针对敌人（站位移开而非物理避让）
+# ============================================================================
+
+## 无球站位时，在基准位置上叠加「远离附近敌人」的偏移
+## base_pos: 阵型基准位 / avoid_radius: 多远内的敌人要躲 / push: 最大偏移距离
+## 注意：排斥力要保守，过强会把球员推到墙角卡住或反复抖动（2026-06-17 调试）
+func _avoid_enemies(ap: Dictionary, base_pos: Vector2, avoid_radius: float = 80.0, push: float = 30.0) -> Vector2:
+	var p: CharacterBody2D = ap.player
+	var offset := Vector2.ZERO
+	var radius_sq: float = avoid_radius * avoid_radius
+	for other in ai_players:
+		if other.team == ap.team or other.player == p or not _is_valid(other):
+			continue  # 只躲敌人
+		if other.player.is_defeated:
+			continue
+		var to_base: Vector2 = base_pos - other.player.global_position
+		var d_sq: float = to_base.length_squared()
+		if d_sq >= radius_sq or d_sq < 1.0:
+			continue
+		# 反平方衰减：敌人越近，基准位被推开越远（系数保守）
+		var strength: float = 300.0 / d_sq
+		offset += to_base.normalized() * strength
+	return base_pos + offset.limit_length(push)
+
+
 func _get_protect_pos(ap: Dictionary) -> Vector2:
 	"""防御手：站在持球者身后（朝己方球门方向），不挡发球路线"""
 	var p: CharacterBody2D = ap.player
