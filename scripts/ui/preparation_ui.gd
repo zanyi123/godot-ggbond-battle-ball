@@ -4,6 +4,15 @@ extends Control
 
 const AIProfile = preload("res://scripts/battle/ai_profile.gd")
 
+# 3个自主AI队友的职位显示配置（颜色/名称）
+# 注意：职位不绑死在某个球员上，玩家可在备战面板自由分配（player_roles 数组）
+const ROLE_DISPLAY := {
+	"attacker": {"name": "主攻手", "color": Color(1.0, 0.45, 0.45)},  # 红-进攻
+	"defender": {"name": "防御手", "color": Color(0.45, 0.65, 1.0)},  # 蓝-防守
+	"supporter": {"name": "辅助手", "color": Color(0.45, 1.0, 0.55)},  # 绿-辅助
+}
+const ROLE_ORDER := ["attacker", "defender", "supporter"]  # 职位切换循环顺序
+
 signal strategy_changed(player_strategy: int, team_strategy: int)
 signal player_substituted(index: int, new_char_id: String)
 signal spirit_changed(index: int, spirit_id: String)
@@ -25,6 +34,10 @@ enum TeamStrategy {
 # 当前策略
 var current_player_strategy: int = PlayerStrategy.PASSING
 var current_team_strategy: int = TeamStrategy.BALANCED
+
+# 3个AI队友的职位分配（index→role，玩家可自由调整，不绑死）
+# 默认 主攻/防御/辅助，玩家点击职位按钮可切换
+var player_roles: Array[String] = ["attacker", "defender", "supporter"]
 
 # AI Profile 映射
 var current_role: String = "supporter"
@@ -128,10 +141,23 @@ func _build_player_card(index: int, x: float, y: float) -> void:
 	pos_label.add_theme_color_override("font_color", Color.CYAN)
 	card.add_child(pos_label)
 	
+	# 职位标签（2026-06-17：显示当前分配职位，点击可切换，不绑死）
+	var role_info: Dictionary = ROLE_DISPLAY.get(player_roles[index], {"name": "队员", "color": Color.WHITE})
+	var role_btn := Button.new()
+	role_btn.text = "［" + str(role_info.name) + "］"
+	role_btn.position = Vector2(75, 6)
+	role_btn.size = Vector2(85, 24)
+	role_btn.add_theme_font_size_override("font_size", 14)
+	role_btn.add_theme_color_override("font_color", role_info.color)
+	role_btn.add_theme_color_override("font_hover_color", role_info.color)
+	role_btn.tooltip_text = "点击切换职位（主攻/防御/辅助）"
+	role_btn.pressed.connect(_on_role_clicked.bind(index))
+	card.add_child(role_btn)
+	
 	# 球员名称
 	var name_label := Label.new()
 	name_label.text = "未选择"
-	name_label.position = Vector2(80, 8)
+	name_label.position = Vector2(160, 8)  # 右移给职位标签让位（原x=80）
 	name_label.add_theme_font_size_override("font_size", 16)
 	name_label.add_theme_color_override("font_color", Color.WHITE)
 	card.add_child(name_label)
@@ -195,6 +221,7 @@ func _build_player_card(index: int, x: float, y: float) -> void:
 	player_widgets.append({
 		"card": card,
 		"name_label": name_label,
+		"role_btn": role_btn,
 		"stamina_bar": stamina_bar,
 		"stamina_val": stamina_val,
 		"speed_label": speed_label,
@@ -456,13 +483,12 @@ func _player_strategy_to_name(s: int) -> String:
 
 
 func _rebuild_team_a_profiles() -> void:
-	"""重建队A所有AI队友的profile（保持各自角色分工，只更新团队策略）"""
+	"""重建队A所有AI队友的profile（按玩家分配的职位，不绑死）"""
 	if not ai_manager:
 		return
-	# 3个队友保持各自角色，不统一改成同一角色
-	var roles := ["attacker", "defender", "supporter"]
+	# 职位读 player_roles（玩家可自由分配），不再用硬编码顺序
 	for i in range(3):
-		var profile: AIProfile = AIProfile.get_role_preset(roles[i])
+		var profile: AIProfile = AIProfile.get_role_preset(player_roles[i])
 		AIProfile.apply_team_strategy(profile, current_team_strategy_str)
 		AIProfile.apply_difficulty(profile, current_difficulty)
 		profile.player_strategy_name = _player_strategy_to_name(current_player_strategy)  # 个人策略同步到外场
@@ -476,6 +502,53 @@ func _update_strategy_button_styles() -> void:
 			btn.button_pressed = (i == current_player_strategy)
 		else:
 			btn.button_pressed = ((i - 3) == current_team_strategy)
+
+
+# ===== 职位分配（2026-06-17：玩家可自由给3个AI队友分配职位，不绑死）=====
+func _on_role_clicked(index: int) -> void:
+	"""点击职位按钮：循环切换到下一个职位
+	若目标职位已被其他队友占用，则与该队友交换（“换位置”语义）
+	保证始终 3 种分工不重复，且玩家可自由调整谁是什么职位"""
+	var current_role: String = player_roles[index]
+	var start_idx: int = ROLE_ORDER.find(current_role)
+	if start_idx < 0:
+		start_idx = 0
+	var next_role: String = ROLE_ORDER[(start_idx + 1) % ROLE_ORDER.size()]
+	if next_role == current_role:
+		return  # 仅一种职位的异常情形，不动
+	# 目标职位被其他队友占用 → 交换（占用者变成我的原职位）
+	var occupier: int = _find_role_occupier(index, next_role)
+	if occupier >= 0:
+		player_roles[occupier] = current_role
+		_refresh_role_btn(occupier)
+	player_roles[index] = next_role
+	_refresh_role_btn(index)
+	_rebuild_team_a_profiles()
+	print("[备战] 位置%d职位切换为 %s" % [(index + 1), next_role])
+
+
+func _find_role_occupier(my_index: int, role: String) -> int:
+	"""查找某个职位被哪个队友占用（-1=无人占用）"""
+	for i in range(player_roles.size()):
+		if i == my_index:
+			continue
+		if player_roles[i] == role:
+			return i
+	return -1
+
+
+func _refresh_role_btn(index: int) -> void:
+	"""刷新指定球员的职位按钮文本和颜色"""
+	if index >= player_widgets.size():
+		return
+	var widget: Dictionary = player_widgets[index]
+	var role_btn: Button = widget.get("role_btn")
+	if not role_btn:
+		return
+	var role_info: Dictionary = ROLE_DISPLAY.get(player_roles[index], {"name": "队员", "color": Color.WHITE})
+	role_btn.text = "［" + str(role_info.name) + "］"
+	role_btn.add_theme_color_override("font_color", role_info.color)
+	role_btn.add_theme_color_override("font_hover_color", role_info.color)
 
 
 func _on_substitute_player(index: int) -> void:
