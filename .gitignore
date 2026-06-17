@@ -19,3 +19,8 @@ desktop.ini
 
 # Test artifacts
 *.uid
+
+# Sim 运行产物（方案A自动模拟，保留基线例外）
+sim_results/*
+!sim_results/baseline.json
+!sim_results/.gitkeep

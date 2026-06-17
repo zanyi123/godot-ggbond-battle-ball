@@ -1,0 +1,44 @@
+{
+  "_说明": "决竞球 AI 回归基线（方案A 优化2，2026-06-17 建立）",
+  "_用途": "每次跑 run_sim.sh 后，脚本读取此文件做健康检查。偏离硬规则=危险必须修；偏离正常范围=警告需关注。",
+  "_更新规则": "AI 行为有重大优化（如修bug、调参）且验证稳定后，更新此基线。不要轻易放宽硬规则。",
+
+  "version": "2026-06-17",
+  "config": {
+    "speed": 6,
+    "half_seconds": 80,
+    "seeds": "1-5",
+    "scene": "res://scenes/battle/battle_arena.tscn"
+  },
+
+  "hard_rules": {
+    "_说明": "硬规则=必须全部满足，任一失败标 ✗ 危险（可能引入 bug）",
+    "score_not_zero_zero": true,
+    "stuck_count_max": 0,
+    "same_team_catch_rate_min": 0.8,
+    "balls_hit_player_min": 1
+  },
+
+  "normal_range": {
+    "_说明": "正常范围=参考区间，偏离标 ⚠ 警告（不一定坏，需人工判断）",
+    "state_changes_per_match": [30, 130],
+    "catches_same_team_per_match": [2, 25],
+    "duration_seconds": [25, 32]
+  },
+
+  "known_observations": {
+    "_说明": "已知现象记录，不是 bug，避免误报",
+    "outer_catches_usually_zero": "外场接球常为0——外场是被罚下球员的隔离区，初始无人；只有比赛进行中被罚下后才有人在外场。后续若做了外场接球优化，此数字应上升。",
+    "team_a_vs_b_activity_diff": "队A/队B状态切换有时差异大——队A含玩家控制位（sim模式不动），属正常。"
+  },
+
+  "baseline_run_20260617": {
+    "seeds": [1, 2, 3, 4, 5],
+    "scores": ["0-1", "2-0", "2-2", "0-1", "0-1"],
+    "catches_same_team": [9, 7, 18, 2, 9],
+    "balls_hit": [3, 7, 10, 4, 5],
+    "state_changes": [54, 73, 125, 43, 53],
+    "stuck": [0, 0, 0, 0, 0],
+    "verdict": "全健康，作为基线快照"
+  }
+}

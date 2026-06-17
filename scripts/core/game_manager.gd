@@ -17,10 +17,23 @@ enum PlayerRole {
 	SUPPORT      # 辅助手
 }
 
-# 比赛配置
-const FIRST_HALF_DURATION: float = 300.0  # 5分钟
+# 比赛配置（保留默认值，const→var 允许 sim 模式覆盖）
+const FIRST_HALF_DURATION: float = 300.0  # 5分钟（默认，正式比赛）
 const HALF_TIME_DURATION: float = 60.0    # 1分钟
 const SECOND_HALF_DURATION: float = 300.0 # 5分钟
+# sim 模式覆盖时长（>0 时用此值代替默认半场时长，供 P1方案A 快速验证）
+var sim_half_duration_override: float = 0.0
+
+# 获取当前生效的半场时长（sim 覆盖优先）
+func get_first_half_duration() -> float:
+	return sim_half_duration_override if sim_half_duration_override > 0.0 else FIRST_HALF_DURATION
+
+func get_second_half_duration() -> float:
+	return sim_half_duration_override if sim_half_duration_override > 0.0 else SECOND_HALF_DURATION
+
+func get_half_time_duration() -> float:
+	# 中场休息在 sim 模式下也缩短（避免模拟卡在中场 60s）
+	return (sim_half_duration_override * 0.2) if sim_half_duration_override > 0.0 else HALF_TIME_DURATION
 
 # 当前比赛状态
 var match_phase: MatchPhase = MatchPhase.PREP
@@ -59,18 +72,18 @@ func start_match() -> void:
 	score_team_a = 0
 	score_team_b = 0
 	_set_phase(MatchPhase.FIRST_HALF)
-	match_time = FIRST_HALF_DURATION
+	match_time = get_first_half_duration()
 
 
 func _advance_phase() -> void:
 	match match_phase:
 		MatchPhase.FIRST_HALF:
 			_set_phase(MatchPhase.HALF_TIME)
-			match_time = HALF_TIME_DURATION
+			match_time = get_half_time_duration()
 			print("[GameManager] 上半场结束，中场休息")
 		MatchPhase.HALF_TIME:
 			_set_phase(MatchPhase.SECOND_HALF)
-			match_time = SECOND_HALF_DURATION
+			match_time = get_second_half_duration()
 			print("[GameManager] 下半场开始")
 		MatchPhase.SECOND_HALF:
 			_set_phase(MatchPhase.RESULTS)

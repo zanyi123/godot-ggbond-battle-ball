@@ -3,6 +3,7 @@ extends Node2D
 ## 场景树:FieldZone + Ball + 6 Players + UI
 
 const AIProfile = preload("res://scripts/battle/ai_profile.gd")
+const MatchStats = preload("res://scripts/battle/match_stats.gd")
 
 # 场地配置
 const FIELD_WIDTH: float = 1300.0
@@ -36,6 +37,13 @@ var message_bubbles: Array[Dictionary] = []  # [{label, timer, player}]
 
 # 比赛是否已开始
 var match_started: bool = false
+
+# === P1方案A：自动模拟模式（headless 验证用，跳过备战面板）===
+var auto_simulate: bool = false       # 是否自动开始比赛（命令行 --sim 开启）
+var sim_time_scale: float = 6.0       # 模拟加速倍率（默认 6：物理稳定上限，更高会穿墙失真）
+# 默认快速模式参数（可被命令行覆盖）：每半场8秒 → 约30秒一场
+const DEFAULT_SIM_HALF: float = 8.0
+var match_stats: Node = null          # 指标采集器
 
 # 违规处理队列
 var pending_transfers: Array[Dictionary] = []  # [{player, offset_index, timer}]
@@ -93,6 +101,38 @@ func _ready() -> void:
 		input_mgr.aim_info_updated.connect(_on_aim_info_updated)
 		input_mgr.cursor_info_updated.connect(_on_cursor_info_updated)
 	# 箭头更新改为 _process 中统一处理,不再依赖信号
+
+	# === P1方案A：解析命令行，启用自动模拟模式 ===
+	_parse_sim_args()
+	if auto_simulate:
+		# 默认快速模式（每半场8秒→约30秒一场），除非命令行已指定 --half
+		if GameManager.sim_half_duration_override <= 0.0:
+			GameManager.sim_half_duration_override = DEFAULT_SIM_HALF
+		# 连接比赛结束信号 → 采集结束 + 输出报告 + 退出
+		GameManager.match_ended.connect(_on_sim_match_ended)
+		# 跳过备战面板，延时自动开始（等 _ready 全完成）
+		call_deferred("_on_prep_match_started")
+		print("[Sim] 自动模拟模式已启动 time_scale=%.1f 半场=%.1f秒" % [sim_time_scale, GameManager.sim_half_duration_override])
+
+
+## 解析命令行参数（--sim / --speed=N / --seed=N / --half=N）
+func _parse_sim_args() -> void:
+	for arg in OS.get_cmdline_args():
+		if arg == "--sim":
+			auto_simulate = true
+		elif arg.begins_with("--speed="):
+			sim_time_scale = float(arg.substr(8))
+		elif arg.begins_with("--seed="):
+			var s: int = int(arg.substr(7))
+			seed(s)  # 固定随机种子，可复现
+			print("[Sim] 随机种子=%d" % s)
+		elif arg.begins_with("--half="):
+			# P1方案A：缩短比赛时长（半场秒数），30秒一场快速验证
+			# 默认 300秒/半场 → --half=8 则每半场8秒，约30秒一场
+			var h: float = float(arg.substr(7))
+			if h > 0.0:
+				GameManager.sim_half_duration_override = h
+				print("[Sim] 半场时长=%.1f秒" % h)
 
 
 func _create_field() -> void:
@@ -210,11 +250,15 @@ func _create_player(char_id: String, team_name: String, controlled: bool, start_
 
 func _assign_initial_ball() -> void:
 	var coin := randi() % 2
+	# P1方案A bug 修复：初始球不能分给玩家控制位（sim模式无人按键→全场僵死）
+	# team_x_players[0] 是玩家位，[1]/[2] 是 AI 队友。sim 模式下优先分给 AI
+	var team_a_carrier_idx: int = 1 if auto_simulate else 0
+	var team_b_carrier_idx: int = 0  # 队B全是 AI
 	if coin == 0:
-		ball_node.return_to_player(team_a_players[0])
+		ball_node.return_to_player(team_a_players[team_a_carrier_idx])
 	else:
-		ball_node.return_to_player(team_b_players[0])
-	print("[Match] 初始球权分配给队%s" % ("A" if coin == 0 else "B"))
+		ball_node.return_to_player(team_b_players[team_b_carrier_idx])
+	print("[Match] 初始球权分配给队%s 位置%d" % ["A" if coin == 0 else "B", (team_a_carrier_idx if coin == 0 else team_b_carrier_idx) + 1])
 
 
 func _setup_ui() -> void:
@@ -1224,5 +1268,25 @@ func _on_prep_match_started() -> void:
 	# 正式开始比赛
 	GameManager.start_match()
 
+	# === P1方案A：自动模拟模式下创建指标采集器 + 加速 ===
+	if auto_simulate:
+		match_stats = MatchStats.new()
+		add_child(match_stats)
+		match_stats.start_recording(ball_node)
+		if ai_mgr:
+			ai_mgr.match_stats = match_stats  # 注入给 ai_manager 上报卡死/状态切换
+		Engine.time_scale = sim_time_scale  # 加速整场模拟（含物理+计时）
+
 	# 发球:球给随机一方
 	_assign_initial_ball()
+
+
+## 自动模拟模式：比赛结束回调→停止采集+输出报告+退出
+func _on_sim_match_ended(score_a: int, score_b: int) -> void:
+	Engine.time_scale = 1.0  # 恢复正常速度
+	if match_stats:
+		match_stats.stop_recording()
+		match_stats.set_final_score(score_a, score_b)
+		match_stats.print_report()
+	print("[Sim] 比赛结束，退出")
+	get_tree().quit()
