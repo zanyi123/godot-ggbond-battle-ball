@@ -1993,14 +1993,45 @@ const ROLE_CHASE_PRIORITY: Dictionary = {
 const ENEMY_ADVANTAGE_DIST: float = 60.0
 
 
+## 预测球的落点（2026-06-19：简单版，只处理直线轨迹）
+## 非飞行状态或非直线轨迹 → 返回当前位置
+func _predict_ball_landing_simple() -> Vector2:
+	if ball_node == null:
+		return Vector2.ZERO
+
+	# 非飞行状态，直接返回当前位置
+	if not ball_node.is_active:
+		return ball_node.global_position
+
+	# 只处理直线轨迹
+	if ball_node.trajectory_type != "straight":
+		return ball_node.global_position
+
+	# 计算剩余飞行距离
+	var remaining_distance = ball_node.max_flight_distance - ball_node.flight_distance
+
+	# 落点 = 当前位置 + 飞行方向 * 剩余距离
+	return ball_node.global_position + ball_node.ball_direction * remaining_distance
+
+
 ## 球是否在己方可达的半场范围内（2026-06-17：避免追到对方半场球时被中线 clamp 卡死）
+## 2026-06-19：飞行中基于落点判断，落地基于当前位置判断（解决球飞行中跨半场导致的状态横跳）
 ## 决竞球规则：球员不能过中线，追对方半场的球→目标被clamp到中线→够不到→卡线
 ## 球在己方半场（含中线）才值得主动追；对方半场的球交给接球状态处理
 func _ball_in_reachable_half(ball_pos: Vector2, team: String) -> bool:
-	if team == "a":
-		return ball_pos.x <= 0.0  # 队A可达中线及左侧己方半场
+	# 飞行中：用落点判断
+	if ball_node.is_active:
+		var landing_pos = _predict_ball_landing_simple()
+		if team == "a":
+			return landing_pos.x <= 0.0  # 队A可达中线及左侧己方半场
+		else:
+			return landing_pos.x >= 0.0  # 队B可达中线及右侧己方半场
+	# 落地：用当前位置判断
 	else:
-		return ball_pos.x >= 0.0  # 队B可达中线及右侧己方半场
+		if team == "a":
+			return ball_pos.x <= 0.0
+		else:
+			return ball_pos.x >= 0.0
 
 
 ## 判断我是否应该去抢球（含职责分工 + 让位原则）
