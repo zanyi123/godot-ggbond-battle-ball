@@ -1,0 +1,70 @@
+#!/bin/bash
+# 决竞球 git pre-commit 钩子 —— 提交时的"安检门"
+# --------------------------------------------------------------------------
+# 作用:
+#   git commit 时，如果本次提交包含 .gd 代码文件，自动跑 verify.sh 验证。
+#   验证不过（单测失败 或 模拟有危险项）→ 拒绝提交。
+#
+# 为什么需要它:
+#   skill（便签）是"软约束"，AI 可能偷懒跳过测试。
+#   本钩子是"硬约束"，不管 AI 还是人，想提交代码就得过验证。
+#   即使 AI 改完代码没自觉跑 verify.sh，到 commit 这一步也会被强制拦下。
+#
+# 紧急跳过（慎用）:
+#   git commit --no-verify
+#   仅用于：纯注释/格式调整/明知验证会过但急需提交的场景。
+# --------------------------------------------------------------------------
+
+# git 钩子运行时 cwd 通常是仓库根，但用 rev-parse 更稳
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -z "$ROOT" ]; then
+  echo "⚠ pre-commit: 不在 git 仓库内，跳过验证"
+  exit 0
+fi
+
+# 拿本次 staged 的 .gd 文件（新增/修改，排除删除）
+STAGED_GD=$(git diff --cached --name-only --diff-filter=ACM -- '*.gd' '*.tscn')
+
+if [ -z "$STAGED_GD" ]; then
+  # 没改代码（只改图/数据/UI 文字/文档），直接放行
+  exit 0
+fi
+
+# 统计 .gd 数量
+GD_COUNT=$(echo "$STAGED_GD" | grep -c '\.gd$')
+
+echo "================================================"
+echo "🔍 pre-commit 钩子：检测到代码修改，自动验证"
+echo "------------------------------------------------"
+echo "本次提交涉及的代码文件："
+echo "$STAGED_GD" | sed 's/^/  - /'
+echo "------------------------------------------------"
+if [ "$GD_COUNT" -gt 0 ]; then
+  echo "→ 含 $GD_COUNT 个 .gd 文件，将运行【单测 + 模拟】，约需 90 秒"
+  VERIFY_MODE="full"
+else
+  echo "→ 仅场景文件，跳过验证（.tscn 不触发完整模拟）"
+  exit 0
+fi
+echo "================================================"
+
+# 跑验证
+bash "$ROOT/verify.sh" "$VERIFY_MODE"
+EXIT=$?
+
+if [ "$EXIT" -ne 0 ]; then
+  echo ""
+  echo "================================================"
+  echo "❌ 验证未通过，本次 commit 已被拒绝"
+  echo "------------------------------------------------"
+  echo "请按上方提示修复问题，然后重新 git add + git commit"
+  echo ""
+  echo "紧急跳过（慎用，请确保你知道后果）："
+  echo "  git commit --no-verify"
+  echo "================================================"
+  exit 1
+fi
+
+echo ""
+echo "✅ pre-commit 验证通过，允许提交"
+exit 0

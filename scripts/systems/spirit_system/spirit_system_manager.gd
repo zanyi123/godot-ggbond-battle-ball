@@ -6,6 +6,7 @@ class_name SpiritSystemManager
 
 signal skill_used(skill_id: String, caster_id: int, success: bool)
 signal effect_applied(tag_id: String, effect_data: Dictionary)
+signal effect_finished(tag_id: String, effect_data: Dictionary)  # 2026-06-19：暴露效果结束信号（供视觉轮廓管理）
 signal ui_feedback(effect_type: String, effect_data: Dictionary)
 
 # 子组件
@@ -122,3 +123,4 @@ func _on_effect_applied_handler(tag_id: String, effect_data: Dictionary) -> void
 ## 效果结束回调
 func _on_effect_finished_handler(tag_id: String, effect_data: Dictionary) -> void:
 	print("[SpiritSystemManager] 效果已结束: ", tag_id)
+	effect_finished.emit(tag_id, effect_data)  # 2026-06-19：转发给外部（视觉轮廓管理）

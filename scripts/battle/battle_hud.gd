@@ -377,18 +377,29 @@ func _create_single_panel(index: int, pos: Vector2, width: float, height: float)
 		panel.add_child(skill_box)
 		this_player_skill_boxes.append(skill_box)
 
-		# 圆形冷却遮罩（叠在色块上，半透明黑灰）
+		# 圆形冷却遮罩（叠在色块上，半透明黑灰钟表扫过式）
+		# 2026-06-19：修复冷却钟不显示——radial 模式需方形居中贴图 + 正确的 fill_mode
 		var cd_overlay := TextureProgressBar.new()
 		cd_overlay.size = Vector2(30, 30)
 		cd_overlay.position = Vector2(70 + s * 35, 48)
 		cd_overlay.min_value = 0
 		cd_overlay.max_value = 1
-		cd_overlay.value = 0
+		cd_overlay.value = 0  # 0=不遮罩(可用)，1=全遮罩(满冷却)
+		# 顺时针填充：value=1 时全灰盖住图标，冷却中 value 从1→0，灰色扇形顺时针退去
 		cd_overlay.fill_mode = TextureProgressBar.FILL_CLOCKWISE
 		cd_overlay.radial_center_offset = Vector2.ZERO
 		cd_overlay.radial_fill_degrees = 360
+		# 生成以中心为圆心的实心圆贴图（radial 模式按贴图区域扫描）
 		var cd_img := Image.create(30, 30, false, Image.FORMAT_RGBA8)
-		cd_img.fill(Color(0.1, 0.1, 0.1, 0.72))
+		cd_img.fill(Color(0, 0, 0, 0))  # 先全透明
+		var center := Vector2i(15, 15)
+		var radius := 14
+		for y in range(30):
+			for x in range(30):
+				var dx := x - center.x
+				var dy := y - center.y
+				if dx * dx + dy * dy <= radius * radius:
+					cd_img.set_pixel(x, y, Color(0.05, 0.05, 0.05, 0.78))
 		cd_overlay.texture_progress = ImageTexture.create_from_image(cd_img)
 		panel.add_child(cd_overlay)
 		this_player_skill_cd_overlays.append(cd_overlay)

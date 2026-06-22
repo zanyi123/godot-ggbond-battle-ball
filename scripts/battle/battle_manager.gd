@@ -31,6 +31,7 @@ var obstacle_manager: Node  # ObstacleManager
 var spirit_system: Node  # SpiritSystemManager
 var field_zone_manager: Node  # FieldZoneManager
 var illusion_manager: Node  # IllusionManager
+var skill_visual_manager: Node  # SkillVisualManager（技能轮廓视觉反馈）
 
 # 消息气泡显示
 var message_bubbles: Array[Dictionary] = []  # [{label, timer, player}]
@@ -1138,20 +1139,59 @@ func _deferred_init_spirit_system() -> void:
 			var pid: int = player.get_instance_id()
 			spirit_system.set_player_skills(pid, skill_ids)
 
+			# 2026-06-19：每个球员绑定自身实例作为施法者（避免误用 controlled_player）
 			if not player.skill_used.is_connected(_on_player_skill_used):
-				player.skill_used.connect(_on_player_skill_used)
+				player.skill_used.connect(_on_player_skill_used.bind(player))
+
+	# 2026-06-19：创建技能视觉轮廓管理器
+	var svm_script := load("res://scripts/systems/spirit_system/skill_visual_manager.gd")
+	skill_visual_manager = Node.new()
+	skill_visual_manager.name = "SkillVisualManager"
+	skill_visual_manager.set_script(svm_script)
+	add_child(skill_visual_manager)
+	var all_players_arr: Array = []
+	for p in team_a_players + team_b_players:
+		if p and is_instance_valid(p):
+			all_players_arr.append(p)
+	skill_visual_manager.setup(self, ball_node, all_players_arr)
+
+	# 连接 SpiritSystemManager 的效果结束信号 → 清除球员/场地轮廓
+	if spirit_system and spirit_system.has_signal("effect_finished"):
+		if not spirit_system.effect_finished.is_connected(_on_skill_effect_finished):
+			spirit_system.effect_finished.connect(_on_skill_effect_finished)
 
 	print("[BattleManager] 元灵技能系统初始化完成")
 
 
-func _on_player_skill_used(skill_id: String, skill_data: Dictionary) -> void:
-	"""球员使用技能 → 转发到 SpiritSystemManager"""
-	var caster: CharacterBody2D = input_mgr.controlled_player
-	if not caster:
+## 2026-06-19：技能效果结束 → 通知视觉管理器清除对应轮廓
+func _on_skill_effect_finished(_tag_id: String, effect_data: Dictionary) -> void:
+	if not skill_visual_manager:
+		return
+	# effect_finished 的 effect 字典结构：{tag_id, params, duration, remaining, ...}
+	# caster_id 在 params._caster_id 里（由 spirit_skill_trigger 注入）
+	var params: Dictionary = effect_data.get("params", {})
+	var caster_id: int = int(params.get("_caster_id", -1))
+	if caster_id >= 0 and skill_visual_manager.has_method("on_effect_finished"):
+		skill_visual_manager.on_effect_finished(caster_id)
+
+
+func _on_player_skill_used(skill_id: String, skill_data: Dictionary, caster: CharacterBody2D) -> void:
+	"""球员使用技能 → 转发到 SpiritSystemManager + 触发视觉轮廓
+	2026-06-19：caster 由信号 bind 注入，是该技能的实际释放者（玩家或AI）"""
+	if not caster or not is_instance_valid(caster):
+		print("[诊断技能] caster 无效，跳过")
 		return
 	var player_id: int = caster.get_instance_id()
 	if spirit_system and spirit_system.has_method("use_skill"):
 		spirit_system.use_skill(player_id, skill_id)
+	# 2026-06-19：触发技能视觉轮廓（按技能包含的标签 target_type 分发）
+	# 2026-06-20 诊断：定位轮廓不显示的断点
+	var tag_ids: Array = skill_data.get("tags", [])
+	print("[诊断技能] _on_player_skill_used skill=%s caster=%s tags=%d svm=%s" % [skill_id, caster.char_data.get("name","?"), tag_ids.size(), is_instance_valid(skill_visual_manager)])
+	if skill_visual_manager and skill_visual_manager.has_method("on_skill_triggered"):
+		skill_visual_manager.on_skill_triggered(skill_id, caster, tag_ids)
+	else:
+		print("[诊断技能] ✗ skill_visual_manager 未就绪或无 on_skill_triggered 方法")
 
 
 func _show_preparation_ui() -> void:

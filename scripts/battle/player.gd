@@ -86,6 +86,34 @@ var energy_bar: ProgressBar
 var state_indicator: ColorRect  # 状态指示(待接球/预发球等)
 var facing_direction: Vector2 = Vector2.ZERO  # 由 register_player 或输入设置
 
+# ==================== 2.5D 3D模型挂载 ====================
+# 开关:false=2D圆圈占位(默认,AI模拟走此路);true=挂载3D模型(需 player_model_3d.tscn + glb)
+# 切换为 true 前请先确认 assets/characters/avatars/ 下有带骨骼动画的 glb
+const USE_3D_MODEL := false
+const MODEL_3D_SCENE_PATH := "res://scenes/battle/player_model_3d.tscn"
+
+# 4 个动作 GLB 路径(2026-06-22 混元+Mixamo 生成,含贴图+骨骼+动画)
+# 主模型用 Idle(自带骨骼+基础动画),其余 3 个只取动画库合并进来
+const GLB_IDLE_PATH := "res://assets/characters/avatars/Idle.glb"
+const GLB_RUN_PATH := "res://assets/characters/avatars/Jog_Forward.glb"
+const GLB_THROW_PATH := "res://assets/characters/avatars/Goalie_Throw.glb"
+const GLB_CATCH_PATH := "res://assets/characters/avatars/Goalkeeper_Catch.glb"
+
+var model_3d_anchor: Node2D  # 3D模型渲染单元(USE_3D_MODEL=true时实例化)
+var _visuals_built := false  # 视觉节点是否已构建(幂等保护,避免_ready+initialize重复创建)
+
+# 3D 动画状态
+var _animation_player: AnimationPlayer  # 主动画播放器(从主GLB提取)
+var _model_slot: Node3D                  # ModelSlot 节点引用(用于旋转朝向)
+var _camera_3d: Camera3D                 # SubViewport 内的 Camera3D(用于切视角)
+var _current_anim_name: String = ""      # 当前播放的动画名(避免重复 play 抖动)
+var _is_3d_moving: bool = false          # 当前是否在移动(缓存,避免每帧切换动画)
+
+# 视角模式常量
+const VIEW_MODE_TOP_DOWN: int = 0   # 俯视鸟瞰(看头顶)
+const VIEW_MODE_ANGLED: int = 1     # 斜俯视(看全身+正脸)
+const VIEW_MODE_FOLLOW: int = 2     # 平视跟随(等高正面看动作)
+
 
 func _ready() -> void:
 	_setup_visuals()
@@ -149,14 +177,29 @@ func get_base_ball_speed() -> float:
 
 
 func _setup_visuals() -> void:
-	# 创建角色头像:带背景色的数字圆形
-	# 碰撞区域
-	var collision := CollisionShape2D.new()
-	var circle := CircleShape2D.new()
-	circle.radius = 28.0
-	collision.shape = circle
-	add_child(collision)
+	# 幂等保护:_ready 和 initialize 各会调一次,第二次起先清理旧视觉节点重建
+	# (修复历史问题:第一次用默认team="a"建,第二次才用真实数据,导致节点重复+颜色错)
+	if _visuals_built:
+		_teardown_visuals()
+	_visuals_built = true
 
+	# 碰撞区域(无论2D/3D都要建,物理层不动)
+	if not has_node("CollisionShape2D"):
+		var collision := CollisionShape2D.new()
+		var circle := CircleShape2D.new()
+		circle.radius = 28.0
+		collision.shape = circle
+		add_child(collision)
+
+	# 分流:2.5D开关
+	if USE_3D_MODEL:
+		_setup_3d_model()
+	else:
+		_setup_2d_avatar()
+
+
+func _setup_2d_avatar() -> void:
+	# 创建角色头像:带背景色的数字圆形(原2D占位逻辑,一字未改行为)
 	# 背景色圆
 	avatar_bg = ColorRect.new()
 	avatar_bg.size = Vector2(56, 56)
@@ -185,6 +228,357 @@ func _setup_visuals() -> void:
 	add_child(state_indicator)
 
 
+func _setup_3d_model() -> void:
+	# 2.5D路径:实例化 player_model_3d.tscn(SubViewport+Camera3D渲染单元)
+	# 状态指示器(3D模式下仍保留2D小色块做状态提示)
+	state_indicator = ColorRect.new()
+	state_indicator.size = Vector2(12, 12)
+	state_indicator.position = Vector2(16, -48)
+	state_indicator.color = Color.TRANSPARENT
+	add_child(state_indicator)
+
+	# 实例化3D渲染单元
+	var scene := load(MODEL_3D_SCENE_PATH) as PackedScene
+	if scene == null:
+		push_error("[Player] 无法加载3D模型场景: %s,回退到2D占位" % MODEL_3D_SCENE_PATH)
+		_setup_2d_avatar()
+		return
+	model_3d_anchor = scene.instantiate() as Node2D
+	if model_3d_anchor == null:
+		push_error("[Player] 3D模型场景根节点非Node2D,回退到2D占位")
+		_setup_2d_avatar()
+		return
+	add_child(model_3d_anchor)
+
+	# 获取 ModelSlot 节点(SubViewport/ModelSlot)
+	_model_slot = model_3d_anchor.get_node_or_null("SubViewport/ModelSlot")
+	if _model_slot == null:
+		push_error("[Player] 找不到 SubViewport/ModelSlot 节点,3D模型无法挂载")
+		return
+	# 获取 Camera3D 节点(用于切换视角)
+	_camera_3d = model_3d_anchor.get_node_or_null("SubViewport/Camera3D")
+	# 关键修复: 显式给 SubViewport 配置 World3D + Environment,
+	# 否则 Godot 在某些场景下会冻结 SubViewport 渲染(动态 add_child 进来的 3D 节点不刷新)
+	_setup_subviewport_world()
+
+	# 加载主 GLB(Idle)作为模型主体(含骨骼+网格+贴图+idle动画)
+	_load_main_glb()
+	# 合并其余 3 个动作动画到主动画播放器
+	_merge_animation_libraries()
+
+	print("[Player] %s 已挂载3D模型渲染单元(USE_3D_MODEL=true)" % (char_data.get("name", "?")))
+
+
+## 强制刷新 SubViewport(确保动画渲染不被冻结)
+func _setup_subviewport_world() -> void:
+	if model_3d_anchor == null:
+		return
+	var sub_vp: SubViewport = model_3d_anchor.get_node_or_null("SubViewport")
+	if sub_vp == null:
+		return
+	# 1. 创建独立的 World3D(SubViewport 默认 world_3d 可能被共享/优化掉)
+	if sub_vp.world_3d == null:
+		sub_vp.world_3d = World3D.new()
+	# 2. 创建 Environment 并挂到 World3D(确保光照和材质正常)
+	if sub_vp.world_3d.environment == null:
+		var env := Environment.new()
+		env.background_mode = Environment.BG_COLOR
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.ambient_light_color = Color(0.7, 0.7, 0.7)
+		env.ambient_light_energy = 0.8
+		sub_vp.world_3d.environment = env
+	# 3. 关键: 强制每帧更新渲染(防止 Godot 优化掉动态 add_child 节点的渲染)
+	sub_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	print("[Player] SubViewport world_3d 已配置, update_mode=ALWAYS")
+
+
+func _load_main_glb() -> void:
+	"""加载主 GLB(Idle)并塞进 ModelSlot,提取主动画播放器"""
+	# 关键: 用 duplicate() 复制一份独立的 PackedScene, 避免多球员共享同一份
+	# AnimationLibrary 资源导致重命名污染(共享资源在 Godot 里是默认行为)
+	var glb_scene := load(GLB_IDLE_PATH) as PackedScene
+	if glb_scene == null:
+		push_error("[Player] 无法加载主GLB: %s" % GLB_IDLE_PATH)
+		return
+	var glb_scene_copy: PackedScene = glb_scene.duplicate(true)
+	if glb_scene_copy == null:
+		glb_scene_copy = glb_scene  # duplicate 失败时降级(单球员不受影响)
+	var glb_instance := glb_scene_copy.instantiate()
+	if glb_instance == null:
+		push_error("[Player] 主GLB实例化失败")
+		return
+	# GLB 根通常是 Node3D 或 AnimationPlayer,直接挂到 ModelSlot 下
+	_model_slot.add_child(glb_instance)
+	# 隐藏 Mixamo 残留的 Icosphere 参考球(真模型叫 node_0)
+	_hide_mixamo_helpers(glb_instance)
+	# 在 GLB 实例里找 AnimationPlayer(GLB 通常根或子级)
+	_animation_player = _find_animation_player(glb_instance)
+	if _animation_player == null:
+		push_warning("[Player] 主GLB未找到AnimationPlayer,动画功能不可用")
+		return
+	# 关键: 设为物理帧推进(因为球员走 _physics_process)
+	_animation_player.set("process_callback", AnimationPlayer.ANIMATION_PROCESS_PHYSICS)
+	# 把主GLB默认库里的动画重命名为 "idle"(原名叫 Armature|mixamo.com|Layer0)
+	_rename_default_anim_to("idle")
+	print("[Player] 主GLB已加载,动画库列表: ", _animation_player.get_animation_library_list())
+
+
+func _find_skeleton3d(node: Node) -> Skeleton3D:
+	"""递归查找 Skeleton3D"""
+	if node is Skeleton3D:
+		return node
+	for child in node.get_children():
+		var found := _find_skeleton3d(child)
+		if found:
+			return found
+	return null
+
+
+func _hide_mixamo_helpers(root: Node) -> void:
+	"""隐藏 Mixamo 残留的 Icosphere 参考球(42 顶点,无 parent,不属于角色网格)"""
+	for node in root.find_children("*", "MeshInstance3D", true, false):
+		# Mixamo 参考球通常叫 "Icosphere" 或 _Primitive 之类
+		if "Icosphere" in node.name or "Primitive" in node.name:
+			node.visible = false
+			print("[Player] 隐藏 Mixamo 参考球: ", node.name)
+
+
+func _rename_default_anim_to(new_name: String) -> void:
+	"""把主动画播放器默认库("")里的第一个动画重命名为 new_name
+	背景: Mixamo 导出的 GLB 动画名是 'Armature|mixamo.com|Layer0',
+	无法被 _resolve_anim_name 匹配,这里统一重命名为 idle/run/throw/catch
+	"""
+	if _animation_player == null:
+		return
+	if not _animation_player.has_animation_library(""):
+		return
+	var default_lib := _animation_player.get_animation_library("")
+	var anim_list := default_lib.get_animation_list()
+	if anim_list.is_empty():
+		return
+	var old_name: String = anim_list[0]
+	if old_name == new_name:
+		return  # 已经是目标名,不用改
+	# 取出原动画,用新名字塞回默认库
+	var anim := default_lib.get_animation(old_name)
+	default_lib.add_animation(new_name, anim)
+	# 删除旧名(避免库里两个动画指向同一数据)
+	if default_lib.has_animation(old_name):
+		default_lib.remove_animation(old_name)
+	print("[Player] 重命名动画 '%s' → '%s'" % [old_name, new_name])
+
+
+func _find_animation_player(node: Node) -> AnimationPlayer:
+	"""递归查找节点树里的 AnimationPlayer"""
+	if node is AnimationPlayer:
+		return node
+	for child in node.get_children():
+		var found := _find_animation_player(child)
+		if found:
+			return found
+	return null
+
+
+func _merge_animation_libraries() -> void:
+	"""把其余 3 个 GLB 的动画合并到主动画播放器,并重命名为语义名
+	Godot 4.x: 每个 GLB 有自己的 AnimationLibrary,用 add_animation_library 合并
+	Mixamo 动画原名 'Armature|mixamo.com|Layer0' → 重命名为 run/throw/catch
+	最终主播放器默认库("")里有 4 个动画: idle/run/throw/catch
+	"""
+	if _animation_player == null:
+		return
+	if not _animation_player.has_animation_library(""):
+		# 主GLB加载失败,补一个空默认库
+		_animation_player.add_animation_library("", AnimationLibrary.new())
+	var default_lib := _animation_player.get_animation_library("")
+	# 把 run/throw/catch 三个 GLB 的动画塞进默认库
+	var libs_to_merge := {
+		"run": GLB_RUN_PATH,
+		"throw": GLB_THROW_PATH,
+		"catch": GLB_CATCH_PATH,
+	}
+	for semantic_name in libs_to_merge:
+		var path: String = libs_to_merge[semantic_name]
+		var glb_scene := load(path) as PackedScene
+		if glb_scene == null:
+			push_warning("[Player] 无法加载动画GLB: %s" % path)
+			continue
+		# 关键: 用 duplicate() 复制独立资源, 避免多球员共享 AnimationLibrary 资源
+		var glb_scene_copy: PackedScene = glb_scene.duplicate(true) if glb_scene else null
+		if glb_scene_copy == null:
+			glb_scene_copy = glb_scene
+		var glb_instance := glb_scene_copy.instantiate()
+		if glb_instance == null:
+			continue
+		# 临时挂到树里才能访问其 AnimationPlayer
+		_model_slot.add_child(glb_instance)
+		var anim_player := _find_animation_player(glb_instance)
+		if anim_player == null:
+			push_warning("[Player] %s 里没找到AnimationPlayer" % path)
+			glb_instance.queue_free()
+			continue
+		# 取出它的第一个动画(Mixamo 只有一个动作),重命名后塞进默认库
+		for lib_key in anim_player.get_animation_library_list():
+			var src_lib := anim_player.get_animation_library(lib_key)
+			for src_anim_name in src_lib.get_animation_list():
+				var anim: Animation = src_lib.get_animation(src_anim_name)
+				# 关键: 动画资源也要 duplicate, 否则 add_animation 后多球员共享同一份
+				var anim_copy: Animation = anim.duplicate(true) if anim else null
+				if anim_copy == null:
+					anim_copy = anim
+				# 塞进默认库,用语义名覆盖原 Mixamo 命名
+				if not default_lib.has_animation(semantic_name):
+					default_lib.add_animation(semantic_name, anim_copy)
+					print("[Player] 合并动画 '%s' (原名 '%s', track数=%d)" % [semantic_name, src_anim_name, anim_copy.get_track_count()])
+				break  # 每个 GLB 只取第一个动画
+			break  # 只处理默认库
+		# 合并完释放这个 GLB 实例(只要它的动画库)
+		glb_instance.queue_free()
+
+
+func _update_3d_animation() -> void:
+	"""根据当前 velocity 自动切换 idle/run 动画(在 _physics_process 末尾调)"""
+	if _animation_player == null or not is_instance_valid(_animation_player):
+		return
+	# 强制保证:只要 current_animation 为空,就强制 play idle(每帧检查,暴力兜底)
+	if _animation_player.current_animation.is_empty():
+		var idle_name := _resolve_anim_name("idle")
+		if not idle_name.is_empty():
+			var anim := _animation_player.get_animation(idle_name)
+			if anim:
+				anim.loop_mode = Animation.LOOP_LINEAR
+			_animation_player.play(idle_name)
+			_current_anim_name = idle_name
+			_is_3d_moving = false
+		return
+	# 用 velocity 长度判断移动状态(>10 视为在动)
+	var moving: bool = velocity.length() > 10.0
+	if moving != _is_3d_moving:
+		_is_3d_moving = moving
+		# 根据移动状态切 idle/run
+		var target_anim := _resolve_anim_name("idle" if not moving else "run")
+		if not target_anim.is_empty() and _current_anim_name != target_anim:
+			var anim := _animation_player.get_animation(target_anim)
+			if anim:
+				anim.loop_mode = Animation.LOOP_LINEAR
+			_animation_player.play(target_anim)
+			_current_anim_name = target_anim
+
+
+func _resolve_anim_name(category: String) -> String:
+	"""解析动画名 —— 直接返回 category(合并时已统一重命名为 idle/run/throw/catch)
+	如果默认库里确实有这个动画,就返回 category 本身
+	"""
+	if _animation_player == null:
+		return ""
+	if not _animation_player.has_animation_library(""):
+		return ""
+	var default_lib := _animation_player.get_animation_library("")
+	if default_lib.has_animation(category):
+		return category
+	# 容错:大小写不敏感匹配(以防 GLB 内部名首字母大写)
+	for anim in default_lib.get_animation_list():
+		if anim.to_lower() == category.to_lower():
+			return anim
+	return ""
+
+
+func _update_3d_facing() -> void:
+	"""根据 velocity 方向旋转 ModelSlot 朝向(只转 Y 轴,Sprite2D 保持不动)
+	注意: ModelSlot 已有 X 轴 -90° 基础旋转(让躺平球员站立),这里只改 Y 轴朝向
+	暂未启用朝向旋转,先确认球员扶正效果
+	"""
+	# 暂时禁用朝向旋转,先让球员稳定站立
+	return
+
+
+## 手动播放指定动作(测试用,F1/F2/F3 切)
+func play_3d_action(category: String) -> void:
+	"""手动切到 throw/catch 等动作(测试用)"""
+	if _animation_player == null:
+		return
+	var target := _resolve_anim_name(category)
+	if target.is_empty():
+		print("[Player] 找不到动画: ", category)
+		return
+	_animation_player.play(target)
+	_current_anim_name = target
+
+
+## 返回当前 3D 模型的实时诊断信息(给测试 UI 显示用)
+func get_3d_debug_info() -> Dictionary:
+	if _animation_player == null or not is_instance_valid(_animation_player):
+		return {"has_anim_player": false}
+	# current_animation 为空时访问 current_animation_position 会报错,先取名字
+	var cur_anim: String = _animation_player.current_animation
+	var anim_pos: float = 0.0
+	var anim_len: float = 0.0
+	if not cur_anim.is_empty():
+		anim_pos = _animation_player.current_animation_position
+		anim_len = _animation_player.current_animation_length
+	return {
+		"has_anim_player": true,
+		"current_anim": cur_anim,
+		"is_playing": _animation_player.is_playing(),
+		"anim_pos": anim_pos,
+		"anim_len": anim_len,
+		"current_anim_name_cache": _current_anim_name,
+		"is_moving": _is_3d_moving,
+		"inside_tree": _animation_player.is_inside_tree(),
+		"velocity_len": velocity.length(),
+	}
+
+
+## 切换 SubViewport 内 Camera3D 的视角模式(测试用,F4 切)
+## 前提: ModelSlot 已旋转 -90°(绕 X 轴),球员从"躺平"扶成"站立"
+## 所以相机角度回归标准 3D 逻辑:
+## mode: 0=俯视全场(看头顶) 1=斜俯视全场(2K默认,看全身+正脸) 2=平视跟随(看正脸特写)
+func set_view_mode(mode: int) -> void:
+	if _camera_3d == null or not is_instance_valid(_camera_3d):
+		return
+	match mode:
+		VIEW_MODE_TOP_DOWN:
+			# 俯视全场: 相机在球员正上方 4m,镜头朝下(-Y)
+			# 绕 X 轴 -90°,让镜头 -Z 朝向 -Y(下方)
+			_camera_3d.transform = Transform3D(
+				Basis(Vector3.RIGHT, deg_to_rad(-90.0)),
+				Vector3(0.0, 4.0, 0.0)
+			)
+		VIEW_MODE_ANGLED:
+			# 斜俯视全场(2K 默认): 相机在球员前上方,35° 俯角看全身+正脸
+			# 绕 X 轴 -35°,位置 (0, 1.8, 3.0)
+			_camera_3d.transform = Transform3D(
+				Basis(Vector3.RIGHT, deg_to_rad(-35.0)),
+				Vector3(0.0, 1.8, 3.0)
+			)
+		VIEW_MODE_FOLLOW:
+			# 平视跟随: 相机与球员等高(1.0m),正前方 3.5m 平视
+			# 单位矩阵(无旋转),镜头朝 -Z 看向球员正脸
+			_camera_3d.transform = Transform3D(
+				Basis(),
+				Vector3(0.0, 1.0, 3.5)
+			)
+		_:
+			pass
+
+
+func _teardown_visuals() -> void:
+	# 释放所有视觉子节点(不含碰撞,碰撞靠 _setup_visuals 里的 has_node 判断保留)
+	for node in [avatar_bg, avatar_label, state_indicator, model_3d_anchor]:
+		if node and is_instance_valid(node):
+			node.queue_free()
+	avatar_bg = null
+	avatar_label = null
+	state_indicator = null
+	model_3d_anchor = null
+	# 清掉 3D 相关引用(避免悬挂指针,防止幂等重建时复用旧引用)
+	_animation_player = null
+	_model_slot = null
+	_camera_3d = null
+	_current_anim_name = ""
+	_is_3d_moving = false
+
+
 func _make_circle_style(radius: float) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color.BLUE
@@ -199,6 +593,14 @@ func _get_display_number() -> String:
 
 
 func _physics_process(delta: float) -> void:
+	# 3D 模式:基于上一帧 velocity 更新动画和朝向(放在函数最前,避开多个 return 出口)
+	if USE_3D_MODEL:
+		_update_3d_animation()
+		_update_3d_facing()
+		# 关键: 手动推进动画(SubViewport 内 AnimationPlayer 不会自动推进,必须手动 advance)
+		if _animation_player and is_instance_valid(_animation_player) and _animation_player.is_playing():
+			_animation_player.advance(delta)
+
 	# 冲刺计时器更新（无论谁控制都要跑）
 	if is_sprinting:
 		sprint_timer -= delta
@@ -586,23 +988,27 @@ func set_penalized(penalized: bool) -> void:
 func enter_catch_state() -> void:
 	"""进入待接球状态"""
 	is_ready_to_catch = true
-	state_indicator.color = Color.YELLOW
+	if state_indicator:
+		state_indicator.color = Color.YELLOW
 
 
 func exit_catch_state() -> void:
 	"""退出待接球状态"""
 	is_ready_to_catch = false
-	state_indicator.color = Color.TRANSPARENT
+	if state_indicator:
+		state_indicator.color = Color.TRANSPARENT
 
 
 func set_carrying_ball(carrying: bool) -> void:
 	is_carrying_ball = carrying
 	if carrying:
-		state_indicator.color = Color.GREEN
+		if state_indicator:
+			state_indicator.color = Color.GREEN
 		# 持球时显示已激活技能的光环
 		_update_ball_skill_aura()
 	elif not is_ready_to_catch:
-		state_indicator.color = Color.TRANSPARENT
+		if state_indicator:
+			state_indicator.color = Color.TRANSPARENT
 		# 不持球时清除光环
 		_clear_ball_skill_aura()
 
@@ -758,6 +1164,12 @@ func get_equipped_skills() -> Array[String]:
 	for skill_id in equipped_skills:
 		result.append(str(skill_id))
 	return result
+
+
+## 返回球员视觉尺寸（半径），用于技能轮廓渲染（2026-06-19）
+## 智能识别接口：未来3D化时只需改这里
+func get_visual_radius() -> float:
+	return 28.0  # 当前2D圆头像半径，与 _setup_visuals 中 circle.radius 一致
 
 
 ## 返回某技能的冷却进度（0=可用，1=刚释放满冷却）

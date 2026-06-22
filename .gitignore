@@ -24,3 +24,17 @@ desktop.ini
 sim_results/*
 !sim_results/baseline.json
 !sim_results/.gitkeep
+
+# 3D 大文件素材(GLB/FBX/blend/纹理,每个 50-100M,用网盘或 Git LFS 单独管理)
+# 代码层已用 load() 引用路径,素材不入库不影响代码可读性
+*.glb
+*.fbx
+*.blend
+*.blend1
+*_texture_*.png
+建模素材库/3D图片素材/*.png
+assets/characters/avatars/*.png
+
+# 临时/调试文件
+nul
+*.tmp

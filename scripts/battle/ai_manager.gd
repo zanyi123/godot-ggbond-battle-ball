@@ -1602,6 +1602,12 @@ func _move(ap: Dictionary, delta: float) -> void:
 		State.CHASE_BALL, State.GOTO_BALL:
 			if dist < arrive:
 				_try_pickup_ball(ap)
+				# 2026-06-20：追到目标但球被敌人拿着（clamp后够不到对方半场的敌人）
+				# → 立即放弃追球转防守回阵型位，不再磁铁吸中线
+				# 修复菲菲压发球线：追→pickup失败空转→重决策又追→死循环
+				if ball_node.owner_player and ball_node.owner_player != p:
+					ap.state = State.DEFEND
+					ap.target_pos = _get_formation_hold_pos(ap)
 				p.velocity = Vector2.ZERO
 			else:
 				p.velocity = _apply_steering(ap, (target - p.global_position).normalized() * profile.speed_chase)

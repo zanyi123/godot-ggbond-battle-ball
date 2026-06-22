@@ -49,6 +49,12 @@ signal ball_hit_player(player: CharacterBody2D, damage: float)
 signal ball_out_of_bounds()
 
 
+## 返回球视觉半径，用于技能轮廓渲染（2026-06-19）
+## 智能识别接口：未来3D化时只需改这里
+func get_visual_radius() -> float:
+	return 20.0  # 当前2D球半径，与 _setup_visuals 中 ball_visual 一致
+
+
 func _ready() -> void:
 	collision_layer = 2
 	collision_mask = 1
