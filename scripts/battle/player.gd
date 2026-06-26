@@ -89,7 +89,7 @@ var facing_direction: Vector2 = Vector2.ZERO  # 由 register_player 或输入设
 # ==================== 2.5D 3D模型挂载 ====================
 # 开关:false=2D圆圈占位(默认,AI模拟走此路);true=挂载3D模型(需 player_model_3d.tscn + glb)
 # 切换为 true 前请先确认 assets/characters/avatars/ 下有带骨骼动画的 glb
-const USE_3D_MODEL := false
+const USE_3D_MODEL := true  # 阶段0:临时开启,验证3D扶正+缩放(2026-06-24)
 const MODEL_3D_SCENE_PATH := "res://scenes/battle/player_model_3d.tscn"
 
 # 4 个动作 GLB 路径(2026-06-22 混元+Mixamo 生成,含贴图+骨骼+动画)
@@ -98,6 +98,37 @@ const GLB_IDLE_PATH := "res://assets/characters/avatars/Idle.glb"
 const GLB_RUN_PATH := "res://assets/characters/avatars/Jog_Forward.glb"
 const GLB_THROW_PATH := "res://assets/characters/avatars/Goalie_Throw.glb"
 const GLB_CATCH_PATH := "res://assets/characters/avatars/Goalkeeper_Catch.glb"
+
+## 角色专属 3D 模型路径映射(2026-06-26)
+## key=character_id, value={ "body":主模型路径, "idle":待机动画(可选), "run":跑步, "throw":投掷, "catch":接球 }
+## 未配置的角色自动回落使用上方 GLB_*_PATH 默认路径
+const CHAR_3D_MODEL_PATHS := {
+	"char_001": {  # 猪猪侠 (player1)
+		"body": "res://建模素材库/3D模型素材/2cff3ad734686d14c0118d195a809dbc.glb",
+		"idle": "res://建模素材库/3D模型素材/player1动作/Idle.fbx",
+		"run": "res://建模素材库/3D模型素材/player1动作/Jog Forward.fbx",
+		"throw": "res://建模素材库/3D模型素材/player1动作/Goalie Throw.fbx",
+		"catch": "res://建模素材库/3D模型素材/player1动作/Goalkeeper Catch.fbx",
+	},
+}
+
+## 根据 character_id 返回角色专属模型路径,未配置则回落默认
+func _get_model_path(action: String) -> String:
+	if CHAR_3D_MODEL_PATHS.has(character_id):
+		var paths: Dictionary = CHAR_3D_MODEL_PATHS[character_id]
+		if paths.has(action):
+			return paths[action]
+	# 回落默认路径
+	match action:
+		"body", "idle":
+			return GLB_IDLE_PATH
+		"run":
+			return GLB_RUN_PATH
+		"throw":
+			return GLB_THROW_PATH
+		"catch":
+			return GLB_CATCH_PATH
+	return ""
 
 var model_3d_anchor: Node2D  # 3D模型渲染单元(USE_3D_MODEL=true时实例化)
 var _visuals_built := false  # 视觉节点是否已构建(幂等保护,避免_ready+initialize重复创建)
@@ -251,6 +282,10 @@ func _setup_3d_model() -> void:
 	add_child(model_3d_anchor)
 
 	# 获取 ModelSlot 节点(SubViewport/ModelSlot)
+	# ModelSlot 在 player_model_3d.tscn 里设了绕X轴-90°扶正矩阵:
+	# basis.x=(1,0,0) basis.y=(0,0,-1) basis.z=(0,1,0)
+	# 原因:实测GLB骨骼站立方向(本地+Y)指向世界+Z(躺平,混元导出常见),需扶到世界+Y站立
+	# 注意: 不要在 tscn 的 [node] 块内写 # 注释,会让 load() 解析失败回退2D(2026-06-24踩坑)
 	_model_slot = model_3d_anchor.get_node_or_null("SubViewport/ModelSlot")
 	if _model_slot == null:
 		push_error("[Player] 找不到 SubViewport/ModelSlot 节点,3D模型无法挂载")
@@ -296,9 +331,10 @@ func _load_main_glb() -> void:
 	"""加载主 GLB(Idle)并塞进 ModelSlot,提取主动画播放器"""
 	# 关键: 用 duplicate() 复制一份独立的 PackedScene, 避免多球员共享同一份
 	# AnimationLibrary 资源导致重命名污染(共享资源在 Godot 里是默认行为)
-	var glb_scene := load(GLB_IDLE_PATH) as PackedScene
+	var body_path := _get_model_path("body")
+	var glb_scene := load(body_path) as PackedScene
 	if glb_scene == null:
-		push_error("[Player] 无法加载主GLB: %s" % GLB_IDLE_PATH)
+		push_error("[Player] 无法加载主模型: %s" % body_path)
 		return
 	var glb_scene_copy: PackedScene = glb_scene.duplicate(true)
 	if glb_scene_copy == null:
@@ -313,6 +349,22 @@ func _load_main_glb() -> void:
 	_hide_mixamo_helpers(glb_instance)
 	# 在 GLB 实例里找 AnimationPlayer(GLB 通常根或子级)
 	_animation_player = _find_animation_player(glb_instance)
+	# 兜底: 如果主模型是纯静态(无AnimationPlayer), 尝试用角色专属 idle 动画源替换
+	if _animation_player == null:
+		var idle_path := _get_model_path("idle")
+		if not idle_path.is_empty() and idle_path != body_path:
+			push_warning("[Player] 主模型无AnimationPlayer, 替换为idle动画源: %s" % idle_path)
+			glb_instance.queue_free()
+			var idle_scene := load(idle_path) as PackedScene
+			if idle_scene:
+				var idle_scene_copy := idle_scene.duplicate(true) if idle_scene else null
+				if idle_scene_copy == null:
+					idle_scene_copy = idle_scene
+				glb_instance = idle_scene_copy.instantiate()
+				if glb_instance:
+					_model_slot.add_child(glb_instance)
+					_hide_mixamo_helpers(glb_instance)
+					_animation_player = _find_animation_player(glb_instance)
 	if _animation_player == null:
 		push_warning("[Player] 主GLB未找到AnimationPlayer,动画功能不可用")
 		return
@@ -393,10 +445,16 @@ func _merge_animation_libraries() -> void:
 	var default_lib := _animation_player.get_animation_library("")
 	# 把 run/throw/catch 三个 GLB 的动画塞进默认库
 	var libs_to_merge := {
-		"run": GLB_RUN_PATH,
-		"throw": GLB_THROW_PATH,
-		"catch": GLB_CATCH_PATH,
+		"run": _get_model_path("run"),
+		"throw": _get_model_path("throw"),
+		"catch": _get_model_path("catch"),
 	}
+	# 如果 body GLB 没有自带 idle 动画,尝试从角色专属 idle 路径合并
+	if not default_lib.has_animation("idle"):
+		var idle_path := _get_model_path("idle")
+		if not idle_path.is_empty():
+			libs_to_merge["idle"] = idle_path
+			print("[Player] 主模型缺idle动画,将从 %s 补合并" % idle_path)
 	for semantic_name in libs_to_merge:
 		var path: String = libs_to_merge[semantic_name]
 		var glb_scene := load(path) as PackedScene
@@ -485,8 +543,8 @@ func _resolve_anim_name(category: String) -> String:
 
 func _update_3d_facing() -> void:
 	"""根据 velocity 方向旋转 ModelSlot 朝向(只转 Y 轴,Sprite2D 保持不动)
-	注意: ModelSlot 已有 X 轴 -90° 基础旋转(让躺平球员站立),这里只改 Y 轴朝向
-	暂未启用朝向旋转,先确认球员扶正效果
+	注意: ModelSlot 在场景里已设 X 轴 -90° 基础旋转(让躺平球员站立,实测GLB骨骼+Z朝上)
+	这里在 ModelSlot 现有姿态上叠加 Y 轴朝向(待启用,先确认扶正效果)
 	"""
 	# 暂时禁用朝向旋转,先让球员稳定站立
 	return
@@ -530,8 +588,8 @@ func get_3d_debug_info() -> Dictionary:
 
 
 ## 切换 SubViewport 内 Camera3D 的视角模式(测试用,F4 切)
-## 前提: ModelSlot 已旋转 -90°(绕 X 轴),球员从"躺平"扶成"站立"
-## 所以相机角度回归标准 3D 逻辑:
+## 前提: ModelSlot 在场景里已设 X 轴 -90°(实测:GLB骨骼+Z朝上,需扶成+Y站立)
+## 扶正后球员正立,相机角度按标准 3D 逻辑设置:
 ## mode: 0=俯视全场(看头顶) 1=斜俯视全场(2K默认,看全身+正脸) 2=平视跟随(看正脸特写)
 func set_view_mode(mode: int) -> void:
 	if _camera_3d == null or not is_instance_valid(_camera_3d):
@@ -545,10 +603,11 @@ func set_view_mode(mode: int) -> void:
 				Vector3(0.0, 4.0, 0.0)
 			)
 		VIEW_MODE_ANGLED:
-			# 斜俯视全场(2K 默认): 相机在球员前上方,35° 俯角看全身+正脸
-			# 绕 X 轴 -35°,位置 (0, 1.8, 3.0)
+			# 斜视45°(大镜头: ZOY平面+Z逆时针45°; 小镜头: 球员已扶正垂直站立时不另转)
+			# 小镜头保持斜俯视位置: -45° 俯角,位置 (0, 1.8, 3.0)
+			# 注意: 原-35°改为-45°以匹配阶段2大镜头斜视规格(2026-06-26确认)
 			_camera_3d.transform = Transform3D(
-				Basis(Vector3.RIGHT, deg_to_rad(-35.0)),
+				Basis(Vector3.RIGHT, deg_to_rad(-45.0)),
 				Vector3(0.0, 1.8, 3.0)
 			)
 		VIEW_MODE_FOLLOW:
