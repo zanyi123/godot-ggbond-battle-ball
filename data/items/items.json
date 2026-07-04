@@ -1,0 +1,323 @@
+{
+	"version": 1,
+	"items": [
+		{
+			"id": "eq_glove_common_01",
+			"name": "训练手套",
+			"type": "equipment",
+			"sub_type": "glove",
+			"rarity": "common",
+			"icon": "res://assets/icons/items/equipment/glove_common.png",
+			"description": "基础训练用手套，攻击+3。",
+			"stack_max": 1,
+			"sell_price": 50,
+			"stats": {
+				"attack_bonus": 3
+			}
+		},
+		{
+			"id": "eq_glove_good_01",
+			"name": "竞技手套",
+			"type": "equipment",
+			"sub_type": "glove",
+			"rarity": "good",
+			"icon": "res://assets/icons/items/equipment/glove_good.png",
+			"description": "进阶竞技手套，攻击+6，球速+10。",
+			"stack_max": 1,
+			"sell_price": 120,
+			"stats": {
+				"attack_bonus": 6,
+				"ball_speed_bonus": 10
+			}
+		},
+		{
+			"id": "eq_glove_rare_01",
+			"name": "赛博手套",
+			"type": "equipment",
+			"sub_type": "glove",
+			"rarity": "rare",
+			"icon": "res://assets/icons/items/equipment/glove_rare.png",
+			"description": "赛博科技打造的稀有手套，攻击+10，球速+25。",
+			"stack_max": 1,
+			"sell_price": 300,
+			"stats": {
+				"attack_bonus": 10,
+				"ball_speed_bonus": 25
+			}
+		},
+		{
+			"id": "eq_glove_epic_01",
+			"name": "金刚手套",
+			"type": "equipment",
+			"sub_type": "glove",
+			"rarity": "epic",
+			"icon": "res://assets/icons/items/equipment/glove_epic.png",
+			"description": "金刚元灵加持，攻击+15，球速+40，韧性+5。",
+			"stack_max": 1,
+			"sell_price": 800,
+			"stats": {
+				"attack_bonus": 15,
+				"ball_speed_bonus": 40,
+				"resilience_bonus": 5
+			}
+		},
+		{
+			"id": "eq_glove_legendary_01",
+			"name": "猛虎圣甲手套",
+			"type": "equipment",
+			"sub_type": "glove",
+			"rarity": "legendary",
+			"icon": "res://assets/icons/items/equipment/glove_legendary.png",
+			"description": "传说级装备，攻击+22，球速+60，韧性+10。",
+			"stack_max": 1,
+			"sell_price": 2000,
+			"stats": {
+				"attack_bonus": 22,
+				"ball_speed_bonus": 60,
+				"resilience_bonus": 10
+			}
+		},
+		{
+			"id": "eq_jersey_common_01",
+			"name": "训练球衣",
+			"type": "equipment",
+			"sub_type": "jersey",
+			"rarity": "common",
+			"icon": "res://assets/icons/items/equipment/jersey_common.png",
+			"description": "基础训练球衣，体力+10，防御+3。",
+			"stack_max": 1,
+			"sell_price": 50,
+			"stats": {
+				"stamina_bonus": 10,
+				"defense_bonus": 3
+			}
+		},
+		{
+			"id": "eq_jersey_good_01",
+			"name": "竞技球衣",
+			"type": "equipment",
+			"sub_type": "jersey",
+			"rarity": "good",
+			"icon": "res://assets/icons/items/equipment/jersey_good.png",
+			"description": "进阶竞技球衣，体力+20，防御+6。",
+			"stack_max": 1,
+			"sell_price": 120,
+			"stats": {
+				"stamina_bonus": 20,
+				"defense_bonus": 6
+			}
+		},
+		{
+			"id": "eq_jersey_rare_01",
+			"name": "大地铠甲",
+			"type": "equipment",
+			"sub_type": "jersey",
+			"rarity": "rare",
+			"icon": "res://assets/icons/items/equipment/jersey_rare.png",
+			"description": "大地元灵编织而成，体力+35，防御+12，韧性+5。",
+			"stack_max": 1,
+			"sell_price": 300,
+			"stats": {
+				"stamina_bonus": 35,
+				"defense_bonus": 12,
+				"resilience_bonus": 5
+			}
+		},
+		{
+			"id": "eq_jersey_epic_01",
+			"name": "冰霜战衣",
+			"type": "equipment",
+			"sub_type": "jersey",
+			"rarity": "epic",
+			"icon": "res://assets/icons/items/equipment/jersey_epic.png",
+			"description": "冰原稀有材料打造，体力+55，防御+20，速度+5。",
+			"stack_max": 1,
+			"sell_price": 800,
+			"stats": {
+				"stamina_bonus": 55,
+				"defense_bonus": 20,
+				"speed_bonus": 5
+			}
+		},
+		{
+			"id": "eq_jersey_legendary_01",
+			"name": "钻石壁垒战袍",
+			"type": "equipment",
+			"sub_type": "jersey",
+			"rarity": "legendary",
+			"icon": "res://assets/icons/items/equipment/jersey_legendary.png",
+			"description": "传说级装备，体力+80，防御+30，速度+10，韧性+10。",
+			"stack_max": 1,
+			"sell_price": 2000,
+			"stats": {
+				"stamina_bonus": 80,
+				"defense_bonus": 30,
+				"speed_bonus": 10,
+				"resilience_bonus": 10
+			}
+		},
+		{
+			"id": "eq_shoes_common_01",
+			"name": "训练球鞋",
+			"type": "equipment",
+			"sub_type": "shoes",
+			"rarity": "common",
+			"icon": "res://assets/icons/items/equipment/shoes_common.png",
+			"description": "基础训练球鞋，速度+3。",
+			"stack_max": 1,
+			"sell_price": 50,
+			"stats": {
+				"speed_bonus": 3
+			}
+		},
+		{
+			"id": "eq_shoes_good_01",
+			"name": "竞技球鞋",
+			"type": "equipment",
+			"sub_type": "shoes",
+			"rarity": "good",
+			"icon": "res://assets/icons/items/equipment/shoes_good.png",
+			"description": "进阶竞技球鞋，速度+6，体力+5。",
+			"stack_max": 1,
+			"sell_price": 120,
+			"stats": {
+				"speed_bonus": 6,
+				"stamina_bonus": 5
+			}
+		},
+		{
+			"id": "eq_shoes_rare_01",
+			"name": "疾风战靴",
+			"type": "equipment",
+			"sub_type": "shoes",
+			"rarity": "rare",
+			"icon": "res://assets/icons/items/equipment/shoes_rare.png",
+			"description": "草木元灵加持，速度+10，体力+15。",
+			"stack_max": 1,
+			"sell_price": 300,
+			"stats": {
+				"speed_bonus": 10,
+				"stamina_bonus": 15
+			}
+		},
+		{
+			"id": "eq_shoes_epic_01",
+			"name": "飞叶幻影鞋",
+			"type": "equipment",
+			"sub_type": "shoes",
+			"rarity": "epic",
+			"icon": "res://assets/icons/items/equipment/shoes_epic.png",
+			"description": "幻影元灵加持，速度+16，体力+25，防御+5。",
+			"stack_max": 1,
+			"sell_price": 800,
+			"stats": {
+				"speed_bonus": 16,
+				"stamina_bonus": 25,
+				"defense_bonus": 5
+			}
+		},
+		{
+			"id": "eq_shoes_legendary_01",
+			"name": "幻梦神靴",
+			"type": "equipment",
+			"sub_type": "shoes",
+			"rarity": "legendary",
+			"icon": "res://assets/icons/items/equipment/shoes_legendary.png",
+			"description": "传说级装备，速度+24，体力+40，防御+10，球速+20。",
+			"stack_max": 1,
+			"sell_price": 2000,
+			"stats": {
+				"speed_bonus": 24,
+				"stamina_bonus": 40,
+				"defense_bonus": 10,
+				"ball_speed_bonus": 20
+			}
+		},
+		{
+			"id": "food_bread_common",
+			"name": "能量面包",
+			"type": "consumable",
+			"sub_type": "food",
+			"rarity": "common",
+			"icon": "res://assets/icons/items/food/food_bread.png",
+			"description": "赛前食用，体力恢复20点。",
+			"stack_max": 99,
+			"sell_price": 15,
+			"effect": {
+				"effect_type": "stat_buff",
+				"stamina_restore": 20,
+				"duration": 0
+			}
+		},
+		{
+			"id": "food_sandwich_good",
+			"name": "元气三明治",
+			"type": "consumable",
+			"sub_type": "food",
+			"rarity": "good",
+			"icon": "res://assets/icons/items/food/food_sandwich.png",
+			"description": "赛前食用，体力上限+10%，持续整场比赛。",
+			"stack_max": 99,
+			"sell_price": 40,
+			"effect": {
+				"effect_type": "stat_buff",
+				"stamina_max_pct": 10,
+				"duration": 300
+			}
+		},
+		{
+			"id": "food_lollipop_rare",
+			"name": "超级棒棒糖",
+			"type": "consumable",
+			"sub_type": "food",
+			"rarity": "rare",
+			"icon": "res://assets/icons/items/food/food_rare.png",
+			"description": "稀有级食物，移动速度+8%，攻击+5%，持续整场比赛。",
+			"stack_max": 99,
+			"sell_price": 100,
+			"effect": {
+				"effect_type": "stat_buff",
+				"speed_pct": 8,
+				"attack_pct": 5,
+				"duration": 300
+			}
+		},
+		{
+			"id": "food_steak_epic",
+			"name": "元气牛排",
+			"type": "consumable",
+			"sub_type": "food",
+			"rarity": "epic",
+			"icon": "res://assets/icons/items/food/food_steak.png",
+			"description": "赛前食用，攻击+12%，防御+8%，持续整场比赛。",
+			"stack_max": 99,
+			"sell_price": 250,
+			"effect": {
+				"effect_type": "stat_buff",
+				"attack_pct": 12,
+				"defense_pct": 8,
+				"duration": 300
+			}
+		},
+		{
+			"id": "food_candy_legendary",
+			"name": "梦幻糖果",
+			"type": "consumable",
+			"sub_type": "food",
+			"rarity": "legendary",
+			"icon": "res://assets/icons/items/food/food_candy.png",
+			"description": "传说级食物，全属性+10%，持续整场比赛。",
+			"stack_max": 99,
+			"sell_price": 600,
+			"effect": {
+				"effect_type": "stat_buff",
+				"attack_pct": 10,
+				"defense_pct": 10,
+				"speed_pct": 10,
+				"stamina_max_pct": 10,
+				"resilience_pct": 10,
+				"duration": 300
+			}
+		}
+	]
+}

@@ -83,6 +83,8 @@ var ultimate_label: Label
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# 整个节点拦截鼠标事件，防止穿透到主菜单
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	_load_data()
 	_build_ui()
 	_select_character(0)
@@ -101,10 +103,11 @@ func _load_data() -> void:
 
 
 func _build_ui() -> void:
-	# 全屏半透明背景
+	# 全屏背景（完全不透明，彻底遮挡主菜单）
 	var bg := ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.08, 0.08, 0.12, 0.95)
+	bg.color = Color(0.05, 0.05, 0.08, 1.0)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP  # 阻断鼠标穿透到主菜单
 	add_child(bg)
 
 	# 标题栏
@@ -129,17 +132,27 @@ func _build_ui() -> void:
 	close_btn.pressed.connect(_on_close)
 	title_bar.add_child(close_btn)
 
-	# === 左侧头像列表 ===
-	var left_bg := Panel.new()
-	left_bg.position = Vector2(40, 75)
-	left_bg.size = Vector2(260, 700)
-	add_child(left_bg)
+	# === 左侧底板（带圆角边框的独立面板）===
+	var left_panel := Panel.new()
+	left_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	left_panel.offset_left = 30
+	left_panel.offset_top = 75
+	left_panel.offset_right = 300
+	left_panel.offset_bottom = 775
+	var left_style := StyleBoxFlat.new()
+	left_style.bg_color = Color(0.12, 0.12, 0.18, 1.0)
+	left_style.border_color = Color(0.3, 0.6, 1.0, 0.5)
+	left_style.set_border_width_all(2)
+	left_style.set_corner_radius_all(10)
+	left_panel.add_theme_stylebox_override("panel", left_style)
+	add_child(left_panel)
 
+	# 左侧列表挂到 left_panel 下
 	avatar_list = VBoxContainer.new()
-	avatar_list.position = Vector2(50, 80)
+	avatar_list.position = Vector2(20, 5)
 	avatar_list.size = Vector2(240, 690)
 	avatar_list.add_theme_constant_override("separation", 6)
-	add_child(avatar_list)
+	left_panel.add_child(avatar_list)
 
 	var list_title := Label.new()
 	list_title.text = "— 球员列表 —"
@@ -160,12 +173,27 @@ func _build_ui() -> void:
 
 	# === 右侧详情面板 === === 排版规范（添加新属性时只需修改类成员 stat_keys 数组） ===
 	
-	# === 创建滚动容器 ===
+	# === 右侧底板（带圆角边框，比内容区大8px）===
+	var right_panel := Panel.new()
+	right_panel.position = Vector2(PANEL_X - 8, PANEL_Y - 8)
+	right_panel.size = Vector2(PANEL_WIDTH + 16, PANEL_VISIBLE_HEIGHT + 16)
+	var right_style := StyleBoxFlat.new()
+	right_style.bg_color = Color(0.10, 0.10, 0.15, 1.0)
+	right_style.border_color = Color(0.6, 0.4, 1.0, 0.5)
+	right_style.set_border_width_all(2)
+	right_style.set_corner_radius_all(10)
+	right_panel.add_theme_stylebox_override("panel", right_style)
+	add_child(right_panel)
+
+	# === 创建滚动容器（透明背景，让底板透出来）===
 	var scroll := ScrollContainer.new()
 	scroll.position = Vector2(PANEL_X, PANEL_Y)
 	scroll.size = Vector2(PANEL_WIDTH, PANEL_VISIBLE_HEIGHT)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	var scroll_bg := StyleBoxFlat.new()
+	scroll_bg.bg_color = Color(0, 0, 0, 0)
+	scroll.add_theme_stylebox_override("panel", scroll_bg)
 	add_child(scroll)
 	
 	# 计算内容总高度

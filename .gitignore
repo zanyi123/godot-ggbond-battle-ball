@@ -38,3 +38,7 @@ assets/characters/avatars/*.png
 # 临时/调试文件
 nul
 *.tmp
+
+# 本地工具目录
+.trae/
+.workbuddy/

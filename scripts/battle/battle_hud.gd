@@ -503,15 +503,26 @@ func _create_quick_message_bar() -> void:
 
 func _on_quick_msg_pressed(msg_index: int) -> void:
 	"""快捷消息按钮点击"""
-	if comm_system:
-		var player: CharacterBody2D = null
-		if GameManager and not GameManager.team_a.is_empty():
-			for p in GameManager.team_a:
-				if p and p.is_player_controlled:
-					player = p
-					break
-		if player:
-			comm_system.try_send_message(player, msg_index)
+	if not comm_system:
+		push_warning("[HUD] _on_quick_msg_pressed: comm_system 未设置")
+		return
+	var player: CharacterBody2D = null
+	# 优先从 GameManager.team_a 查找被控制的玩家（与键盘路径一致）
+	if GameManager and not GameManager.team_a.is_empty():
+		for p in GameManager.team_a:
+			if p and is_instance_valid(p) and p.is_player_controlled:
+				player = p
+				break
+	# fallback: 从 HUD 自身的 team_players 找
+	if player == null and not team_players.is_empty():
+		for p in team_players:
+			if p and is_instance_valid(p) and p.is_player_controlled:
+				player = p
+				break
+	if player:
+		comm_system.try_send_message(player, msg_index)
+	else:
+		push_warning("[HUD] _on_quick_msg_pressed: 找不到被控制的玩家")
 
 
 func set_comm_system(sys: Node) -> void:

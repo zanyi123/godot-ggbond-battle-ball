@@ -60,12 +60,12 @@ func _input(event: InputEvent) -> void:
 		# C键取消技能
 		elif event.keycode == KEY_C:
 			_handle_skill_cancel()
-		# 快捷指令
-		elif event.keycode == KEY_7:
+		# 快捷指令（整数键值：Godot 4.x 中 KEY_* 常量兼容性不稳）
+		elif event.keycode == 55:   # KEY_7
 			quick_command_requested.emit(0)  # 注意防守
-		elif event.keycode == KEY_8:
+		elif event.keycode == 56:   # KEY_8
 			quick_command_requested.emit(1)  # 传球给我
-		elif event.keycode == KEY_9:
+		elif event.keycode == 57:   # KEY_9
 			quick_command_requested.emit(2)  # 别传球
 		# Tab切换球员
 		elif event.keycode == KEY_TAB:

@@ -89,7 +89,7 @@ var facing_direction: Vector2 = Vector2.ZERO  # 由 register_player 或输入设
 # ==================== 2.5D 3D模型挂载 ====================
 # 开关:false=2D圆圈占位(默认,AI模拟走此路);true=挂载3D模型(需 player_model_3d.tscn + glb)
 # 切换为 true 前请先确认 assets/characters/avatars/ 下有带骨骼动画的 glb
-const USE_3D_MODEL := true  # 阶段0:临时开启,验证3D扶正+缩放(2026-06-24)
+const USE_3D_MODEL := false  # 主游戏用2D占位,3D测试用 test/player_3d_test.gd 独立验证(2026-06-27修复)
 const MODEL_3D_SCENE_PATH := "res://scenes/battle/player_model_3d.tscn"
 
 # 4 个动作 GLB 路径(2026-06-22 混元+Mixamo 生成,含贴图+骨骼+动画)
@@ -176,6 +176,28 @@ func initialize(data_id: String, team_name: String, controlled: bool) -> void:
 	talent_name = char_data["talent_name"] if char_data.has("talent_name") else ""
 	talent_desc = char_data["talent_desc"] if char_data.has("talent_desc") else ""
 
+	# 叠加训练加成（固定值，加在底层）
+	var train: Dictionary = PlayerSaveManager.get_character_train(character_id)
+	max_stamina += float(train.get("stamina_bonus", 0))
+	stamina = max_stamina
+	defense += float(train.get("defense_bonus", 0))
+	raw_speed += float(train.get("speed_bonus", 0))
+	speed = raw_speed * SPEED_SCALE
+	attack_power += float(train.get("attack_bonus", 0))
+	resilience += float(train.get("resilience_bonus", 0))
+
+	# 叠加装备加成（固定值，和训练同级，加在底层）
+	var equip_bonuses: Dictionary = PlayerSaveManager.get_equipment_bonuses(character_id)
+	max_stamina += float(equip_bonuses.get("stamina_bonus", 0))
+	stamina = max_stamina
+	defense += float(equip_bonuses.get("defense_bonus", 0))
+	# 装备的 speed_bonus 也是加在原始速度上，再乘缩放
+	raw_speed += float(equip_bonuses.get("speed_bonus", 0))
+	speed = raw_speed * SPEED_SCALE
+	attack_power += float(equip_bonuses.get("attack_bonus", 0))
+	resilience += float(equip_bonuses.get("resilience_bonus", 0))
+	# ball_speed_bonus 在 get_base_ball_speed() 里应用
+
 	# 元灵偏好在 char_data.spirit_preference 中
 	# 技能与元灵绑定：球员创建时不自动装备技能，必须在备战面板手动选择元灵后才获得技能
 	# 备战面板可据此偏好高亮推荐元灵
@@ -198,13 +220,19 @@ func _on_phase_changed(phase) -> void:
 ## 获取该球员的发球基础球速
 func get_base_ball_speed() -> float:
 	"""返回该球员的发球基础球速
-	
+
 	从 char_data 中的 ball_speed 字段读取，
+	叠加训练加成和装备加成，
 	如果没有配置则返回默认值 400.0
 	"""
-	if char_data.has("ball_speed"):
-		return float(char_data["ball_speed"])
-	return 400.0  # 默认值
+	var base: float = float(char_data.get("ball_speed", 400.0))
+	# 训练加成
+	var train: Dictionary = PlayerSaveManager.get_character_train(character_id)
+	base += float(train.get("ball_speed_bonus", 0))
+	# 装备加成
+	var equip_bonuses: Dictionary = PlayerSaveManager.get_equipment_bonuses(character_id)
+	base += float(equip_bonuses.get("ball_speed_bonus", 0))
+	return base
 
 
 func _setup_visuals() -> void:

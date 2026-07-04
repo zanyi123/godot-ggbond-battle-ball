@@ -76,6 +76,10 @@ const BIG_CAM_FOV: float = 62.0              # 透视模式视野角
 ## 球员切换
 var _current_control_index: int = 0
 
+## 手动动画锁：F键按下时置 true，防止 _physics_process 同帧覆盖
+## throw/catch 播完后自动清零（在 _physics_process 里检测 is_playing()）
+var _manual_anim_locked: bool = false
+
 
 ## ==================== 初始化 ====================
 
@@ -411,7 +415,8 @@ func _make_3d_player(team_color: Color) -> Node3D:
 	else:
 		# 诊断：打印 AnimationPlayer 和动画库状态
 		if anim_player != null:
-			print("[Player3DTest] ✅ anim_player 找到: %s, is_playing=%s" % [anim_player.get_path(), anim_player.is_playing()])
+			# 注意：此时节点还未加入场景树，不能调 get_path()，用 .name 替代
+			print("[Player3DTest] ✅ anim_player 找到: %s, is_playing=%s" % [anim_player.name, anim_player.is_playing()])
 			if anim_player.has_animation_library(""):
 				var lib = anim_player.get_animation_library("")
 				var anim_list = lib.get_animation_list()
@@ -498,23 +503,23 @@ static func _merge_proxy_animations(ap: AnimationPlayer, slot: Node3D) -> void:
 		if glb_scene == null:
 			push_warning("[Player3DTest] 无法加载动画GLB: %s" % paths[semantic_name])
 			continue
-		# 直接 instantiate, 不需要 duplicate (PackedScene.instantiate() 本身就返回新实例)
 		var glb_inst: Node = glb_scene.instantiate()
 		if glb_inst == null:
 			continue
-		# 临时挂到 slot 下才能访问 AnimationPlayer
-		slot.add_child(glb_inst)
+		# 关键：不挂入场景树，直接静态遍历节点树获取 AnimationPlayer
+		# （挂入未在树中的 slot 会导致 get_path() 等调用崩溃）
 		var tmp_ap := _find_animation_player_static(glb_inst)
 		if tmp_ap != null:
 			for lib_key in tmp_ap.get_animation_library_list():
 				var src_lib := tmp_ap.get_animation_library(lib_key)
 				for src_anim_name in src_lib.get_animation_list():
 					var anim: Animation = src_lib.get_animation(src_anim_name)
-					var anim_copy: Animation = anim.duplicate(true) if anim else null
+					if anim == null:
+						continue
+					var anim_copy: Animation = anim.duplicate(true)
 					if anim_copy == null:
 						anim_copy = anim
 					default_lib.add_animation(semantic_name, anim_copy)
-					# 设置正确的循环模式
 					var merged_anim: Animation = default_lib.get_animation(semantic_name)
 					if merged_anim:
 						if semantic_name in ["throw", "catch"]:
@@ -527,7 +532,8 @@ static func _merge_proxy_animations(ap: AnimationPlayer, slot: Node3D) -> void:
 					])
 					break
 				break
-		glb_inst.queue_free()
+		# 不再 queue_free()，而是直接 free()（节点未入场景树，queue_free 可能无效）
+		glb_inst.free()
 
 
 ## 静态递归查找 AnimationPlayer(被 _merge_proxy_animations 调用)
@@ -542,20 +548,36 @@ static func _find_animation_player_static(node: Node) -> AnimationPlayer:
 
 
 ## 修复 proxy 内所有 MeshInstance3D 的白膜问题 + 材质质量优化
+## 兜底情况：slot 内可能是 idle FBX（无独立贴图），主贴图在 body GLB 目录
 func _fix_proxy_materials(slot: Node3D) -> void:
-	## GLB 实例化后，StandardMaterial3D.albedo_texture 常为 null（嵌入材质未正确解析）
-	## 同时优化材质渲染质量（防模糊）
 	if slot == null:
 		return
 
-	# 从 body GLB 路径推导可能的贴图目录
-	var glb_path: String = PLAYER1_BODY_PATH
-	var base_dir: String = glb_path.get_base_dir()    # res://建模素材库/3D模型素材
-	var base_name: String = glb_path.get_file().get_basename()  # 2cff3ad734686d14c0118d195a809dbc
+	# body GLB 目录（主贴图在这里）
+	var body_dir: String = PLAYER1_BODY_PATH.get_base_dir()
+	var body_base: String = PLAYER1_BODY_PATH.get_file().get_basename()
+	# idle FBX 目录（兜底模型目录，一般无独立贴图，但也扫一遍）
+	var fbx_dir: String = PLAYER1_IDLE_PATH.get_base_dir()
 
-	print("[Player3DTest] _fix_proxy_materials: 尝试从 %s 修复材质" % base_dir)
+	print("[Player3DTest] _fix_proxy_materials: body_dir=%s, fbx_dir=%s" % [body_dir, fbx_dir])
+
+	# 主贴图候选路径（按优先级排列）
+	var tex_candidates: Array = [
+		body_dir + "/" + body_base + "_texture_pbr_20250901.png",
+		body_dir + "/body.png",
+		body_dir + "/diffuse.png",
+		body_dir + "/albedo.png",
+		body_dir + "/" + body_base + ".png",
+		fbx_dir + "/body.png",
+		fbx_dir + "/diffuse.png",
+		fbx_dir + "/albedo.png",
+	]
 
 	var meshes := slot.find_children("*", "MeshInstance3D", true, false)
+	if meshes.is_empty():
+		push_warning("[Player3DTest] _fix_proxy_materials: slot 内没有 MeshInstance3D！")
+		return
+
 	for m in meshes:
 		var mi: MeshInstance3D = m
 		var mesh := mi.mesh
@@ -563,32 +585,39 @@ func _fix_proxy_materials(slot: Node3D) -> void:
 			continue
 		var surf_count: int = mesh.get_surface_count()
 		for i in range(surf_count):
+			# 优先取 surface 自带材质，再取 override
 			var mat = mesh.surface_get_material(i)
 			if mat == null:
-				mat = mi.material_override if mi.material_override else null
-				if mat == null:
-					continue
+				mat = mi.material_override
+			if mat == null:
+				# 没有任何材质 → 强制新建 StandardMaterial3D 并填贴图
+				var new_mat := StandardMaterial3D.new()
+				for p in tex_candidates:
+					var tex: Texture2D = load(p)
+					if tex != null:
+						new_mat.albedo_texture = tex
+						new_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+						mi.set_surface_override_material(i, new_mat)
+						print("[Player3DTest]   ✅ '%s' surf%d 无材质→新建+贴图 %s" % [mi.name, i, p])
+						break
+				if new_mat.albedo_texture == null:
+					push_warning("[Player3DTest]   ❌ '%s' surf%d 无材质且找不到贴图" % [mi.name, i])
+				continue
+
 			if mat is StandardMaterial3D:
 				var sm: StandardMaterial3D = mat
 				# ---- 贴图加载 ----
 				if sm.albedo_texture == null:
-					var tried_paths := [
-						base_dir + "/" + base_name + "_texture_pbr_20250901.png",
-						base_dir + "/body.png",
-						base_dir + "/diffuse.png",
-						base_dir + "/albedo.png",
-						base_dir + "/" + base_name + ".png",
-					]
-					for p in tried_paths:
+					for p in tex_candidates:
 						var tex: Texture2D = load(p)
 						if tex != null:
 							sm.albedo_texture = tex
-							print("[Player3DTest]   ✅ 修复 '%s' surface %d: 加载贴图 %s" % [mi.name, i, p])
+							print("[Player3DTest]   ✅ 修复 '%s' surf%d: 加载贴图 %s" % [mi.name, i, p])
 							break
 					if sm.albedo_texture == null:
-						push_warning("[Player3DTest]   ❌ '%s' surface %d: 找不到贴图" % [mi.name, i])
+						push_warning("[Player3DTest]   ❌ '%s' surf%d: 找不到贴图，候选=%s" % [mi.name, i, str(tex_candidates)])
 				else:
-					print("[Player3DTest]   ✅ '%s' surface %d: 已有贴图 %s" % [mi.name, i, sm.albedo_texture.resource_path])
+					print("[Player3DTest]   ✅ '%s' surf%d: 已有贴图 %s" % [mi.name, i, sm.albedo_texture.resource_path])
 
 				# ---- 材质质量 ----
 				if sm.albedo_texture != null:
@@ -782,12 +811,16 @@ func _physics_process(_delta: float) -> void:
 		var ap: AnimationPlayer = current_proxy.get_meta("anim_player", null)
 		var cur_anim: String = current_proxy.get_meta("current_anim", "idle")
 		if ap != null and is_instance_valid(ap):
-			# throw/catch 是手动触发的单次动画，播放期间不自动切换
-			# 等播完（is_playing()=false 或 current_anim 不是 throw/catch）再恢复自动切换
-			var is_manual_anim: bool = cur_anim in ["throw", "catch"]
-			if is_manual_anim and ap.is_playing() and ap.current_animation == cur_anim:
-				pass  # 正在播手动动画，不干预
+			# _manual_anim_locked=true 说明 F 键刚触发了 throw/catch，不要自动覆盖
+			if _manual_anim_locked:
+				# throw/catch 是单次动画，播完后自动解锁恢复自动切换
+				var is_one_shot: bool = cur_anim in ["throw", "catch"]
+				if is_one_shot and not ap.is_playing():
+					_manual_anim_locked = false
+					current_proxy.set_meta("current_anim", "idle")
+				# 锁定中：不做任何自动切换
 			else:
+				# 自动 idle ↔ run 切换
 				var moving: bool = controlled_player.velocity.length() > 10.0
 				var target: String = "idle" if not moving else "run"
 				if target != cur_anim and ap.has_animation(target):
@@ -823,6 +856,7 @@ func _input(event: InputEvent) -> void:
 				if ap1 and ap1.has_animation("throw"):
 					ap1.play("throw")
 					px1.set_meta("current_anim", "throw")
+					_manual_anim_locked = true  # 锁定，防止 _physics_process 同帧覆盖
 					var a1 := ap1.get_animation("throw")
 					if a1: a1.loop_mode = Animation.LOOP_NONE
 					print("[Player3DTest] ✅ 切 throw 动作")
@@ -839,6 +873,7 @@ func _input(event: InputEvent) -> void:
 				if ap2 and ap2.has_animation("catch"):
 					ap2.play("catch")
 					px2.set_meta("current_anim", "catch")
+					_manual_anim_locked = true  # 锁定，防止 _physics_process 同帧覆盖
 					var a2 := ap2.get_animation("catch")
 					if a2: a2.loop_mode = Animation.LOOP_NONE
 					print("[Player3DTest] ✅ 切 catch 动作")
@@ -855,6 +890,7 @@ func _input(event: InputEvent) -> void:
 				if ap3 and ap3.has_animation("idle"):
 					ap3.play("idle")
 					px3.set_meta("current_anim", "idle")
+					_manual_anim_locked = false  # idle 是循环动画，直接解锁恢复自动切换
 					var a3 := ap3.get_animation("idle")
 					if a3: a3.loop_mode = Animation.LOOP_LINEAR
 					print("[Player3DTest] ✅ 切 idle 动作")

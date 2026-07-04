@@ -1,17 +1,22 @@
 extends Control
 ## 主菜单 - 游戏入口
 
+# 主菜单交互节点列表（打开子界面时隐藏，关闭时恢复）
+var _menu_interactive_nodes: Array[Node] = []
+
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	
+
 	# 背景
 	var bg := ColorRect.new()
+	bg.name = "BG"
 	bg.size = Vector2(1440, 810)
 	bg.color = Color(0.1, 0.1, 0.2)
 	add_child(bg)
-	
+
 	# 标题
 	var title := Label.new()
+	title.name = "Title"
 	title.text = "猪猪侠之决竞球"
 	title.position = Vector2(470, 120)
 	title.size = Vector2(500, 70)
@@ -19,55 +24,81 @@ func _ready() -> void:
 	title.add_theme_font_size_override("font_size", 36)
 	title.add_theme_color_override("font_color", Color.YELLOW)
 	add_child(title)
-	
+
 	# 开始比赛按钮
 	var btn_start := Button.new()
+	btn_start.name = "BtnStart"
 	btn_start.text = "开始比赛"
 	btn_start.position = Vector2(545, 320)
 	btn_start.size = Vector2(350, 55)
 	btn_start.pressed.connect(_on_start_match)
 	add_child(btn_start)
-	
+	_menu_interactive_nodes.append(btn_start)
+
 	# 角色系统按钮
 	var btn_chars := Button.new()
+	btn_chars.name = "BtnCharacters"
 	btn_chars.text = "角色系统"
 	btn_chars.position = Vector2(545, 395)
 	btn_chars.size = Vector2(350, 55)
 	btn_chars.pressed.connect(_on_open_characters)
 	add_child(btn_chars)
-	
+	_menu_interactive_nodes.append(btn_chars)
+
 	# 元灵系统按钮
 	var btn_spirits := Button.new()
+	btn_spirits.name = "BtnSpirits"
 	btn_spirits.text = "元灵系统"
 	btn_spirits.position = Vector2(545, 470)
 	btn_spirits.size = Vector2(350, 55)
 	btn_spirits.pressed.connect(_on_open_spirits)
 	add_child(btn_spirits)
-	
+	_menu_interactive_nodes.append(btn_spirits)
+
 	# 基地按钮
 	var btn_base := Button.new()
+	btn_base.name = "BtnBase"
 	btn_base.text = "基地"
 	btn_base.position = Vector2(545, 545)
 	btn_base.size = Vector2(350, 55)
 	btn_base.pressed.connect(_on_open_base)
 	add_child(btn_base)
+	_menu_interactive_nodes.append(btn_base)
 
 	# 开发者工具按钮
 	var btn_dev := Button.new()
+	btn_dev.name = "BtnDev"
 	btn_dev.text = "快捷设置（开发者）"
 	btn_dev.position = Vector2(545, 620)
 	btn_dev.size = Vector2(350, 55)
 	btn_dev.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
 	btn_dev.pressed.connect(_on_open_dev_settings)
 	add_child(btn_dev)
+	_menu_interactive_nodes.append(btn_dev)
 
 	# 交易按钮
 	var btn_trade := Button.new()
+	btn_trade.name = "BtnTrade"
 	btn_trade.text = "交易"
 	btn_trade.position = Vector2(545, 695)
 	btn_trade.size = Vector2(350, 55)
 	btn_trade.pressed.connect(_on_open_trade)
 	add_child(btn_trade)
+	_menu_interactive_nodes.append(btn_trade)
+
+
+# 隐藏主菜单交互节点（打开子界面时调用）
+func _hide_menu_interactive_nodes() -> void:
+	for node in _menu_interactive_nodes:
+		if is_instance_valid(node):
+			node.visible = false
+
+
+# 恢复主菜单交互节点（关闭子界面时调用）
+func _show_menu_interactive_nodes() -> void:
+	for node in _menu_interactive_nodes:
+		if is_instance_valid(node):
+			node.visible = true
 
 
 func _on_start_match() -> void:
@@ -75,10 +106,33 @@ func _on_start_match() -> void:
 	get_tree().change_scene_to_file("res://scenes/battle/battle_arena.tscn")
 
 
+var char_ui: Control = null
+
+
 func _on_open_characters() -> void:
+	# 已打开且可见 → 不做任何事（角色系统有关闭按钮）
+	if char_ui and is_instance_valid(char_ui) and char_ui.visible:
+		return
+
+	# 已打开但隐藏（不应发生，角色系统关闭时会 queue_free）→ 清理后重建
+	if char_ui and is_instance_valid(char_ui):
+		char_ui.queue_free()
+		char_ui = null
+
+	# 创建新的角色系统界面
 	var CharacterSystemClass = load("res://scripts/ui/character_system.gd")
-	var char_ui: Control = CharacterSystemClass.new()
+	char_ui = CharacterSystemClass.new()
 	add_child(char_ui)
+
+	# 隐藏主菜单按钮，避免鼠标穿透
+	_hide_menu_interactive_nodes()
+
+	# 关闭时恢复按钮并清理引用
+	if char_ui.has_signal("closed"):
+		char_ui.closed.connect(func() -> void:
+			_show_menu_interactive_nodes()
+			char_ui = null
+		)
 
 
 var spirit_ui: Control = null

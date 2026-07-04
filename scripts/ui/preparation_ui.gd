@@ -17,6 +17,7 @@ signal strategy_changed(player_strategy: int, team_strategy: int)
 signal player_substituted(index: int, new_char_id: String)
 signal spirit_changed(index: int, spirit_id: String)
 signal match_started_from_prep()
+signal back_to_menu_requested()
 
 # 策略枚举
 enum PlayerStrategy {
@@ -54,6 +55,7 @@ var ai_manager: Node = null
 # UI元素引用
 var player_widgets: Array[Dictionary] = []
 var spirit_widgets: Array[Dictionary] = []
+var equipment_widgets: Array[Dictionary] = []
 var strategy_buttons: Array[Button] = []
 
 # 开始按钮引用
@@ -82,20 +84,33 @@ func _build_ui() -> void:
 	title.add_theme_color_override("font_color", Color(1, 0.9, 0.3))
 	add_child(title)
 	
+	# 返回主菜单按钮（左上角）
+	var back_btn := Button.new()
+	back_btn.text = "← 返回主菜单"
+	back_btn.position = Vector2(10, 15)
+	back_btn.size = Vector2(140, 35)
+	back_btn.add_theme_font_size_override("font_size", 14)
+	back_btn.add_theme_color_override("font_color", Color(1.0, 0.6, 0.6))
+	back_btn.pressed.connect(_on_back_to_menu)
+	add_child(back_btn)
+	
 	# === 第一行：球员状态（3个独立卡片，横向排列）===
 	_build_player_row()
 	
 	# === 第二行：元灵选择（3个独立卡片，横向排列）===
 	_build_spirit_row()
 	
-	# === 第三行：战术策略 ===
+	# === 第三行：装备穿戴（3个独立卡片，横向排列）===
+	_build_equipment_row()
+	
+	# === 第四行：战术策略 ===
 	_build_strategy_panel()
 	
 	# === 底部：开始比赛按钮 ===
 	start_btn = Button.new()
 	start_btn.text = "开始比赛!"
-	start_btn.position = Vector2(475, 620)
-	start_btn.size = Vector2(250, 50)
+	start_btn.position = Vector2(475, 660)
+	start_btn.size = Vector2(250, 45)
 	start_btn.add_theme_font_size_override("font_size", 22)
 	start_btn.pressed.connect(_on_start_match)
 	add_child(start_btn)
@@ -362,13 +377,393 @@ func _build_spirit_card(index: int, x: float, y: float) -> void:
 	})
 
 
-# ===== 第三行：战术策略 =====
+# ===== 第三行：装备穿戴 =====
+
+const EQUIP_SLOT_INFO := {
+	"glove": {"name": "手套", "icon": "🧤"},
+	"jersey": {"name": "球衣", "icon": "👕"},
+	"shoes": {"name": "球鞋", "icon": "👟"},
+}
+const EQUIP_SLOT_ORDER := ["glove", "jersey", "shoes"]
+
+
+func _build_equipment_row() -> void:
+	"""构建装备穿戴行（3个独立卡片）"""
+	var section_title := Label.new()
+	section_title.text = "— 装备穿戴 —"
+	section_title.position = Vector2(0, 460)
+	section_title.size = Vector2(1200, 25)
+	section_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	section_title.add_theme_font_size_override("font_size", 18)
+	section_title.add_theme_color_override("font_color", Color(0.9, 0.7, 0.3))
+	add_child(section_title)
+	
+	for i in range(3):
+		var x_pos: float = 50 + i * 390
+		_build_equipment_card(i, x_pos, 490)
+
+
+func _build_equipment_card(index: int, x: float, y: float) -> void:
+	"""创建单个装备穿戴卡片"""
+	var card := Panel.new()
+	card.position = Vector2(x, y)
+	card.size = Vector2(370, 70)
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color(0.15, 0.15, 0.22, 0.95)
+	card_style.border_color = Color(0.9, 0.7, 0.3, 0.5)
+	card_style.set_border_width_all(2)
+	card_style.set_corner_radius_all(8)
+	card.add_theme_stylebox_override("panel", card_style)
+	add_child(card)
+	
+	# 位置标签
+	var pos_label := Label.new()
+	pos_label.text = "位置 %d 装备" % (index + 1)
+	pos_label.position = Vector2(10, 5)
+	pos_label.add_theme_font_size_override("font_size", 14)
+	pos_label.add_theme_color_override("font_color", Color(0.9, 0.7, 0.3))
+	card.add_child(pos_label)
+	
+	# 3个槽位标签
+	var slot_labels: Array = []
+	var slot_icons: Array = []
+	for s in range(3):
+		var slot_key: String = EQUIP_SLOT_ORDER[s]
+		var info: Dictionary = EQUIP_SLOT_INFO.get(slot_key, {})
+		
+		# 槽位图标
+		var icon_lbl := Label.new()
+		icon_lbl.text = str(info.get("icon", "?"))
+		icon_lbl.position = Vector2(10 + s * 120, 28)
+		icon_lbl.add_theme_font_size_override("font_size", 16)
+		card.add_child(icon_lbl)
+		slot_icons.append(icon_lbl)
+		
+		# 槽位名称+装备名
+		var slot_lbl := Label.new()
+		slot_lbl.text = str(info.get("name", "")) + ": 未装备"
+		slot_lbl.position = Vector2(30 + s * 120, 30)
+		slot_lbl.add_theme_font_size_override("font_size", 12)
+		slot_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+		card.add_child(slot_lbl)
+		slot_labels.append(slot_lbl)
+	
+	# 更换按钮
+	var change_btn := Button.new()
+	change_btn.text = "更换"
+	change_btn.position = Vector2(290, 38)
+	change_btn.size = Vector2(70, 26)
+	change_btn.add_theme_font_size_override("font_size", 13)
+	change_btn.pressed.connect(_on_change_equipment.bind(index))
+	card.add_child(change_btn)
+	
+	equipment_widgets.append({
+		"card": card,
+		"slot_labels": slot_labels,
+		"slot_icons": slot_icons,
+		"change_btn": change_btn,
+	})
+
+
+func _update_equipment_widget(index: int) -> void:
+	"""更新装备卡片显示"""
+	if index >= equipment_widgets.size():
+		return
+	if index >= team_a_players.size():
+		return
+	var w: Dictionary = equipment_widgets[index]
+	var player: CharacterBody2D = team_a_players[index]
+	if not player or not is_instance_valid(player):
+		return
+	var char_id: String = player.character_id
+	var equipped: Dictionary = PlayerSaveManager.get_equipped(char_id)
+	
+	for s in range(3):
+		var slot_key: String = EQUIP_SLOT_ORDER[s]
+		var item_id: String = equipped.get(slot_key, "")
+		var slot_lbl: Label = w.slot_labels[s]
+		if item_id == "":
+			var info: Dictionary = EQUIP_SLOT_INFO.get(slot_key, {})
+			slot_lbl.text = str(info.get("name", "")) + ": 未装备"
+			slot_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+		else:
+			var def: Dictionary = InventoryManager.get_item_def(item_id)
+			var name: String = str(def.get("name", item_id))
+			slot_lbl.text = name
+			var rarity: String = str(def.get("rarity", "common"))
+			slot_lbl.add_theme_color_override("font_color", InventoryManager.get_rarity_color(rarity))
+
+
+# ===== 装备选择弹窗 =====
+
+var _equip_popup_player_index: int = -1
+var _equip_popup: Control = null
+var _equip_popup_current_slot: String = ""
+
+
+func _on_change_equipment(index: int) -> void:
+	"""更换装备：弹出装备选择弹窗"""
+	print("[备战] 位置%d更换装备" % (index + 1))
+	_open_equipment_select_popup(index)
+
+
+func _open_equipment_select_popup(player_index: int) -> void:
+	"""打开装备选择弹窗"""
+	_close_equipment_popup()
+	_equip_popup_player_index = player_index
+	
+	if player_index >= team_a_players.size():
+		return
+	var player: CharacterBody2D = team_a_players[player_index]
+	if not player or not is_instance_valid(player):
+		return
+	var char_id: String = player.character_id
+	var char_name: String = str(player.char_data.get("name", "?"))
+	var equipped: Dictionary = PlayerSaveManager.get_equipped(char_id)
+	
+	var popup := Control.new()
+	popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	popup.name = "EquipmentSelectPopup"
+	add_child(popup)
+	_equip_popup = popup
+	
+	# 半透明遮罩
+	var overlay := ColorRect.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.color = Color(0, 0, 0, 0.6)
+	overlay.gui_input.connect(_on_equip_popup_bg_input)
+	popup.add_child(overlay)
+	
+	# 弹窗面板
+	var panel := Panel.new()
+	panel.offset_left = 200
+	panel.offset_top = 60
+	panel.offset_right = 1000
+	panel.offset_bottom = 680
+	popup.add_child(panel)
+	
+	# 标题
+	var title := Label.new()
+	title.text = "装备选择 - " + char_name
+	title.position = Vector2(210, 70)
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", Color(0.9, 0.7, 0.3))
+	popup.add_child(title)
+	
+	# 当前穿戴状态
+	var equipped_row := HBoxContainer.new()
+	equipped_row.offset_left = 210
+	equipped_row.offset_top = 100
+	equipped_row.offset_right = 990
+	equipped_row.offset_bottom = 130
+	popup.add_child(equipped_row)
+	
+	for slot_key in EQUIP_SLOT_ORDER:
+		var info: Dictionary = EQUIP_SLOT_INFO.get(slot_key, {})
+		var item_id: String = equipped.get(slot_key, "")
+		var slot_lbl := Label.new()
+		if item_id == "":
+			slot_lbl.text = str(info.get("icon", "")) + " " + str(info.get("name", "")) + ": 未装备"
+			slot_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+		else:
+			var def: Dictionary = InventoryManager.get_item_def(item_id)
+			slot_lbl.text = str(info.get("icon", "")) + " " + str(def.get("name", item_id))
+			var rarity: String = str(def.get("rarity", "common"))
+			slot_lbl.add_theme_color_override("font_color", InventoryManager.get_rarity_color(rarity))
+		slot_lbl.add_theme_font_size_override("font_size", 14)
+		slot_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		equipped_row.add_child(slot_lbl)
+	
+	# 3个槽位的装备列表
+	var scroll := ScrollContainer.new()
+	scroll.offset_left = 210
+	scroll.offset_top = 140
+	scroll.offset_right = 990
+	scroll.offset_bottom = 640
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	popup.add_child(scroll)
+	
+	var vbox := VBoxContainer.new()
+	vbox.custom_minimum_size = Vector2(770, 0)
+	vbox.add_theme_constant_override("separation", 6)
+	scroll.add_child(vbox)
+	
+	# 按槽位分组显示背包里的装备
+	for slot_key in EQUIP_SLOT_ORDER:
+		var info: Dictionary = EQUIP_SLOT_INFO.get(slot_key, {})
+		
+		# 槽位标题
+		var slot_title := Label.new()
+		slot_title.text = "=== " + str(info.get("icon", "")) + " " + str(info.get("name", "")) + " ==="
+		slot_title.add_theme_font_size_override("font_size", 16)
+		slot_title.add_theme_color_override("font_color", Color(0.9, 0.7, 0.3))
+		vbox.add_child(slot_title)
+		
+		# 当前穿戴的装备 - 卸下按钮
+		var cur_item_id: String = equipped.get(slot_key, "")
+		if cur_item_id != "":
+			var cur_def: Dictionary = InventoryManager.get_item_def(cur_item_id)
+			var cur_row := HBoxContainer.new()
+			cur_row.custom_minimum_size = Vector2(0, 36)
+			
+			var cur_name := Label.new()
+			cur_name.text = "当前: " + str(cur_def.get("name", cur_item_id))
+			cur_name.add_theme_font_size_override("font_size", 14)
+			cur_name.add_theme_color_override("font_color", InventoryManager.get_rarity_color(str(cur_def.get("rarity", "common"))))
+			cur_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			cur_row.add_child(cur_name)
+			
+			var unequip_btn := Button.new()
+			unequip_btn.text = "卸下"
+			unequip_btn.custom_minimum_size = Vector2(60, 30)
+			unequip_btn.add_theme_font_size_override("font_size", 13)
+			unequip_btn.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
+			unequip_btn.pressed.connect(_on_unequip_equipment.bind(slot_key))
+			cur_row.add_child(unequip_btn)
+			
+			vbox.add_child(cur_row)
+		
+		# 背包里该槽位的装备
+		var backpack_items: Array = InventoryManager.get_backpack_by_slot(slot_key)
+		if backpack_items.size() == 0:
+			var empty_lbl := Label.new()
+			empty_lbl.text = "  （背包没有此类装备）"
+			empty_lbl.add_theme_font_size_override("font_size", 13)
+			empty_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+			vbox.add_child(empty_lbl)
+		else:
+			for item in backpack_items:
+				var iid: String = str(item.get("item_id", ""))
+				var idef: Dictionary = item.get("def", {})
+				var icount: int = int(item.get("count", 0))
+				var iname: String = str(idef.get("name", iid))
+				var irarity: String = str(idef.get("rarity", "common"))
+				var istats: Dictionary = idef.get("stats", {})
+				
+				# 跳过当前已穿戴的
+				if iid == cur_item_id:
+					continue
+				
+				var row := HBoxContainer.new()
+				row.custom_minimum_size = Vector2(0, 36)
+				
+				# 稀有度色块
+				var color_box := ColorRect.new()
+				color_box.custom_minimum_size = Vector2(6, 30)
+				color_box.color = InventoryManager.get_rarity_color(irarity)
+				row.add_child(color_box)
+				
+				var name_lbl := Label.new()
+				name_lbl.text = "  " + iname + " (x" + str(icount) + ")"
+				name_lbl.add_theme_font_size_override("font_size", 14)
+				name_lbl.add_theme_color_override("font_color", InventoryManager.get_rarity_color(irarity))
+				name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				row.add_child(name_lbl)
+				
+				# 属性加成
+				var stats_text := ""
+				for stat_key in istats:
+					if stats_text != "":
+						stats_text += " "
+					stats_text += _stat_key_to_name(stat_key) + "+" + str(istats[stat_key])
+				var stats_lbl := Label.new()
+				stats_lbl.text = stats_text
+				stats_lbl.add_theme_font_size_override("font_size", 12)
+				stats_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+				stats_lbl.custom_minimum_size = Vector2(250, 30)
+				row.add_child(stats_lbl)
+				
+				var wear_btn := Button.new()
+				wear_btn.text = "穿戴"
+				wear_btn.custom_minimum_size = Vector2(60, 30)
+				wear_btn.add_theme_font_size_override("font_size", 13)
+				wear_btn.pressed.connect(_on_equip_selected.bind(slot_key, iid))
+				row.add_child(wear_btn)
+				
+				vbox.add_child(row)
+		
+		# 分隔
+		var sep := HSeparator.new()
+		sep.custom_minimum_size = Vector2(0, 8)
+		vbox.add_child(sep)
+	
+	# 关闭按钮
+	var close_btn := Button.new()
+	close_btn.text = "关闭"
+	close_btn.position = Vector2(560, 645)
+	close_btn.size = Vector2(80, 30)
+	close_btn.pressed.connect(_close_equipment_popup)
+	popup.add_child(close_btn)
+
+
+func _stat_key_to_name(key: String) -> String:
+	match key:
+		"attack_bonus": return "攻击"
+		"defense_bonus": return "防御"
+		"speed_bonus": return "速度"
+		"stamina_bonus": return "体力"
+		"resilience_bonus": return "韧性"
+		"ball_speed_bonus": return "球速"
+		_: return key
+
+
+func _on_equip_selected(slot: String, item_id: String) -> void:
+	"""选中装备穿戴"""
+	var idx: int = _equip_popup_player_index
+	if idx < 0 or idx >= team_a_players.size():
+		_close_equipment_popup()
+		return
+	var player: CharacterBody2D = team_a_players[idx]
+	if not player or not is_instance_valid(player):
+		_close_equipment_popup()
+		return
+	var char_id: String = player.character_id
+	var ok: bool = InventoryManager.equip_to_character(char_id, slot, item_id)
+	if ok:
+		_update_equipment_widget(idx)
+		print("[备战] %s 穿戴 %s: %s" % [char_id, slot, item_id])
+	_close_equipment_popup()
+
+
+func _on_unequip_equipment(slot: String) -> void:
+	"""卸下装备"""
+	var idx: int = _equip_popup_player_index
+	if idx < 0 or idx >= team_a_players.size():
+		_close_equipment_popup()
+		return
+	var player: CharacterBody2D = team_a_players[idx]
+	if not player or not is_instance_valid(player):
+		_close_equipment_popup()
+		return
+	var char_id: String = player.character_id
+	var ok: bool = InventoryManager.unequip_from_character(char_id, slot)
+	if ok:
+		_update_equipment_widget(idx)
+		print("[备战] %s 卸下 %s" % [char_id, slot])
+	_close_equipment_popup()
+
+
+func _on_equip_popup_bg_input(event: InputEvent) -> void:
+	"""点击遮罩关闭弹窗"""
+	if event is InputEventMouseButton and event.pressed:
+		_close_equipment_popup()
+
+
+func _close_equipment_popup() -> void:
+	"""关闭装备选择弹窗"""
+	if _equip_popup and is_instance_valid(_equip_popup):
+		_equip_popup.queue_free()
+	_equip_popup = null
+	_equip_popup_player_index = -1
+
+
+# ===== 第四行：战术策略 =====
 
 func _build_strategy_panel() -> void:
 	"""构建战术策略面板"""
 	var section_title := Label.new()
 	section_title.text = "— 战术策略 —"
-	section_title.position = Vector2(0, 460)
+	section_title.position = Vector2(0, 565)
 	section_title.size = Vector2(1200, 25)
 	section_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	section_title.add_theme_font_size_override("font_size", 18)
@@ -378,31 +773,31 @@ func _build_strategy_panel() -> void:
 	# 个人策略
 	var personal_label := Label.new()
 	personal_label.text = "个人策略:"
-	personal_label.position = Vector2(80, 495)
+	personal_label.position = Vector2(80, 600)
 	personal_label.add_theme_font_size_override("font_size", 15)
 	personal_label.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
 	add_child(personal_label)
 	
-	_create_strategy_btn("突破进攻", PlayerStrategy.BREAKTHROUGH, 200, 492, 0)
-	_create_strategy_btn("防守反击", PlayerStrategy.DEFENSE, 310, 492, 1)
-	_create_strategy_btn("传球配合", PlayerStrategy.PASSING, 420, 492, 2)
+	_create_strategy_btn("突破进攻", PlayerStrategy.BREAKTHROUGH, 200, 597, 0)
+	_create_strategy_btn("防守反击", PlayerStrategy.DEFENSE, 310, 597, 1)
+	_create_strategy_btn("传球配合", PlayerStrategy.PASSING, 420, 597, 2)
 	
 	# 团队策略
 	var team_label := Label.new()
 	team_label.text = "团队策略:"
-	team_label.position = Vector2(560, 495)
+	team_label.position = Vector2(560, 600)
 	team_label.add_theme_font_size_override("font_size", 15)
 	team_label.add_theme_color_override("font_color", Color(1.0, 0.7, 0.3))
 	add_child(team_label)
 	
-	_create_strategy_btn("全力进攻", TeamStrategy.OFFENSIVE + 3, 680, 492, 3)
-	_create_strategy_btn("全力防守", TeamStrategy.DEFENSIVE + 3, 790, 492, 4)
-	_create_strategy_btn("攻守平衡", TeamStrategy.BALANCED + 3, 900, 492, 5)
+	_create_strategy_btn("全力进攻", TeamStrategy.OFFENSIVE + 3, 680, 597, 3)
+	_create_strategy_btn("全力防守", TeamStrategy.DEFENSIVE + 3, 790, 597, 4)
+	_create_strategy_btn("攻守平衡", TeamStrategy.BALANCED + 3, 900, 597, 5)
 	
 	# 策略说明
 	var desc := Label.new()
 	desc.text = "策略影响AI队友的行为模式，可随时切换"
-	desc.position = Vector2(350, 535)
+	desc.position = Vector2(350, 640)
 	desc.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
 	add_child(desc)
 
@@ -428,6 +823,8 @@ func load_battle_data(players: Array[CharacterBody2D]) -> void:
 		var player: CharacterBody2D = players[i]
 		if player and i < player_widgets.size():
 			_update_player_widget(i, player)
+		if player and i < equipment_widgets.size():
+			_update_equipment_widget(i)
 
 
 func _update_player_widget(index: int, player: CharacterBody2D) -> void:
@@ -884,6 +1281,13 @@ func _on_start_match() -> void:
 	print("[备战] 开始比赛!")
 	visible = false
 	match_started_from_prep.emit()
+
+
+func _on_back_to_menu() -> void:
+	"""返回主菜单"""
+	print("[备战] 返回主菜单")
+	visible = false
+	back_to_menu_requested.emit()
 
 
 # ===== 公开方法 =====

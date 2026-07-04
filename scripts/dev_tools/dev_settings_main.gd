@@ -50,25 +50,59 @@ func _build_ui() -> void:
 	center.set_anchors_preset(Control.PRESET_CENTER)
 	center.position = Vector2(720, 405)
 	center.offset_left = -200
-	center.offset_top = -80
+	center.offset_top = -150
 	center.offset_right = 200
-	center.offset_bottom = 80
-	center.add_theme_constant_override("separation", 25)
+	center.offset_bottom = 150
+	center.add_theme_constant_override("separation", 20)
 	add_child(center)
+
+	var btn_account := Button.new()
+	btn_account.text = "账号管理（测试工具）"
+	btn_account.custom_minimum_size = Vector2(400, 55)
+	btn_account.add_theme_font_size_override("font_size", 20)
+	btn_account.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
+	btn_account.pressed.connect(_open_account_panel)
+	center.add_child(btn_account)
 
 	var btn_player := Button.new()
 	btn_player.text = "球员管理"
-	btn_player.custom_minimum_size = Vector2(400, 60)
-	btn_player.add_theme_font_size_override("font_size", 22)
+	btn_player.custom_minimum_size = Vector2(400, 55)
+	btn_player.add_theme_font_size_override("font_size", 20)
 	btn_player.pressed.connect(_open_player_panel)
 	center.add_child(btn_player)
 
 	var btn_spirit := Button.new()
 	btn_spirit.text = "元灵管理"
-	btn_spirit.custom_minimum_size = Vector2(400, 60)
-	btn_spirit.add_theme_font_size_override("font_size", 22)
+	btn_spirit.custom_minimum_size = Vector2(400, 55)
+	btn_spirit.add_theme_font_size_override("font_size", 20)
 	btn_spirit.pressed.connect(_open_spirit_panel)
 	center.add_child(btn_spirit)
+
+	var btn_equip := Button.new()
+	btn_equip.text = "装备管理"
+	btn_equip.custom_minimum_size = Vector2(400, 55)
+	btn_equip.add_theme_font_size_override("font_size", 20)
+	btn_equip.add_theme_color_override("font_color", Color(0.9, 0.7, 0.3))
+	btn_equip.pressed.connect(_open_equipment_panel)
+	center.add_child(btn_equip)
+
+	var btn_food := Button.new()
+	btn_food.text = "食物管理"
+	btn_food.custom_minimum_size = Vector2(400, 55)
+	btn_food.add_theme_font_size_override("font_size", 20)
+	btn_food.add_theme_color_override("font_color", Color(0.3, 0.9, 0.6))
+	btn_food.pressed.connect(_open_food_panel)
+	center.add_child(btn_food)
+
+
+func _open_account_panel() -> void:
+	_clear_current_panel()
+	var DevAccountPanelClass = load("res://scripts/dev_tools/dev_account_panel.gd")
+	var panel: Control = DevAccountPanelClass.new()
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.closed.connect(_on_sub_panel_closed)
+	add_child(panel)
+	_current_panel = panel
 
 
 func _open_player_panel() -> void:
@@ -85,6 +119,26 @@ func _open_spirit_panel() -> void:
 	_clear_current_panel()
 	var DevSpiritPanelClass = load("res://scripts/dev_tools/dev_spirit_panel.gd")
 	var panel: Control = DevSpiritPanelClass.new()
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.closed.connect(_on_sub_panel_closed)
+	add_child(panel)
+	_current_panel = panel
+
+
+func _open_equipment_panel() -> void:
+	_clear_current_panel()
+	var DevEquipmentPanelClass = load("res://scripts/dev_tools/dev_equipment_panel.gd")
+	var panel: Control = DevEquipmentPanelClass.new()
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.closed.connect(_on_sub_panel_closed)
+	add_child(panel)
+	_current_panel = panel
+
+
+func _open_food_panel() -> void:
+	_clear_current_panel()
+	var DevFoodPanelClass = load("res://scripts/dev_tools/dev_food_panel.gd")
+	var panel: Control = DevFoodPanelClass.new()
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	panel.closed.connect(_on_sub_panel_closed)
 	add_child(panel)

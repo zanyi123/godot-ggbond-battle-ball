@@ -1029,6 +1029,7 @@ func _setup_preparation_ui() -> void:
 	preparation_ui.player_substituted.connect(_on_player_substituted)
 	preparation_ui.spirit_changed.connect(_on_spirit_changed)
 	preparation_ui.match_started_from_prep.connect(_on_prep_match_started)
+	preparation_ui.back_to_menu_requested.connect(_on_back_to_menu)
 
 	# 隐藏比赛场地(只显示备战窗口)
 	if field_zone:
@@ -1323,6 +1324,19 @@ func _on_prep_match_started() -> void:
 
 	# 发球:球给随机一方
 	_assign_initial_ball()
+
+
+func _on_back_to_menu() -> void:
+	"""备战界面点击返回主菜单：切回主菜单场景"""
+	print("[Match] 返回主菜单")
+	# 重置比赛状态
+	GameManager.match_phase = GameManager.MatchPhase.PREP
+	GameManager.score_team_a = 0
+	GameManager.score_team_b = 0
+	GameManager.match_time = 0.0
+	GameManager.is_paused = false
+	# 切回主菜单
+	get_tree().change_scene_to_file("res://scenes/main/main_menu.tscn")
 
 
 ## 自动模拟模式：比赛结束回调→停止采集+输出报告+退出
