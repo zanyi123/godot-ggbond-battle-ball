@@ -161,42 +161,14 @@ func initialize(data_id: String, team_name: String, controlled: bool) -> void:
 		push_error("[Player] 找不到角色数据: %s" % character_id)
 		return
 
-	# 设置属性
-	max_stamina = char_data["stamina"] if char_data.has("stamina") else 100.0
-	stamina = max_stamina
-	spirit_energy = max_spirit_energy  # 元灵能量初始满（与体力一致，可立即释放技能）
-	defense = char_data["defense"] if char_data.has("defense") else 50.0
-	# speed 统一从角色数据出发,全局缩放
-	# 原始范围50~85,缩放后150~255,让场地移动节奏合理
-	var raw_speed: float = char_data["speed"] if char_data.has("speed") else 50.0
-	speed = raw_speed * SPEED_SCALE
-	attack_power = char_data["attack"] if char_data.has("attack") else 50.0
-	resilience = char_data["resilience"] if char_data.has("resilience") else 50.0
+	# 设置属性基础值
 	defense_factor = char_data["defense_factor"] if char_data.has("defense_factor") else 0.15
 	talent_name = char_data["talent_name"] if char_data.has("talent_name") else ""
 	talent_desc = char_data["talent_desc"] if char_data.has("talent_desc") else ""
 
-	# 叠加训练加成（固定值，加在底层）
-	var train: Dictionary = PlayerSaveManager.get_character_train(character_id)
-	max_stamina += float(train.get("stamina_bonus", 0))
-	stamina = max_stamina
-	defense += float(train.get("defense_bonus", 0))
-	raw_speed += float(train.get("speed_bonus", 0))
-	speed = raw_speed * SPEED_SCALE
-	attack_power += float(train.get("attack_bonus", 0))
-	resilience += float(train.get("resilience_bonus", 0))
-
-	# 叠加装备加成（固定值，和训练同级，加在底层）
-	var equip_bonuses: Dictionary = PlayerSaveManager.get_equipment_bonuses(character_id)
-	max_stamina += float(equip_bonuses.get("stamina_bonus", 0))
-	stamina = max_stamina
-	defense += float(equip_bonuses.get("defense_bonus", 0))
-	# 装备的 speed_bonus 也是加在原始速度上，再乘缩放
-	raw_speed += float(equip_bonuses.get("speed_bonus", 0))
-	speed = raw_speed * SPEED_SCALE
-	attack_power += float(equip_bonuses.get("attack_bonus", 0))
-	resilience += float(equip_bonuses.get("resilience_bonus", 0))
-	# ball_speed_bonus 在 get_base_ball_speed() 里应用
+	# 从基础值开始叠加训练+装备+食物
+	_recalculate_all_bonuses()
+	spirit_energy = max_spirit_energy  # 元灵能量初始满（与体力一致，可立即释放技能）
 
 	# 元灵偏好在 char_data.spirit_preference 中
 	# 技能与元灵绑定：球员创建时不自动装备技能，必须在备战面板手动选择元灵后才获得技能
@@ -207,6 +179,57 @@ func initialize(data_id: String, team_name: String, controlled: bool) -> void:
 	# 监听比赛阶段切换（中场休息恢复能量）
 	if GameManager and not GameManager.phase_changed.is_connected(_on_phase_changed):
 		GameManager.phase_changed.connect(_on_phase_changed)
+
+
+## 重新计算所有基础加成（训练+装备+食物），从char_data基础值开始
+## 用于：比赛开始前确保属性是最新的（备战界面可能换了装备/吃了食物）
+func _recalculate_all_bonuses() -> void:
+	if char_data.is_empty():
+		return
+
+	# 1. 重置为基础值
+	max_stamina = char_data["stamina"] if char_data.has("stamina") else 100.0
+	defense = char_data["defense"] if char_data.has("defense") else 50.0
+	var raw_speed: float = char_data["speed"] if char_data.has("speed") else 50.0
+	attack_power = char_data["attack"] if char_data.has("attack") else 50.0
+	resilience = char_data["resilience"] if char_data.has("resilience") else 50.0
+
+	# 2. 叠加训练加成（固定值，加在底层）
+	var train: Dictionary = PlayerSaveManager.get_character_train(character_id)
+	max_stamina += float(train.get("stamina_bonus", 0))
+	defense += float(train.get("defense_bonus", 0))
+	raw_speed += float(train.get("speed_bonus", 0))
+	attack_power += float(train.get("attack_bonus", 0))
+	resilience += float(train.get("resilience_bonus", 0))
+
+	# 3. 叠加装备加成（固定值，和训练同级，加在底层）
+	var equip_bonuses: Dictionary = PlayerSaveManager.get_equipment_bonuses(character_id)
+	max_stamina += float(equip_bonuses.get("stamina_bonus", 0))
+	defense += float(equip_bonuses.get("defense_bonus", 0))
+	raw_speed += float(equip_bonuses.get("speed_bonus", 0))
+	attack_power += float(equip_bonuses.get("attack_bonus", 0))
+	resilience += float(equip_bonuses.get("resilience_bonus", 0))
+	# ball_speed_bonus 在 get_base_ball_speed() 里应用
+
+	# 4. 叠加食物加成（固定值，全队生效，加在底层）
+	if NutritionManager != null:
+		var food_bonuses: Dictionary = NutritionManager.get_team_bonuses()
+		max_stamina += float(food_bonuses.get("stamina_bonus", 0))
+		defense += float(food_bonuses.get("defense_bonus", 0))
+		raw_speed += float(food_bonuses.get("speed_bonus", 0))
+		attack_power += float(food_bonuses.get("attack_bonus", 0))
+		resilience += float(food_bonuses.get("resilience_bonus", 0))
+		# ball_speed_bonus 在 get_base_ball_speed() 里应用
+
+	# 5. 计算最终speed（原始速度 × 缩放系数）
+	speed = raw_speed * SPEED_SCALE
+	# 体力补满（重新计算后体力是满的）
+	stamina = max_stamina
+
+
+## 对外公开：重新计算所有加成（供battle_manager在比赛开始前调用）
+func refresh_bonuses() -> void:
+	_recalculate_all_bonuses()
 
 
 ## 中场休息时场上元灵能量恢复20点
@@ -232,6 +255,10 @@ func get_base_ball_speed() -> float:
 	# 装备加成
 	var equip_bonuses: Dictionary = PlayerSaveManager.get_equipment_bonuses(character_id)
 	base += float(equip_bonuses.get("ball_speed_bonus", 0))
+	# 食物加成（全队生效）
+	if NutritionManager != null:
+		var food_bonuses: Dictionary = NutritionManager.get_team_bonuses()
+		base += float(food_bonuses.get("ball_speed_bonus", 0))
 	return base
 
 

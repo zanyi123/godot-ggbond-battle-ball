@@ -297,6 +297,28 @@ func get_data() -> Dictionary:
 	return save_data
 
 
+## ==================== 营养系统 ====================
+
+## 设置当前已吃的赛前食物（空字符串=清除）
+func set_active_food(food_id: String) -> void:
+	if not save_data.has("nutrition"):
+		save_data["nutrition"] = {"pre_match_food": ""}
+	save_data["nutrition"]["pre_match_food"] = food_id
+	_save_to_file()
+
+
+## 获取当前已吃的赛前食物ID
+func get_active_food() -> String:
+	var nutrition: Dictionary = save_data.get("nutrition", {})
+	var food = nutrition.get("pre_match_food", "")
+	if food is Array:
+		# 兼容旧数组格式
+		if food.size() > 0:
+			return String(food[0])
+		return ""
+	return String(food)
+
+
 func get_total_stat(char_id: String, stat_key: String) -> int:
 	var char_data: Dictionary = DataManager.get_character_by_id(char_id)
 	if char_data.is_empty():

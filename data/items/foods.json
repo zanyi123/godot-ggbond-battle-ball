@@ -1,0 +1,135 @@
+{
+	"version": 1,
+	"foods": [
+		{
+			"id": "food_stamina_common",
+			"name": "能量面包",
+			"rarity": "common",
+			"icon": "res://assets/icons/items/food/food_common.png",
+			"description": "全队体力+5，整场有效。",
+			"stack_max": 99,
+			"sell_price": 15,
+			"effect": {
+				"stat": "stamina",
+				"value": 5
+			}
+		},
+		{
+			"id": "food_attack_common",
+			"name": "力量饼干",
+			"rarity": "common",
+			"icon": "res://assets/icons/items/food/food_common.png",
+			"description": "全队攻击+3，整场有效。",
+			"stack_max": 99,
+			"sell_price": 15,
+			"effect": {
+				"stat": "attack",
+				"value": 3
+			}
+		},
+		{
+			"id": "food_defense_good",
+			"name": "护盾蛋糕",
+			"rarity": "good",
+			"icon": "res://assets/icons/items/food/food_good.png",
+			"description": "全队防御+8，整场有效。",
+			"stack_max": 99,
+			"sell_price": 40,
+			"effect": {
+				"stat": "defense",
+				"value": 8
+			}
+		},
+		{
+			"id": "food_speed_good",
+			"name": "疾风果汁",
+			"rarity": "good",
+			"icon": "res://assets/icons/items/food/food_good.png",
+			"description": "全队速度+6，整场有效。",
+			"stack_max": 99,
+			"sell_price": 40,
+			"effect": {
+				"stat": "speed",
+				"value": 6
+			}
+		},
+		{
+			"id": "food_stamina_rare",
+			"name": "巨人牛排",
+			"rarity": "rare",
+			"icon": "res://assets/icons/items/food/food_rare.png",
+			"description": "全队体力+15，整场有效。",
+			"stack_max": 99,
+			"sell_price": 100,
+			"effect": {
+				"stat": "stamina",
+				"value": 15
+			}
+		},
+		{
+			"id": "food_attack_rare",
+			"name": "战意辣椒",
+			"rarity": "rare",
+			"icon": "res://assets/icons/items/food/food_rare.png",
+			"description": "全队攻击+12，整场有效。",
+			"stack_max": 99,
+			"sell_price": 100,
+			"effect": {
+				"stat": "attack",
+				"value": 12
+			}
+		},
+		{
+			"id": "food_resilience_epic",
+			"name": "坚韧炖菜",
+			"rarity": "epic",
+			"icon": "res://assets/icons/items/food/food_epic.png",
+			"description": "全队韧性+22，整场有效。",
+			"stack_max": 99,
+			"sell_price": 250,
+			"effect": {
+				"stat": "resilience",
+				"value": 22
+			}
+		},
+		{
+			"id": "food_speed_epic",
+			"name": "闪电布丁",
+			"rarity": "epic",
+			"icon": "res://assets/icons/items/food/food_epic.png",
+			"description": "全队速度+20，整场有效。",
+			"stack_max": 99,
+			"sell_price": 250,
+			"effect": {
+				"stat": "speed",
+				"value": 20
+			}
+		},
+		{
+			"id": "food_stamina_legendary",
+			"name": "龙心盛宴",
+			"rarity": "legendary",
+			"icon": "res://assets/icons/items/food/food_legendary.png",
+			"description": "全队体力+40，整场有效。",
+			"stack_max": 99,
+			"sell_price": 500,
+			"effect": {
+				"stat": "stamina",
+				"value": 40
+			}
+		},
+		{
+			"id": "food_attack_legendary",
+			"name": "神力金丹",
+			"rarity": "legendary",
+			"icon": "res://assets/icons/items/food/food_legendary.png",
+			"description": "全队攻击+35，整场有效。",
+			"stack_max": 99,
+			"sell_price": 500,
+			"effect": {
+				"stat": "attack",
+				"value": 35
+			}
+		}
+	]
+}

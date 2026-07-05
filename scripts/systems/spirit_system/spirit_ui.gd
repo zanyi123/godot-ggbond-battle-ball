@@ -34,7 +34,7 @@ signal close_requested
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	size = Vector2(1440, 810)
+	size = Vector2(1440, 900)
 	_load_data()
 	_build_ui()
 	if spirits_data.size() > 0:

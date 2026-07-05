@@ -219,6 +219,14 @@ func _build_ui() -> void:
 	quick_btn2.pressed.connect(_on_add_all_food)
 	mid_vbox.add_child(quick_btn2)
 
+	var add_custom_btn := Button.new()
+	add_custom_btn.text = "➕ 添加指定道具"
+	add_custom_btn.custom_minimum_size = Vector2(0, 28)
+	add_custom_btn.add_theme_font_size_override("font_size", 12)
+	add_custom_btn.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
+	add_custom_btn.pressed.connect(_on_open_add_item_popup)
+	mid_vbox.add_child(add_custom_btn)
+
 	var clear_btn := Button.new()
 	clear_btn.text = "🗑️ 清空背包"
 	clear_btn.custom_minimum_size = Vector2(0, 28)
@@ -591,6 +599,313 @@ func _on_max_all_train() -> void:
 			PlayerSaveManager.set_training_bonus(cid, ts.key, int(ts.max))
 	_refresh_training()
 	print("[DevAccount] 全部角色训练已全满")
+
+
+# ===== 添加指定道具弹窗 =====
+
+var _add_item_popup: Control = null
+var _add_item_search: LineEdit
+var _add_item_filter: OptionButton
+var _add_item_list: VBoxContainer
+var _add_item_count_edit: LineEdit
+var _add_item_status_lbl: Label
+
+
+func _on_open_add_item_popup() -> void:
+	"""打开添加指定道具弹窗"""
+	if _add_item_popup and is_instance_valid(_add_item_popup):
+		_add_item_popup.queue_free()
+		_add_item_popup = null
+	
+	var popup := Control.new()
+	popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	popup.name = "AddItemPopup"
+	popup.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(popup)
+	_add_item_popup = popup
+	
+	var overlay := ColorRect.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.color = Color(0, 0, 0, 0.7)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.gui_input.connect(_on_add_item_popup_bg_input)
+	popup.add_child(overlay)
+	
+	var panel := Panel.new()
+	panel.offset_left = 250
+	panel.offset_top = 50
+	panel.offset_right = 950
+	panel.offset_bottom = 720
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	popup.add_child(panel)
+	
+	var title := Label.new()
+	title.text = "添加指定道具"
+	title.position = Vector2(270, 60)
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
+	popup.add_child(title)
+	
+	# 搜索框
+	var search_edit := LineEdit.new()
+	search_edit.position = Vector2(270, 95)
+	search_edit.size = Vector2(400, 30)
+	search_edit.placeholder_text = "搜索道具名称..."
+	search_edit.add_theme_font_size_override("font_size", 13)
+	search_edit.text_changed.connect(_on_add_item_search_changed)
+	popup.add_child(search_edit)
+	_add_item_search = search_edit
+	
+	# 筛选下拉
+	var filter_opt := OptionButton.new()
+	filter_opt.position = Vector2(680, 95)
+	filter_opt.size = Vector2(150, 30)
+	filter_opt.add_theme_font_size_override("font_size", 13)
+	filter_opt.add_item("全部道具", 0)
+	filter_opt.add_item("装备 - 全部", 1)
+	filter_opt.add_item("装备 - 手套", 2)
+	filter_opt.add_item("装备 - 球衣", 3)
+	filter_opt.add_item("装备 - 球鞋", 4)
+	filter_opt.add_item("食物", 5)
+	filter_opt.select(0)
+	filter_opt.item_selected.connect(_on_add_item_filter_changed)
+	popup.add_child(filter_opt)
+	_add_item_filter = filter_opt
+	
+	# 数量输入
+	var count_lbl := Label.new()
+	count_lbl.text = "数量:"
+	count_lbl.position = Vector2(270, 135)
+	count_lbl.add_theme_font_size_override("font_size", 14)
+	count_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	popup.add_child(count_lbl)
+	
+	var count_edit := LineEdit.new()
+	count_edit.position = Vector2(320, 132)
+	count_edit.size = Vector2(100, 28)
+	count_edit.text = "1"
+	count_edit.placeholder_text = "数量"
+	count_edit.add_theme_font_size_override("font_size", 13)
+	popup.add_child(count_edit)
+	_add_item_count_edit = count_edit
+	
+	# 状态提示
+	var status_lbl := Label.new()
+	status_lbl.text = ""
+	status_lbl.position = Vector2(440, 135)
+	status_lbl.size = Vector2(400, 25)
+	status_lbl.add_theme_font_size_override("font_size", 13)
+	status_lbl.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4))
+	popup.add_child(status_lbl)
+	_add_item_status_lbl = status_lbl
+	
+	# 道具列表
+	var scroll := ScrollContainer.new()
+	scroll.offset_left = 270
+	scroll.offset_top = 170
+	scroll.offset_right = 930
+	scroll.offset_bottom = 680
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	popup.add_child(scroll)
+	
+	var list_vbox := VBoxContainer.new()
+	list_vbox.custom_minimum_size = Vector2(640, 0)
+	list_vbox.add_theme_constant_override("separation", 3)
+	scroll.add_child(list_vbox)
+	_add_item_list = list_vbox
+	
+	# 关闭按钮
+	var close_btn := Button.new()
+	close_btn.text = "关闭"
+	close_btn.position = Vector2(570, 685)
+	close_btn.size = Vector2(80, 28)
+	close_btn.pressed.connect(_close_add_item_popup)
+	popup.add_child(close_btn)
+	
+	_refresh_add_item_list()
+
+
+func _on_add_item_popup_bg_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		_close_add_item_popup()
+
+
+func _close_add_item_popup() -> void:
+	if _add_item_popup and is_instance_valid(_add_item_popup):
+		_add_item_popup.queue_free()
+	_add_item_popup = null
+
+
+func _on_add_item_search_changed(_txt: String) -> void:
+	_refresh_add_item_list()
+
+
+func _on_add_item_filter_changed(_idx: int) -> void:
+	_refresh_add_item_list()
+
+
+func _refresh_add_item_list() -> void:
+	if not _add_item_list or not is_instance_valid(_add_item_list):
+		return
+	for child in _add_item_list.get_children():
+		child.queue_free()
+	
+	var search_text: String = ""
+	if _add_item_search and is_instance_valid(_add_item_search):
+		search_text = _add_item_search.text.strip_edges().to_lower()
+	
+	var filter_idx: int = 0
+	if _add_item_filter and is_instance_valid(_add_item_filter):
+		filter_idx = _add_item_filter.selected
+	
+	var all_items: Array = DevDataSync.load_items()
+	var shown: int = 0
+	
+	for item in all_items:
+		var iid: String = str(item.get("id", ""))
+		var iname: String = str(item.get("name", ""))
+		var itype: String = str(item.get("type", ""))
+		var isub: String = str(item.get("sub_type", ""))
+		var irarity: String = str(item.get("rarity", "common"))
+		
+		# 筛选
+		if filter_idx == 1 and itype != "equipment":
+			continue
+		if filter_idx == 2 and isub != "glove":
+			continue
+		if filter_idx == 3 and isub != "jersey":
+			continue
+		if filter_idx == 4 and isub != "shoes":
+			continue
+		if filter_idx == 5 and (itype != "consumable" or isub != "food"):
+			continue
+		
+		# 搜索
+		if search_text != "" and not iname.to_lower().find(search_text) >= 0 and not iid.to_lower().find(search_text) >= 0:
+			continue
+		
+		shown += 1
+		
+		var row := HBoxContainer.new()
+		row.custom_minimum_size = Vector2(0, 32)
+		
+		# 稀有度色块
+		var color_box := ColorRect.new()
+		color_box.custom_minimum_size = Vector2(6, 26)
+		color_box.color = DevDataSync.get_rarity_color(irarity)
+		row.add_child(color_box)
+		
+		# 图标/名称
+		var name_lbl := Label.new()
+		name_lbl.text = "  " + iname
+		name_lbl.add_theme_font_size_override("font_size", 13)
+		name_lbl.add_theme_color_override("font_color", DevDataSync.get_rarity_color(irarity))
+		name_lbl.custom_minimum_size = Vector2(180, 26)
+		row.add_child(name_lbl)
+		
+		# 类型
+		var type_lbl := Label.new()
+		var type_text := ""
+		if itype == "equipment":
+			match isub:
+				"glove": type_text = "[装备/手套]"
+				"jersey": type_text = "[装备/球衣]"
+				"shoes": type_text = "[装备/球鞋]"
+				_: type_text = "[装备]"
+		elif itype == "consumable" and isub == "food":
+			type_text = "[食物]"
+		else:
+			type_text = "[" + itype + "]"
+		type_lbl.text = type_text
+		type_lbl.add_theme_font_size_override("font_size", 12)
+		type_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+		type_lbl.custom_minimum_size = Vector2(100, 26)
+		row.add_child(type_lbl)
+		
+		# 属性
+		var stats_text := ""
+		var stats: Dictionary = item.get("stats", {})
+		var eff_list: Array = item.get("effects", [])
+		for stat_key in stats:
+			if stats_text != "":
+				stats_text += " "
+			stats_text += _dev_stat_short(stat_key) + "+" + str(stats[stat_key])
+		if eff_list.size() > 0:
+			if stats_text != "":
+				stats_text += " "
+			stats_text += "%d种效果" % eff_list.size()
+		var stats_lbl := Label.new()
+		stats_lbl.text = stats_text
+		stats_lbl.add_theme_font_size_override("font_size", 12)
+		stats_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+		stats_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(stats_lbl)
+		
+		# 添加按钮
+		var add_btn := Button.new()
+		add_btn.text = "添加"
+		add_btn.custom_minimum_size = Vector2(60, 26)
+		add_btn.add_theme_font_size_override("font_size", 12)
+		add_btn.pressed.connect(_on_add_specific_item.bind(iid))
+		row.add_child(add_btn)
+		
+		_add_item_list.add_child(row)
+	
+	if shown == 0:
+		var empty_lbl := Label.new()
+		empty_lbl.text = "（没有符合条件的道具）"
+		empty_lbl.add_theme_font_size_override("font_size", 13)
+		empty_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+		empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_add_item_list.add_child(empty_lbl)
+
+
+func _dev_stat_short(key: String) -> String:
+	match key:
+		"attack_bonus": return "攻击"
+		"defense_bonus": return "防御"
+		"speed_bonus": return "速度"
+		"stamina_bonus": return "体力"
+		"resilience_bonus": return "韧性"
+		"ball_speed_bonus": return "球速"
+		"duration": return "持续"
+		_: return key
+
+
+func _on_add_specific_item(item_id: String) -> void:
+	"""添加指定数量的指定道具"""
+	var count_str: String = ""
+	if _add_item_count_edit and is_instance_valid(_add_item_count_edit):
+		count_str = _add_item_count_edit.text.strip_edges()
+	var count: int = 1
+	if count_str.is_valid_int():
+		count = int(count_str)
+	if count <= 0:
+		count = 1
+	
+	var ok: bool = InventoryManager.add_item(item_id, count)
+	if ok:
+		print("[DevAccount] 添加道具 %s x%d" % [item_id, count])
+		_refresh_backpack()
+		_refresh_currency()
+		_show_add_status("✓ 已添加 x%d" % count, true)
+	else:
+		print("[DevAccount] 添加道具失败: %s" % item_id)
+		_show_add_status("✗ 添加失败（背包已满？）", false)
+
+
+func _show_add_status(msg: String, success: bool) -> void:
+	if not _add_item_status_lbl or not is_instance_valid(_add_item_status_lbl):
+		return
+	_add_item_status_lbl.text = msg
+	if success:
+		_add_item_status_lbl.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4))
+	else:
+		_add_item_status_lbl.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
+	await get_tree().create_timer(2.0).timeout
+	if _add_item_status_lbl and is_instance_valid(_add_item_status_lbl):
+		_add_item_status_lbl.text = ""
+
 
 
 func _on_close() -> void:

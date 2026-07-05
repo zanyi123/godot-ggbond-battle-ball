@@ -10,6 +10,7 @@ const SKILLS_PATH := "res://data/spirits/skills.json"
 const TAGS_PATH := "res://data/spirits/tags_registry.json"
 const ITEMS_PATH := "res://data/items/items.json"
 const ITEM_ICONS_DIR := "res://assets/icons/items"
+const GROWTH_CURVES_PATH := "res://data/characters/growth_curves.json"
 
 ## 读取角色数据
 static func load_characters() -> Array:
@@ -29,6 +30,7 @@ static func save_characters(data: Array) -> bool:
 		file.store_string(JSON.stringify(data, "\t"))
 		file.close()
 		print("[DevSync] 角色数据已保存, 共 ", data.size(), " 个角色")
+		_refresh_data_manager()
 		return true
 	printerr("[DevSync] 无法保存角色数据")
 	return false
@@ -52,6 +54,7 @@ static func save_spirits(data: Array) -> bool:
 		file.store_string(JSON.stringify(wrapper, "\t"))
 		file.close()
 		print("[DevSync] 元灵数据已保存, 共 ", data.size(), " 个元灵")
+		_refresh_data_manager()
 		return true
 	printerr("[DevSync] 无法保存元灵数据")
 	return false
@@ -75,6 +78,7 @@ static func save_skills(data: Array) -> bool:
 		file.store_string(JSON.stringify(wrapper, "\t"))
 		file.close()
 		print("[DevSync] 技能数据已保存, 共 ", data.size(), " 个技能")
+		_refresh_data_manager()
 		return true
 	printerr("[DevSync] 无法保存技能数据")
 	return false
@@ -243,6 +247,7 @@ static func save_items(data: Array) -> bool:
 		wfile.store_string(JSON.stringify(wrapper, "\t"))
 		wfile.close()
 		print("[DevSync] 道具数据已保存, 共 ", data.size(), " 个道具")
+		_refresh_inventory_manager()
 		return true
 	printerr("[DevSync] 无法保存道具数据")
 	return false
@@ -404,3 +409,43 @@ static func save_item_icon(source_path: String, item_id: String, item_type: Stri
 		return ""
 	print("[DevDataSync] 道具图标已保存: %s" % dest_path)
 	return dest_path
+
+
+## 读取成长曲线数据
+static func load_growth_curves() -> Dictionary:
+	var file := FileAccess.open(GROWTH_CURVES_PATH, FileAccess.READ)
+	if file:
+		var json := JSON.new()
+		var err := json.parse(file.get_as_text())
+		file.close()
+		if err == OK and json.data is Dictionary:
+			return json.data.get("growth_curves", {})
+	return {}
+
+
+## 保存成长曲线数据
+static func save_growth_curves(data: Dictionary) -> bool:
+	var wrapper := {"growth_curves": data}
+	var file := FileAccess.open(GROWTH_CURVES_PATH, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(wrapper, "\t"))
+		file.close()
+		print("[DevSync] 成长曲线已保存, 共 ", data.size(), " 个球员")
+		return true
+	printerr("[DevSync] 无法保存成长曲线")
+	return false
+
+
+## 刷新 DataManager 内存数据（角色/元灵/技能等修改后调用）
+static func _refresh_data_manager() -> void:
+	if DataManager and is_instance_valid(DataManager):
+		DataManager.reload_all()
+
+
+## 刷新 InventoryManager 道具定义数据（装备/食物修改后调用）
+## 同时刷新 NutritionManager 的食物缓存，确保备战界面能正确显示
+static func _refresh_inventory_manager() -> void:
+	if InventoryManager and is_instance_valid(InventoryManager):
+		InventoryManager.reload_item_defs()
+	if NutritionManager and is_instance_valid(NutritionManager):
+		NutritionManager.reload_foods_data()

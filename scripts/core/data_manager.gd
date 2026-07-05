@@ -25,6 +25,11 @@ func load_all_data() -> void:
 	print("[DataManager] 数据加载完成: %d 角色, %d 元灵, %d 技能, %d 标签" % [characters.size(), spirits.size(), skills.size(), tags.size()])
 
 
+## 重新加载所有配置数据（管理员修改数据后调用，确保玩家端实时同步）
+func reload_all() -> void:
+	load_all_data()
+
+
 func _load_json_raw(path: String) -> Variant:
 	if not FileAccess.file_exists(path):
 		push_warning("[DataManager] 文件不存在: %s" % path)

@@ -56,6 +56,7 @@ var btn_cancel: Button
 var btn_back: Button
 var name_display: Label
 var upload_btn: Button
+var growth_btn: Button
 
 
 func _ready() -> void:
@@ -252,6 +253,21 @@ func _build_ui() -> void:
 	sep2.custom_minimum_size = Vector2(0, 10)
 	detail_container.add_child(sep2)
 
+	# 成长曲线按钮（仅已有球员可用，新建时不显示）
+	var growth_btn_row := HBoxContainer.new()
+	growth_btn_row.custom_minimum_size = Vector2(0, 40)
+
+	growth_btn = Button.new()
+	growth_btn.text = "成长曲线规划"
+	growth_btn.custom_minimum_size = Vector2(180, 36)
+	growth_btn.add_theme_font_size_override("font_size", 15)
+	growth_btn.add_theme_color_override("font_color", Color(0.8, 0.6, 1.0))
+	growth_btn.pressed.connect(_on_open_growth_curve)
+	growth_btn_row.add_child(growth_btn)
+
+	detail_container.add_child(growth_btn_row)
+	growth_btn.visible = false  # 初始隐藏，选中已有球员后才显示
+
 	# 上传图片按钮（可选）
 	upload_btn = Button.new()
 	upload_btn.text = "上传球员图片（可选）"
@@ -339,6 +355,7 @@ func _select_character(index: int) -> void:
 
 	# 更新右侧面板
 	_update_detail_panel(data)
+	growth_btn.visible = true
 
 
 func _update_detail_panel(data: Dictionary) -> void:
@@ -483,8 +500,10 @@ func _on_cancel() -> void:
 
 	if selected_index >= 0 and selected_index < characters_data.size():
 		_update_detail_panel(characters_data[selected_index])
+		growth_btn.visible = true
 	else:
 		_clear_detail_panel()
+		growth_btn.visible = false
 
 
 func _clear_detail_panel() -> void:
@@ -519,6 +538,7 @@ func _on_create_new() -> void:
 
 	name_display.text = "新建球员"
 	name_display.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
+	growth_btn.visible = false
 
 
 func _confirm_create() -> void:
@@ -542,6 +562,21 @@ func _confirm_create() -> void:
 
 	btn_confirm.text = "确认修改"
 	print("[DevPlayerPanel] 已创建新球员: ", data.get("name", ""))
+
+
+func _on_open_growth_curve() -> void:
+	if selected_index < 0 or selected_index >= characters_data.size():
+		return
+	var data: Dictionary = characters_data[selected_index]
+	var cid: String = data.get("id", "")
+	if cid == "":
+		return
+
+	var growth_panel_class = load("res://scripts/dev_tools/dev_growth_panel.gd")
+	var panel = growth_panel_class.new()
+	panel.set_initial_character(cid)
+	panel.closed.connect(func(): panel.queue_free())
+	get_tree().root.add_child(panel)
 
 
 func _on_upload_image() -> void:

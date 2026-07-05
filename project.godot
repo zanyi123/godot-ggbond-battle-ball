@@ -25,11 +25,13 @@ DataManager="*res://scripts/core/data_manager.gd"
 GameManager="*res://scripts/core/game_manager.gd"
 PlayerSaveManager="*res://scripts/core/player_save_manager.gd"
 InventoryManager="*res://scripts/systems/inventory/inventory_manager.gd"
+TrainingManager="*res://scripts/systems/training/training_manager.gd"
+NutritionManager="*res://scripts/systems/nutrition/nutrition_manager.gd"
 
 [display]
 
 window/size/viewport_width=1440
-window/size/viewport_height=810
+window/size/viewport_height=900
 window/stretch/mode="canvas_items"
 
 [filesystem]

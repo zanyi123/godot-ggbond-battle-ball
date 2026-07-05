@@ -53,6 +53,13 @@ func _on_save_loaded(_slot: int) -> void:
 	_ensure_inventory_structure()
 
 
+## 重新加载道具定义数据（管理员修改数据后调用，确保玩家端实时同步）
+func reload_item_defs() -> void:
+	_item_defs.clear()
+	_item_list.clear()
+	_load_item_definitions()
+
+
 func _ensure_inventory_structure() -> void:
 	var save: Dictionary = PlayerSaveManager.save_data
 	if not save.has("inventory"):

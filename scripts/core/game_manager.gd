@@ -48,6 +48,14 @@ var is_paused: bool = false
 var team_a: Array[CharacterBody2D] = []
 var team_b: Array[CharacterBody2D] = []
 
+# 主菜单上次进入的模式（"player" / "admin" / ""）
+# 用于从比赛返回主菜单时保持模式，不用每次重新选
+var last_menu_mode: String = ""
+
+# 模式对应存档槽位（数据隔离）
+const MODE_SLOT_PLAYER: int = 1
+const MODE_SLOT_ADMIN: int = 2
+
 signal phase_changed(new_phase: MatchPhase)
 signal match_time_updated(time: float)
 signal score_updated(team: String, new_score: int)

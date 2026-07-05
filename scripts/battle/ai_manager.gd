@@ -1551,13 +1551,21 @@ func _calc_avoid_velocity(ap: Dictionary, base_vel: Vector2) -> Vector2:
 ## 应用分离力到速度（通用：所有 _move 移动分支可调用）
 ## 仅在非击退/非僵直/非接球状态下叠加
 func _apply_steering(ap: Dictionary, base_velocity: Vector2, use_avoid: bool = false) -> Vector2:
+	# 应用速度buff（buff系统对AI也生效：最终速度 = 基础 × buff倍率 + buff固定值）
+	var p: CharacterBody2D = ap.player
+	var base_speed: float = base_velocity.length()
+	var buffed_speed: float = p._get_effective_value("speed", base_speed)
+	var buffed_velocity: Vector2 = base_velocity
+	if base_speed > 1.0:
+		buffed_velocity = base_velocity.normalized() * buffed_speed
+	
 	var sep := _calc_separation(ap)
-	var vel := base_velocity + sep
+	var vel := buffed_velocity + sep
 	# 带球时额外做碰撞预测绕行
 	if use_avoid and ap.player.is_carrying_ball:
 		vel = _calc_avoid_velocity(ap, vel)
 	# 保持原速度上限（不超速）
-	var max_speed: float = base_velocity.length()
+	var max_speed: float = buffed_velocity.length()
 	if max_speed > 1.0:
 		vel = vel.limit_length(max_speed)
 	return vel
@@ -2287,6 +2295,17 @@ func update_player_profile(player_index: int, profile: AIProfile) -> void:
 			ap.profile = profile
 			print("[AI] 队A位置%d profile已更新 角色=%s 策略=%s chase=%.0f" % [player_index, profile.role, profile.team_strategy_name, profile.speed_chase])
 			return
+
+
+## 刷新所有AI球员的速度profile（player.speed变化后调用，比如换装备/吃食物后）
+func refresh_all_speeds() -> void:
+	for ap in ai_players:
+		var base_speed: float = ap.player.speed
+		var profile: AIProfile = ap.profile
+		profile.speed_chase = base_speed * profile.speed_chase_mult
+		profile.speed_dribble = base_speed * profile.speed_dribble_mult
+		profile.speed_move = base_speed * profile.speed_move_mult
+	print("[AI] 所有球员速度profile已刷新")
 
 
 func get_player_profile(player_index: int) -> AIProfile:

@@ -75,6 +75,9 @@ func _ready() -> void:
 	_create_field()
 	_create_ball()
 	_setup_input_manager()
+	# 提前加载食物存档（必须在_setup_teams之前，否则球员初始化时读不到食物加成）
+	if NutritionManager != null:
+		NutritionManager.load_from_save()
 	_setup_teams()
 	_setup_ui()
 	_setup_ai_manager()
@@ -602,6 +605,9 @@ func _on_phase_changed(new_phase: int) -> void:
 			print("[Match] 下半场开始!")
 		GameManager.MatchPhase.RESULTS:
 			print("[Match] 比赛结束! 最终比分: %d - %d" % [GameManager.score_team_a, GameManager.score_team_b])
+			# 比赛结束，清空已吃食物
+			if NutritionManager != null:
+				NutritionManager.clear_active_food()
 
 
 # ===== 隔离墙管理 =====
@@ -1282,6 +1288,14 @@ func _on_spirit_changed(index: int, spirit_id: String) -> void:
 func _on_prep_match_started() -> void:
 	"""备战界面点击开始比赛后:恢复场地、开始比赛、发球、解锁输入"""
 	print("[Match] 备战完成,开始比赛!")
+
+	# 重新计算所有球员的属性加成（确保备战界面换的装备/吃的食物生效）
+	for player: CharacterBody2D in team_a_players + team_b_players:
+		if player and is_instance_valid(player) and player.has_method("refresh_bonuses"):
+			player.refresh_bonuses()
+	# 刷新AI速度profile（player.speed变了，AI的速度系数也要更新）
+	if ai_mgr and ai_mgr.has_method("refresh_all_speeds"):
+		ai_mgr.refresh_all_speeds()
 
 	# 显示比赛场地
 	if field_zone:

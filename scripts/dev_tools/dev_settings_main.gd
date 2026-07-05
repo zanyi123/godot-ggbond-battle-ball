@@ -94,6 +94,14 @@ func _build_ui() -> void:
 	btn_food.pressed.connect(_open_food_panel)
 	center.add_child(btn_food)
 
+	var btn_growth := Button.new()
+	btn_growth.text = "成长曲线规划"
+	btn_growth.custom_minimum_size = Vector2(400, 55)
+	btn_growth.add_theme_font_size_override("font_size", 20)
+	btn_growth.add_theme_color_override("font_color", Color(0.8, 0.6, 1.0))
+	btn_growth.pressed.connect(_open_growth_panel)
+	center.add_child(btn_growth)
+
 
 func _open_account_panel() -> void:
 	_clear_current_panel()
@@ -139,6 +147,16 @@ func _open_food_panel() -> void:
 	_clear_current_panel()
 	var DevFoodPanelClass = load("res://scripts/dev_tools/dev_food_panel.gd")
 	var panel: Control = DevFoodPanelClass.new()
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.closed.connect(_on_sub_panel_closed)
+	add_child(panel)
+	_current_panel = panel
+
+
+func _open_growth_panel() -> void:
+	_clear_current_panel()
+	var DevGrowthPanelClass = load("res://scripts/dev_tools/dev_growth_panel.gd")
+	var panel: Control = DevGrowthPanelClass.new()
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	panel.closed.connect(_on_sub_panel_closed)
 	add_child(panel)

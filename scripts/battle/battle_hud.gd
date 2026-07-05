@@ -11,6 +11,9 @@ var player_panels: Array[Control] = []
 var player_stamina_bars: Array[ProgressBar] = []
 var player_energy_bars: Array[ProgressBar] = []
 var player_name_labels: Array[Label] = []
+# 增益色块：每个球员6个属性色块（stamina/defense/speed/attack/resilience/ball_speed）
+var player_bonus_colors: Array[Array] = []  # [i] = [ColorRect, ColorRect, ...]
+var player_bonus_tooltip: Array[Label] = []  # 增益数值提示（可选，先做色块）
 # 每个球员的技能图标容器：player_skill_boxes[i] = [ColorRect, ColorRect, ColorRect]
 var player_skill_boxes: Array = []
 var player_skill_labels: Array = []  # 技能首字标签 [i]=[Label,Label,Label]
@@ -35,7 +38,7 @@ var enemy_players: Array[CharacterBody2D] = []  # 对方3个球员
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	size = Vector2(1440, 810)
+	size = Vector2(1440, 900)
 
 	_create_score_panel()
 	_create_enemy_stamina_panel()
@@ -176,6 +179,17 @@ func _update_bars() -> void:
 				else:
 					overlays[slot].value = 0.0
 
+		# 增益色块更新（装备+食物总加成）
+		if i < player_bonus_colors.size():
+			var bonuses: Dictionary = _get_total_bonuses(p.character_id)
+			var stat_keys: Array = ["stamina_bonus", "defense_bonus", "speed_bonus", "attack_bonus", "resilience_bonus", "ball_speed_bonus"]
+			var boxes: Array = player_bonus_colors[i]
+			for s in range(6):
+				if s >= boxes.size():
+					continue
+				var bonus_val: float = float(bonuses.get(stat_keys[s], 0))
+				boxes[s].visible = bonus_val > 0.0
+
 	# 顶部：对方体力
 	for i in range(min(3, enemy_players.size())):
 		var p: CharacterBody2D = enemy_players[i]
@@ -183,6 +197,31 @@ func _update_bars() -> void:
 			continue
 		enemy_stamina_bars[i].max_value = p.max_stamina
 		enemy_stamina_bars[i].value = p.stamina
+
+
+## 获取某球员的总增益（装备+食物，不含训练，因为训练是永久的）
+func _get_total_bonuses(char_id: String) -> Dictionary:
+	var result: Dictionary = {
+		"stamina_bonus": 0,
+		"defense_bonus": 0,
+		"speed_bonus": 0,
+		"attack_bonus": 0,
+		"resilience_bonus": 0,
+		"ball_speed_bonus": 0,
+	}
+	# 装备加成
+	if PlayerSaveManager != null:
+		var equip: Dictionary = PlayerSaveManager.get_equipment_bonuses(char_id)
+		for key in result:
+			if equip.has(key):
+				result[key] += int(equip[key])
+	# 食物加成（全队）
+	if NutritionManager != null:
+		var food: Dictionary = NutritionManager.get_team_bonuses()
+		for key in result:
+			if food.has(key):
+				result[key] += int(food[key])
+	return result
 
 
 # ============================================================
@@ -279,7 +318,7 @@ func _create_player_panels() -> void:
 	var panel_width: float = 380.0
 	var panel_height: float = 90.0
 	var start_x: float = (1440.0 - panel_width * 3 - 20) / 2.0
-	var start_y: float = 810.0 - panel_height - 12.0
+	var start_y: float = 900.0 - panel_height - 12.0
 
 	for i in range(3):
 		var panel := _create_single_panel(i, Vector2(start_x + i * (panel_width + 10), start_y), panel_width, panel_height)
@@ -343,6 +382,30 @@ func _create_single_panel(index: int, pos: Vector2, width: float, height: float)
 
 	panel.add_child(stamina)
 	player_stamina_bars.append(stamina)
+
+	# 增益色块（体力条右侧末端，6个属性：体力/防御/速度/攻击/韧性/球速）
+	var bonus_colors: Array = []
+	var bonus_x_start: float = 70 + 150 + 4  # 体力条右边缘+间距
+	var bonus_size: float = 10.0
+	var bonus_gap: float = 2.0
+	var bonus_y: float = 18 + 1  # 体力条垂直居中
+	var stat_colors: Array = [
+		Color(0.95, 0.3, 0.3),   # 0: stamina 红
+		Color(0.3, 0.6, 1.0),    # 1: defense 蓝
+		Color(1.0, 0.85, 0.2),   # 2: speed 黄
+		Color(1.0, 0.55, 0.2),   # 3: attack 橙
+		Color(0.75, 0.45, 0.95), # 4: resilience 紫
+		Color(0.3, 0.85, 0.85),  # 5: ball_speed 青
+	]
+	for s in range(6):
+		var box := ColorRect.new()
+		box.size = Vector2(bonus_size, bonus_size)
+		box.position = Vector2(bonus_x_start + s * (bonus_size + bonus_gap), bonus_y)
+		box.color = stat_colors[s]
+		box.visible = false  # 默认隐藏，有增益才显示
+		panel.add_child(box)
+		bonus_colors.append(box)
+	player_bonus_colors.append(bonus_colors)
 
 	# 元灵能量条
 	var energy := ProgressBar.new()
@@ -461,7 +524,7 @@ func _create_quick_message_bar() -> void:
 	var bar_width: float = 70.0
 	var bar_height: float = 90.0
 	var bar_x: float = 10.0
-	var bar_y: float = 810.0 - bar_height - 12.0
+	var bar_y: float = 900.0 - bar_height - 12.0
 
 	var bg := Panel.new()
 	bg.position = Vector2(bar_x, bar_y)

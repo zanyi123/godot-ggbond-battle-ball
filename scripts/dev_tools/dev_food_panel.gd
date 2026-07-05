@@ -5,14 +5,14 @@ extends Control
 
 signal closed()
 
-const EFFECT_DEFS: Array[Dictionary] = [
-	{"key": "attack_pct", "label": "攻击加成%", "min": 0.0, "max": 50.0, "step": 1.0, "color": Color(0.9, 0.3, 0.3)},
-	{"key": "defense_pct", "label": "防御加成%", "min": 0.0, "max": 50.0, "step": 1.0, "color": Color(0.9, 0.75, 0.1)},
-	{"key": "speed_pct", "label": "速度加成%", "min": 0.0, "max": 50.0, "step": 1.0, "color": Color(0.2, 0.5, 0.95)},
-	{"key": "stamina_max_pct", "label": "体力上限%", "min": 0.0, "max": 50.0, "step": 1.0, "color": Color(0.9, 0.4, 0.4)},
-	{"key": "resilience_pct", "label": "韧性加成%", "min": 0.0, "max": 50.0, "step": 1.0, "color": Color(0.6, 0.6, 0.6)},
-	{"key": "stamina_restore", "label": "体力恢复", "min": 0.0, "max": 100.0, "step": 5.0, "color": Color(0.3, 0.9, 0.5)},
-	{"key": "duration", "label": "持续时间(秒)", "min": 0.0, "max": 600.0, "step": 10.0, "color": Color(0.6, 0.4, 0.8)},
+# 食物效果：固定值加成，选1个属性+数值
+const STAT_OPTIONS: Array[Dictionary] = [
+	{"key": "stamina", "label": "体力", "color": Color(0.9, 0.4, 0.4), "max": 50},
+	{"key": "defense", "label": "防御", "color": Color(0.9, 0.75, 0.1), "max": 40},
+	{"key": "speed", "label": "速度", "color": Color(0.2, 0.5, 0.95), "max": 40},
+	{"key": "attack", "label": "攻击", "color": Color(0.9, 0.3, 0.3), "max": 50},
+	{"key": "resilience", "label": "韧性", "color": Color(0.6, 0.6, 0.6), "max": 40},
+	{"key": "ball_speed", "label": "球速", "color": Color(0.6, 0.4, 0.8), "max": 100},
 ]
 
 const TEXT_FIELDS: Array[Dictionary] = [
@@ -31,8 +31,9 @@ var avatar_scroll: ScrollContainer
 var avatar_list: VBoxContainer
 var avatar_buttons: Array[Button] = []
 var detail_container: VBoxContainer
-var effect_sliders: Dictionary = {}
-var effect_value_labels: Dictionary = {}
+var stat_option: OptionButton
+var value_slider: HSlider
+var value_label: Label
 var text_edits: Dictionary = {}
 var rarity_option: OptionButton
 var btn_edit: Button
@@ -306,38 +307,56 @@ func _build_ui() -> void:
 	detail_container.add_child(sep1)
 
 	var effect_title := Label.new()
-	effect_title.text = "— 食物效果 —"
+	effect_title.text = "— 食物效果（固定值加成，全队生效） —"
 	effect_title.add_theme_font_size_override("font_size", 16)
 	effect_title.add_theme_color_override("font_color", Color(0.8, 0.7, 0.3))
 	effect_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	detail_container.add_child(effect_title)
 
-	for eff in EFFECT_DEFS:
-		var row := HBoxContainer.new()
-		row.custom_minimum_size = Vector2(0, 35)
-		var lbl := Label.new()
-		lbl.text = eff.label + ":"
-		lbl.custom_minimum_size = Vector2(110, 28)
-		lbl.add_theme_font_size_override("font_size", 14)
-		lbl.add_theme_color_override("font_color", eff.color)
-		row.add_child(lbl)
-		var slider := HSlider.new()
-		slider.min_value = eff.min
-		slider.max_value = eff.max
-		slider.step = eff.step
-		slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		slider.editable = false
-		slider.value_changed.connect(_on_slider_changed.bind(eff.key))
-		row.add_child(slider)
-		effect_sliders[eff.key] = slider
-		var val_lbl := Label.new()
-		val_lbl.custom_minimum_size = Vector2(60, 28)
-		val_lbl.add_theme_font_size_override("font_size", 14)
-		val_lbl.add_theme_color_override("font_color", eff.color)
-		val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		row.add_child(val_lbl)
-		effect_value_labels[eff.key] = val_lbl
-		detail_container.add_child(row)
+	# 属性选择下拉
+	var stat_row := HBoxContainer.new()
+	stat_row.custom_minimum_size = Vector2(0, 35)
+	var stat_lbl := Label.new()
+	stat_lbl.text = "加成属性:"
+	stat_lbl.custom_minimum_size = Vector2(110, 28)
+	stat_lbl.add_theme_font_size_override("font_size", 14)
+	stat_lbl.add_theme_color_override("font_color", Color(0.8, 0.7, 0.3))
+	stat_row.add_child(stat_lbl)
+	stat_option = OptionButton.new()
+	stat_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for s in STAT_OPTIONS:
+		stat_option.add_item(s.label)
+	stat_option.disabled = true
+	stat_option.item_selected.connect(_on_stat_selected)
+	stat_row.add_child(stat_option)
+	detail_container.add_child(stat_row)
+
+	# 固定值滑块
+	var val_row := HBoxContainer.new()
+	val_row.custom_minimum_size = Vector2(0, 35)
+	var val_lbl := Label.new()
+	val_lbl.text = "固定值:"
+	val_lbl.custom_minimum_size = Vector2(110, 28)
+	val_lbl.add_theme_font_size_override("font_size", 14)
+	val_lbl.add_theme_color_override("font_color", Color(0.8, 0.7, 0.3))
+	val_row.add_child(val_lbl)
+	value_slider = HSlider.new()
+	value_slider.min_value = 0.0
+	value_slider.max_value = 50.0
+	value_slider.step = 1.0
+	value_slider.value = 0.0
+	value_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	value_slider.editable = false
+	value_slider.value_changed.connect(_on_value_changed)
+	val_row.add_child(value_slider)
+	value_label = Label.new()
+	value_label.custom_minimum_size = Vector2(60, 28)
+	value_label.add_theme_font_size_override("font_size", 14)
+	value_label.add_theme_color_override("font_color", Color(0.8, 0.7, 0.3))
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.text = "0"
+	val_row.add_child(value_label)
+	detail_container.add_child(val_row)
 
 	var sep2 := HSeparator.new()
 	sep2.custom_minimum_size = Vector2(0, 10)
@@ -452,31 +471,38 @@ func _update_detail_panel(data: Dictionary) -> void:
 	# 图标
 	var icon_path: String = str(data.get("icon", ""))
 	icon_path_edit.text = icon_path
-	if icon_path != "":
-		var img := Image.new()
-		if img.load(icon_path) == OK:
-			icon_preview.texture = ImageTexture.create_from_image(img)
+	if icon_path != "" and ResourceLoader.exists(icon_path):
+		var tex := load(icon_path)
+		if tex is Texture2D:
+			icon_preview.texture = tex
 		else:
 			icon_preview.texture = null
 	else:
 		icon_preview.texture = null
 
-	# 效果数值
+	# 效果（固定值：stat + value）
 	var effect_dict: Dictionary = data.get("effect", {})
-	for eff in EFFECT_DEFS:
-		var key: String = eff.key
-		if effect_sliders.has(key):
-			var val: float = float(effect_dict.get(key, 0))
-			effect_sliders[key].value = val
-			if key == "duration":
-				effect_value_labels[key].text = str(int(val))
-			else:
-				effect_value_labels[key].text = str(int(val))
+	var stat: String = str(effect_dict.get("stat", ""))
+	var val: int = int(effect_dict.get("value", 0))
+	# 选中对应属性
+	stat_option.selected = 0
+	for i in range(STAT_OPTIONS.size()):
+		if STAT_OPTIONS[i].key == stat:
+			stat_option.selected = i
+			break
+	# 根据属性调整滑块上限
+	value_slider.max_value = STAT_OPTIONS[stat_option.selected].max
+	value_slider.value = val
+	value_label.text = str(val)
 
 
-func _on_slider_changed(val: float, key: String) -> void:
-	if effect_value_labels.has(key):
-		effect_value_labels[key].text = str(int(val))
+func _on_value_changed(val: float) -> void:
+	value_label.text = str(int(val))
+
+
+func _on_stat_selected(idx: int) -> void:
+	if idx >= 0 and idx < STAT_OPTIONS.size():
+		value_slider.max_value = STAT_OPTIONS[idx].max
 
 
 func _on_filter_rarity(idx: int) -> void:
@@ -508,8 +534,8 @@ func _on_toggle_edit() -> void:
 func _set_editable(editable: bool) -> void:
 	for key in text_edits:
 		text_edits[key].editable = editable
-	for key in effect_sliders:
-		effect_sliders[key].editable = editable
+	value_slider.editable = editable
+	stat_option.disabled = not editable
 	rarity_option.disabled = not editable
 	sell_price_edit.editable = editable
 	stack_max_edit.editable = editable
@@ -581,13 +607,13 @@ func _collect_data_from_ui() -> Dictionary:
 		else:
 			data["icon"] = old_icon
 
-	# 效果
-	var effect_dict: Dictionary = data.get("effect", {})
-	for eff in EFFECT_DEFS:
-		var key: String = eff.key
-		if effect_sliders.has(key):
-			effect_dict[key] = int(effect_sliders[key].value)
-	data["effect"] = effect_dict
+	# 效果（固定值：stat + value）
+	var stat_idx: int = stat_option.selected
+	var stat_key: String = STAT_OPTIONS[stat_idx].key if stat_idx >= 0 and stat_idx < STAT_OPTIONS.size() else "stamina"
+	data["effect"] = {
+		"stat": stat_key,
+		"value": int(value_slider.value),
+	}
 
 	return data
 
@@ -612,9 +638,10 @@ func _clear_detail_panel() -> void:
 	name_display.text = "请选择食物"
 	for key in text_edits:
 		text_edits[key].text = ""
-	for key in effect_sliders:
-		effect_sliders[key].value = 0
-		effect_sliders[key].editable = false
+	stat_option.selected = 0
+	value_slider.value = 0
+	value_slider.editable = false
+	value_label.text = "0"
 	sell_price_edit.text = ""
 	stack_max_edit.text = ""
 	icon_path_edit.text = ""

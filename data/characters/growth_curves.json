@@ -1,0 +1,585 @@
+{
+	"growth_curves": {
+		"char_001": {
+			"field_level_1": {
+				"attack_max": 43,
+				"ball_speed_max": 450,
+				"defense_max": 68,
+				"resilience_max": 56,
+				"speed_max": 83,
+				"stamina_max": 90
+			},
+			"field_level_10": {
+				"attack_max": 88,
+				"ball_speed_max": 720,
+				"defense_max": 140,
+				"resilience_max": 110,
+				"speed_max": 155,
+				"stamina_max": 180
+			},
+			"field_level_2": {
+				"attack_max": 48,
+				"ball_speed_max": 480,
+				"defense_max": 76,
+				"resilience_max": 62,
+				"speed_max": 91,
+				"stamina_max": 100
+			},
+			"field_level_3": {
+				"attack_max": 53,
+				"ball_speed_max": 510,
+				"defense_max": 84,
+				"resilience_max": 68,
+				"speed_max": 99,
+				"stamina_max": 110
+			},
+			"field_level_4": {
+				"attack_max": 58,
+				"ball_speed_max": 540,
+				"defense_max": 92,
+				"resilience_max": 74,
+				"speed_max": 107,
+				"stamina_max": 120
+			},
+			"field_level_5": {
+				"attack_max": 63,
+				"ball_speed_max": 570,
+				"defense_max": 100,
+				"resilience_max": 80,
+				"speed_max": 115,
+				"stamina_max": 130
+			},
+			"field_level_6": {
+				"attack_max": 68,
+				"ball_speed_max": 600,
+				"defense_max": 108,
+				"resilience_max": 86,
+				"speed_max": 123,
+				"stamina_max": 140
+			},
+			"field_level_7": {
+				"attack_max": 73,
+				"ball_speed_max": 630,
+				"defense_max": 116,
+				"resilience_max": 92,
+				"speed_max": 131,
+				"stamina_max": 150
+			},
+			"field_level_8": {
+				"attack_max": 78,
+				"ball_speed_max": 660,
+				"defense_max": 124,
+				"resilience_max": 98,
+				"speed_max": 139,
+				"stamina_max": 160
+			},
+			"field_level_9": {
+				"attack_max": 83,
+				"ball_speed_max": 690,
+				"defense_max": 132,
+				"resilience_max": 104,
+				"speed_max": 147,
+				"stamina_max": 170
+			},
+			"name": "猪猪侠"
+		},
+		"char_002": {
+			"field_level_1": {
+				"attack_max": 35,
+				"ball_speed_max": 410,
+				"defense_max": 88,
+				"resilience_max": 76,
+				"speed_max": 73,
+				"stamina_max": 100
+			},
+			"field_level_10": {
+				"attack_max": 80,
+				"ball_speed_max": 680,
+				"defense_max": 160,
+				"resilience_max": 130,
+				"speed_max": 145,
+				"stamina_max": 190
+			},
+			"field_level_2": {
+				"attack_max": 40,
+				"ball_speed_max": 440,
+				"defense_max": 96,
+				"resilience_max": 82,
+				"speed_max": 81,
+				"stamina_max": 110
+			},
+			"field_level_3": {
+				"attack_max": 45,
+				"ball_speed_max": 470,
+				"defense_max": 104,
+				"resilience_max": 88,
+				"speed_max": 89,
+				"stamina_max": 120
+			},
+			"field_level_4": {
+				"attack_max": 50,
+				"ball_speed_max": 500,
+				"defense_max": 112,
+				"resilience_max": 94,
+				"speed_max": 97,
+				"stamina_max": 130
+			},
+			"field_level_5": {
+				"attack_max": 55,
+				"ball_speed_max": 530,
+				"defense_max": 120,
+				"resilience_max": 100,
+				"speed_max": 105,
+				"stamina_max": 140
+			},
+			"field_level_6": {
+				"attack_max": 60,
+				"ball_speed_max": 560,
+				"defense_max": 128,
+				"resilience_max": 106,
+				"speed_max": 113,
+				"stamina_max": 150
+			},
+			"field_level_7": {
+				"attack_max": 65,
+				"ball_speed_max": 590,
+				"defense_max": 136,
+				"resilience_max": 112,
+				"speed_max": 121,
+				"stamina_max": 160
+			},
+			"field_level_8": {
+				"attack_max": 70,
+				"ball_speed_max": 620,
+				"defense_max": 144,
+				"resilience_max": 118,
+				"speed_max": 129,
+				"stamina_max": 170
+			},
+			"field_level_9": {
+				"attack_max": 75,
+				"ball_speed_max": 650,
+				"defense_max": 152,
+				"resilience_max": 124,
+				"speed_max": 137,
+				"stamina_max": 180
+			},
+			"name": "超人强"
+		},
+		"char_003": {
+			"field_level_1": {
+				"attack_max": 38,
+				"ball_speed_max": 510,
+				"defense_max": 58,
+				"resilience_max": 46,
+				"speed_max": 93,
+				"stamina_max": 80
+			},
+			"field_level_10": {
+				"attack_max": 83,
+				"ball_speed_max": 780,
+				"defense_max": 130,
+				"resilience_max": 100,
+				"speed_max": 165,
+				"stamina_max": 170
+			},
+			"field_level_2": {
+				"attack_max": 43,
+				"ball_speed_max": 540,
+				"defense_max": 66,
+				"resilience_max": 52,
+				"speed_max": 101,
+				"stamina_max": 90
+			},
+			"field_level_3": {
+				"attack_max": 48,
+				"ball_speed_max": 570,
+				"defense_max": 74,
+				"resilience_max": 58,
+				"speed_max": 109,
+				"stamina_max": 100
+			},
+			"field_level_4": {
+				"attack_max": 53,
+				"ball_speed_max": 600,
+				"defense_max": 82,
+				"resilience_max": 64,
+				"speed_max": 117,
+				"stamina_max": 110
+			},
+			"field_level_5": {
+				"attack_max": 58,
+				"ball_speed_max": 630,
+				"defense_max": 90,
+				"resilience_max": 70,
+				"speed_max": 125,
+				"stamina_max": 120
+			},
+			"field_level_6": {
+				"attack_max": 63,
+				"ball_speed_max": 660,
+				"defense_max": 98,
+				"resilience_max": 76,
+				"speed_max": 133,
+				"stamina_max": 130
+			},
+			"field_level_7": {
+				"attack_max": 68,
+				"ball_speed_max": 690,
+				"defense_max": 106,
+				"resilience_max": 82,
+				"speed_max": 141,
+				"stamina_max": 140
+			},
+			"field_level_8": {
+				"attack_max": 73,
+				"ball_speed_max": 720,
+				"defense_max": 114,
+				"resilience_max": 88,
+				"speed_max": 149,
+				"stamina_max": 150
+			},
+			"field_level_9": {
+				"attack_max": 78,
+				"ball_speed_max": 750,
+				"defense_max": 122,
+				"resilience_max": 94,
+				"speed_max": 157,
+				"stamina_max": 160
+			},
+			"name": "菲菲"
+		},
+		"char_004": {
+			"field_level_1": {
+				"attack_max": 40,
+				"ball_speed_max": 430,
+				"defense_max": 73,
+				"resilience_max": 61,
+				"speed_max": 80,
+				"stamina_max": 85
+			},
+			"field_level_10": {
+				"attack_max": 85,
+				"ball_speed_max": 700,
+				"defense_max": 145,
+				"resilience_max": 115,
+				"speed_max": 152,
+				"stamina_max": 175
+			},
+			"field_level_2": {
+				"attack_max": 45,
+				"ball_speed_max": 460,
+				"defense_max": 81,
+				"resilience_max": 67,
+				"speed_max": 88,
+				"stamina_max": 95
+			},
+			"field_level_3": {
+				"attack_max": 50,
+				"ball_speed_max": 490,
+				"defense_max": 89,
+				"resilience_max": 73,
+				"speed_max": 96,
+				"stamina_max": 105
+			},
+			"field_level_4": {
+				"attack_max": 55,
+				"ball_speed_max": 520,
+				"defense_max": 97,
+				"resilience_max": 79,
+				"speed_max": 104,
+				"stamina_max": 115
+			},
+			"field_level_5": {
+				"attack_max": 60,
+				"ball_speed_max": 550,
+				"defense_max": 105,
+				"resilience_max": 85,
+				"speed_max": 112,
+				"stamina_max": 125
+			},
+			"field_level_6": {
+				"attack_max": 65,
+				"ball_speed_max": 580,
+				"defense_max": 113,
+				"resilience_max": 91,
+				"speed_max": 120,
+				"stamina_max": 135
+			},
+			"field_level_7": {
+				"attack_max": 70,
+				"ball_speed_max": 610,
+				"defense_max": 121,
+				"resilience_max": 97,
+				"speed_max": 128,
+				"stamina_max": 145
+			},
+			"field_level_8": {
+				"attack_max": 75,
+				"ball_speed_max": 640,
+				"defense_max": 129,
+				"resilience_max": 103,
+				"speed_max": 136,
+				"stamina_max": 155
+			},
+			"field_level_9": {
+				"attack_max": 80,
+				"ball_speed_max": 670,
+				"defense_max": 137,
+				"resilience_max": 109,
+				"speed_max": 144,
+				"stamina_max": 165
+			},
+			"name": "小呆呆"
+		},
+		"char_005": {
+			"field_level_1": {
+				"attack_max": 48,
+				"ball_speed_max": 490,
+				"defense_max": 63,
+				"resilience_max": 41,
+				"speed_max": 86,
+				"stamina_max": 75
+			},
+			"field_level_10": {
+				"attack_max": 93,
+				"ball_speed_max": 760,
+				"defense_max": 135,
+				"resilience_max": 95,
+				"speed_max": 158,
+				"stamina_max": 165
+			},
+			"field_level_2": {
+				"attack_max": 53,
+				"ball_speed_max": 520,
+				"defense_max": 71,
+				"resilience_max": 47,
+				"speed_max": 94,
+				"stamina_max": 85
+			},
+			"field_level_3": {
+				"attack_max": 58,
+				"ball_speed_max": 550,
+				"defense_max": 79,
+				"resilience_max": 53,
+				"speed_max": 102,
+				"stamina_max": 95
+			},
+			"field_level_4": {
+				"attack_max": 63,
+				"ball_speed_max": 580,
+				"defense_max": 87,
+				"resilience_max": 59,
+				"speed_max": 110,
+				"stamina_max": 105
+			},
+			"field_level_5": {
+				"attack_max": 68,
+				"ball_speed_max": 610,
+				"defense_max": 95,
+				"resilience_max": 65,
+				"speed_max": 118,
+				"stamina_max": 115
+			},
+			"field_level_6": {
+				"attack_max": 73,
+				"ball_speed_max": 640,
+				"defense_max": 103,
+				"resilience_max": 71,
+				"speed_max": 126,
+				"stamina_max": 125
+			},
+			"field_level_7": {
+				"attack_max": 78,
+				"ball_speed_max": 670,
+				"defense_max": 111,
+				"resilience_max": 77,
+				"speed_max": 134,
+				"stamina_max": 135
+			},
+			"field_level_8": {
+				"attack_max": 83,
+				"ball_speed_max": 700,
+				"defense_max": 119,
+				"resilience_max": 83,
+				"speed_max": 142,
+				"stamina_max": 145
+			},
+			"field_level_9": {
+				"attack_max": 88,
+				"ball_speed_max": 730,
+				"defense_max": 127,
+				"resilience_max": 89,
+				"speed_max": 150,
+				"stamina_max": 155
+			},
+			"name": "波比"
+		},
+		"char_006": {
+			"field_level_1": {
+				"attack_max": 35,
+				"ball_speed_max": 420,
+				"defense_max": 78,
+				"resilience_max": 66,
+				"speed_max": 76,
+				"stamina_max": 80
+			},
+			"field_level_10": {
+				"attack_max": 80,
+				"ball_speed_max": 690,
+				"defense_max": 150,
+				"resilience_max": 120,
+				"speed_max": 148,
+				"stamina_max": 170
+			},
+			"field_level_2": {
+				"attack_max": 40,
+				"ball_speed_max": 450,
+				"defense_max": 86,
+				"resilience_max": 72,
+				"speed_max": 84,
+				"stamina_max": 90
+			},
+			"field_level_3": {
+				"attack_max": 45,
+				"ball_speed_max": 480,
+				"defense_max": 94,
+				"resilience_max": 78,
+				"speed_max": 92,
+				"stamina_max": 100
+			},
+			"field_level_4": {
+				"attack_max": 50,
+				"ball_speed_max": 510,
+				"defense_max": 102,
+				"resilience_max": 84,
+				"speed_max": 100,
+				"stamina_max": 110
+			},
+			"field_level_5": {
+				"attack_max": 55,
+				"ball_speed_max": 540,
+				"defense_max": 110,
+				"resilience_max": 90,
+				"speed_max": 108,
+				"stamina_max": 120
+			},
+			"field_level_6": {
+				"attack_max": 60,
+				"ball_speed_max": 570,
+				"defense_max": 118,
+				"resilience_max": 96,
+				"speed_max": 116,
+				"stamina_max": 130
+			},
+			"field_level_7": {
+				"attack_max": 65,
+				"ball_speed_max": 600,
+				"defense_max": 126,
+				"resilience_max": 102,
+				"speed_max": 124,
+				"stamina_max": 140
+			},
+			"field_level_8": {
+				"attack_max": 70,
+				"ball_speed_max": 630,
+				"defense_max": 134,
+				"resilience_max": 108,
+				"speed_max": 132,
+				"stamina_max": 150
+			},
+			"field_level_9": {
+				"attack_max": 75,
+				"ball_speed_max": 660,
+				"defense_max": 142,
+				"resilience_max": 114,
+				"speed_max": 140,
+				"stamina_max": 160
+			},
+			"name": "迷糊老师"
+		},
+		"char_007": {
+			"field_level_1": {
+				"attack_max": 23,
+				"ball_speed_max": 400,
+				"defense_max": 48,
+				"resilience_max": 36,
+				"speed_max": 53,
+				"stamina_max": 64
+			},
+			"field_level_10": {
+				"attack_max": 68,
+				"ball_speed_max": 670,
+				"defense_max": 120,
+				"resilience_max": 90,
+				"speed_max": 125,
+				"stamina_max": 154
+			},
+			"field_level_2": {
+				"attack_max": 28,
+				"ball_speed_max": 430,
+				"defense_max": 56,
+				"resilience_max": 42,
+				"speed_max": 61,
+				"stamina_max": 74
+			},
+			"field_level_3": {
+				"attack_max": 33,
+				"ball_speed_max": 460,
+				"defense_max": 64,
+				"resilience_max": 48,
+				"speed_max": 69,
+				"stamina_max": 84
+			},
+			"field_level_4": {
+				"attack_max": 38,
+				"ball_speed_max": 490,
+				"defense_max": 72,
+				"resilience_max": 54,
+				"speed_max": 77,
+				"stamina_max": 94
+			},
+			"field_level_5": {
+				"attack_max": 43,
+				"ball_speed_max": 520,
+				"defense_max": 80,
+				"resilience_max": 60,
+				"speed_max": 85,
+				"stamina_max": 104
+			},
+			"field_level_6": {
+				"attack_max": 48,
+				"ball_speed_max": 550,
+				"defense_max": 88,
+				"resilience_max": 66,
+				"speed_max": 93,
+				"stamina_max": 114
+			},
+			"field_level_7": {
+				"attack_max": 53,
+				"ball_speed_max": 580,
+				"defense_max": 96,
+				"resilience_max": 72,
+				"speed_max": 101,
+				"stamina_max": 124
+			},
+			"field_level_8": {
+				"attack_max": 58,
+				"ball_speed_max": 610,
+				"defense_max": 104,
+				"resilience_max": 78,
+				"speed_max": 109,
+				"stamina_max": 134
+			},
+			"field_level_9": {
+				"attack_max": 63,
+				"ball_speed_max": 640,
+				"defense_max": 112,
+				"resilience_max": 84,
+				"speed_max": 117,
+				"stamina_max": 144
+			},
+			"name": "卜三"
+		}
+	}
+}

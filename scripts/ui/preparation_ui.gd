@@ -58,12 +58,21 @@ var spirit_widgets: Array[Dictionary] = []
 var equipment_widgets: Array[Dictionary] = []
 var strategy_buttons: Array[Button] = []
 
+# 食物选择UI
+var food_option: OptionButton
+var food_eat_btn: Button
+var food_status_label: Label
+
 # 开始按钮引用
 var start_btn: Button
 
 
 func _ready() -> void:
 	_build_ui()
+	# 从存档恢复已吃食物状态
+	if NutritionManager != null:
+		NutritionManager.load_from_save()
+		_refresh_food_list()
 
 
 func _build_ui() -> void:
@@ -102,14 +111,17 @@ func _build_ui() -> void:
 	
 	# === 第三行：装备穿戴（3个独立卡片，横向排列）===
 	_build_equipment_row()
-	
-	# === 第四行：战术策略 ===
+
+	# === 第四行：训练系统 ===
+	_build_training_row()
+
+	# === 第五行：战术策略 ===
 	_build_strategy_panel()
-	
+
 	# === 底部：开始比赛按钮 ===
 	start_btn = Button.new()
 	start_btn.text = "开始比赛!"
-	start_btn.position = Vector2(475, 660)
+	start_btn.position = Vector2(475, 830)
 	start_btn.size = Vector2(250, 45)
 	start_btn.add_theme_font_size_override("font_size", 22)
 	start_btn.pressed.connect(_on_start_match)
@@ -197,6 +209,29 @@ func _build_player_card(index: int, x: float, y: float) -> void:
 	stamina_val.add_theme_color_override("font_color", Color.GREEN)
 	card.add_child(stamina_val)
 	
+	# 增益色块（体力条右侧，6个属性：体力/防御/速度/攻击/韧性/球速）
+	var bonus_colors: Array = []
+	var bonus_x_start: float = 60 + 200 + 6  # 体力条右边缘+间距
+	var bonus_size: float = 12.0
+	var bonus_gap: float = 2.0
+	var bonus_y: float = 38 + 3  # 垂直居中
+	var stat_colors: Array = [
+		Color(0.95, 0.3, 0.3),   # 0: stamina 红
+		Color(0.3, 0.6, 1.0),    # 1: defense 蓝
+		Color(1.0, 0.85, 0.2),   # 2: speed 黄
+		Color(1.0, 0.55, 0.2),   # 3: attack 橙
+		Color(0.75, 0.45, 0.95), # 4: resilience 紫
+		Color(0.3, 0.85, 0.85),  # 5: ball_speed 青
+	]
+	for s in range(6):
+		var box := ColorRect.new()
+		box.size = Vector2(bonus_size, bonus_size)
+		box.position = Vector2(bonus_x_start + s * (bonus_size + bonus_gap), bonus_y)
+		box.color = stat_colors[s]
+		box.visible = false
+		card.add_child(box)
+		bonus_colors.append(box)
+	
 	# 速度
 	var speed_label := Label.new()
 	speed_label.text = "速度: --"
@@ -243,7 +278,8 @@ func _build_player_card(index: int, x: float, y: float) -> void:
 		"attack_label": attack_label,
 		"defense_label": defense_label,
 		"sub_btn": sub_btn,
-		"state_label": state_label
+		"state_label": state_label,
+		"bonus_colors": bonus_colors
 	})
 
 
@@ -386,6 +422,16 @@ const EQUIP_SLOT_INFO := {
 }
 const EQUIP_SLOT_ORDER := ["glove", "jersey", "shoes"]
 
+const TRAIN_STATS_INFO := {
+	"stamina": {"name": "体力", "color": Color.GREEN},
+	"defense": {"name": "防御", "color": Color(0.4, 0.7, 1.0)},
+	"speed": {"name": "速度", "color": Color(1.0, 0.8, 0.3)},
+	"attack": {"name": "攻击", "color": Color(1.0, 0.4, 0.4)},
+	"resilience": {"name": "韧性", "color": Color(0.8, 0.5, 1.0)},
+	"ball_speed": {"name": "球速", "color": Color(0.5, 1.0, 0.6)},
+}
+const TRAIN_STATS_ORDER := ["stamina", "defense", "speed", "attack", "resilience", "ball_speed"]
+
 
 func _build_equipment_row() -> void:
 	"""构建装备穿戴行（3个独立卡片）"""
@@ -463,6 +509,290 @@ func _build_equipment_card(index: int, x: float, y: float) -> void:
 		"slot_icons": slot_icons,
 		"change_btn": change_btn,
 	})
+
+
+# ===== 第四行：训练系统 =====
+
+var training_widgets: Array[Dictionary] = []
+
+
+func _build_training_row() -> void:
+	var section_title := Label.new()
+	section_title.text = "— 训练系统 —"
+	section_title.position = Vector2(0, 580)
+	section_title.size = Vector2(1200, 25)
+	section_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	section_title.add_theme_font_size_override("font_size", 18)
+	section_title.add_theme_color_override("font_color", Color(0.5, 0.9, 0.6))
+	add_child(section_title)
+	
+	for i in range(3):
+		var x_pos: float = 50 + i * 390
+		_build_training_card(i, x_pos, 600)
+
+
+func _build_training_card(index: int, x: float, y: float) -> void:
+	var card := Panel.new()
+	card.position = Vector2(x, y)
+	card.size = Vector2(370, 90)
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color(0.15, 0.15, 0.22, 0.95)
+	card_style.border_color = Color(0.5, 0.9, 0.6, 0.5)
+	card_style.set_border_width_all(2)
+	card_style.set_corner_radius_all(8)
+	card.add_theme_stylebox_override("panel", card_style)
+	add_child(card)
+	
+	var pos_label := Label.new()
+	pos_label.text = "位置 %d 训练" % (index + 1)
+	pos_label.position = Vector2(10, 5)
+	pos_label.add_theme_font_size_override("font_size", 14)
+	pos_label.add_theme_color_override("font_color", Color(0.5, 0.9, 0.6))
+	card.add_child(pos_label)
+	
+	var train_btn := Button.new()
+	train_btn.text = "训练"
+	train_btn.position = Vector2(290, 5)
+	train_btn.size = Vector2(70, 26)
+	train_btn.add_theme_font_size_override("font_size", 13)
+	train_btn.add_theme_color_override("font_color", Color(0.5, 0.9, 0.6))
+	train_btn.pressed.connect(_on_open_training.bind(index))
+	card.add_child(train_btn)
+	
+	var stats_display := Label.new()
+	stats_display.text = "训练加成: 无"
+	stats_display.position = Vector2(10, 35)
+	stats_display.size = Vector2(350, 20)
+	stats_display.add_theme_font_size_override("font_size", 13)
+	stats_display.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+	card.add_child(stats_display)
+	
+	var field_lbl := Label.new()
+	var field_level: int = TrainingManager.get_field_level()
+	field_lbl.text = "场地等级: Lv.%d" % field_level
+	field_lbl.position = Vector2(10, 60)
+	field_lbl.add_theme_font_size_override("font_size", 12)
+	field_lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
+	card.add_child(field_lbl)
+	
+	training_widgets.append({
+		"card": card,
+		"pos_label": pos_label,
+		"train_btn": train_btn,
+		"stats_display": stats_display,
+		"field_lbl": field_lbl,
+	})
+
+
+func _update_training_widget(index: int) -> void:
+	if index >= training_widgets.size():
+		return
+	if index >= team_a_players.size():
+		return
+	var w: Dictionary = training_widgets[index]
+	var player: CharacterBody2D = team_a_players[index]
+	if not player or not is_instance_valid(player):
+		return
+	var char_id: String = player.character_id
+	var train_data: Dictionary = PlayerSaveManager.get_character_train(char_id)
+	
+	var bonus_text: String = ""
+	for stat_key in TRAIN_STATS_ORDER:
+		var bonus: int = int(train_data.get(stat_key + "_bonus", 0))
+		if bonus > 0:
+			if bonus_text != "":
+				bonus_text += " "
+			bonus_text += TRAIN_STATS_INFO[stat_key].name + "+" + str(bonus)
+	
+	w.stats_display.text = "训练加成: " + (bonus_text if bonus_text != "" else "无")
+	
+	var field_level: int = TrainingManager.get_field_level()
+	w.field_lbl.text = "场地等级: Lv.%d" % field_level
+
+
+# ===== 训练弹窗 =====
+
+var _train_popup_player_index: int = -1
+var _train_popup: Control = null
+
+
+func _on_open_training(index: int) -> void:
+	_open_training_popup(index)
+
+
+func _open_training_popup(player_index: int) -> void:
+	_close_training_popup()
+	_train_popup_player_index = player_index
+	
+	if player_index >= team_a_players.size():
+		return
+	var player: CharacterBody2D = team_a_players[player_index]
+	if not player or not is_instance_valid(player):
+		return
+	var char_id: String = player.character_id
+	var char_name: String = str(player.char_data.get("name", "?"))
+	var train_data: Dictionary = PlayerSaveManager.get_character_train(char_id)
+	var char_data: Dictionary = DataManager.get_character_by_id(char_id)
+	
+	var popup := Control.new()
+	popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	popup.name = "TrainingPopup"
+	add_child(popup)
+	_train_popup = popup
+	
+	var overlay := ColorRect.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.color = Color(0, 0, 0, 0.6)
+	overlay.gui_input.connect(_on_train_popup_bg_input)
+	popup.add_child(overlay)
+	
+	var panel := Panel.new()
+	panel.offset_left = 200
+	panel.offset_top = 60
+	panel.offset_right = 1000
+	panel.offset_bottom = 680
+	popup.add_child(panel)
+	
+	var title := Label.new()
+	title.text = "训练 - " + char_name
+	title.position = Vector2(210, 70)
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", Color(0.5, 0.9, 0.6))
+	popup.add_child(title)
+	
+	var field_level: int = TrainingManager.get_field_level()
+	var field_info := Label.new()
+	field_info.text = "当前场地等级: Lv.%d" % field_level
+	field_info.position = Vector2(210, 100)
+	field_info.add_theme_font_size_override("font_size", 14)
+	field_info.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
+	popup.add_child(field_info)
+	
+	var upgrade_cost: int = TrainingManager.get_field_upgrade_cost(field_level)
+	var upgrade_btn := Button.new()
+	if upgrade_cost > 0:
+		upgrade_btn.text = "升级场地 (花费 %d 童话币)" % upgrade_cost
+		upgrade_btn.disabled = PlayerSaveManager.get_currency("fairy_coin") < upgrade_cost
+	else:
+		upgrade_btn.text = "场地已满级"
+		upgrade_btn.disabled = true
+	upgrade_btn.position = Vector2(650, 95)
+	upgrade_btn.size = Vector2(230, 30)
+	upgrade_btn.add_theme_font_size_override("font_size", 13)
+	upgrade_btn.add_theme_color_override("font_color", Color(0.8, 0.6, 1.0))
+	upgrade_btn.pressed.connect(_on_upgrade_field)
+	popup.add_child(upgrade_btn)
+	
+	var train_cost: int = TrainingManager.get_train_cost()
+	var cost_lbl := Label.new()
+	cost_lbl.text = "每次训练花费: %d 童话币，属性+%d" % [train_cost, TrainingManager.TRAIN_BONUS_PER_TIME]
+	cost_lbl.position = Vector2(210, 130)
+	cost_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	popup.add_child(cost_lbl)
+	
+	var scroll := ScrollContainer.new()
+	scroll.offset_left = 210
+	scroll.offset_top = 160
+	scroll.offset_right = 990
+	scroll.offset_bottom = 640
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	popup.add_child(scroll)
+	
+	var vbox := VBoxContainer.new()
+	vbox.custom_minimum_size = Vector2(770, 0)
+	vbox.add_theme_constant_override("separation", 8)
+	scroll.add_child(vbox)
+	
+	for stat_key in TRAIN_STATS_ORDER:
+		var info: Dictionary = TRAIN_STATS_INFO.get(stat_key, {})
+		var base_val: float = float(char_data.get(stat_key, 0))
+		var bonus: int = int(train_data.get(stat_key + "_bonus", 0))
+		var max_val: float = TrainingManager.get_stat_max(char_id, stat_key)
+		
+		var row := HBoxContainer.new()
+		row.custom_minimum_size = Vector2(0, 40)
+		
+		var name_lbl := Label.new()
+		name_lbl.text = info.name
+		name_lbl.add_theme_font_size_override("font_size", 15)
+		name_lbl.add_theme_color_override("font_color", info.color)
+		name_lbl.custom_minimum_size = Vector2(60, 35)
+		row.add_child(name_lbl)
+		
+		var bar := ProgressBar.new()
+		bar.custom_minimum_size = Vector2(400, 24)
+		bar.max_value = max_val
+		bar.value = base_val + bonus
+		bar.show_percentage = false
+		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(bar)
+		
+		var val_lbl := Label.new()
+		val_lbl.text = "%.0f / %.0f" % [base_val + bonus, max_val]
+		val_lbl.add_theme_font_size_override("font_size", 13)
+		val_lbl.custom_minimum_size = Vector2(90, 35)
+		row.add_child(val_lbl)
+		
+		var train_btn := Button.new()
+		var can_train: bool = TrainingManager.can_train(char_id, stat_key)
+		if can_train:
+			train_btn.text = "训练"
+			train_btn.disabled = PlayerSaveManager.get_currency("fairy_coin") < train_cost
+		else:
+			train_btn.text = "已满"
+			train_btn.disabled = true
+		train_btn.custom_minimum_size = Vector2(60, 30)
+		train_btn.add_theme_font_size_override("font_size", 13)
+		train_btn.pressed.connect(_on_train_stat.bind(stat_key))
+		row.add_child(train_btn)
+		
+		vbox.add_child(row)
+	
+	var close_btn := Button.new()
+	close_btn.text = "关闭"
+	close_btn.position = Vector2(560, 645)
+	close_btn.size = Vector2(80, 30)
+	close_btn.pressed.connect(_close_training_popup)
+	popup.add_child(close_btn)
+
+
+func _on_train_stat(stat_key: String) -> void:
+	var idx: int = _train_popup_player_index
+	if idx < 0 or idx >= team_a_players.size():
+		return
+	var player: CharacterBody2D = team_a_players[idx]
+	if not player or not is_instance_valid(player):
+		return
+	var char_id: String = player.character_id
+	
+	var ok: bool = TrainingManager.train_stat(char_id, stat_key)
+	if ok:
+		print("[训练] %s 属性 %s 训练成功" % [char_id, stat_key])
+		_update_training_widget(idx)
+		_close_training_popup()
+		_open_training_popup(idx)
+
+
+func _on_upgrade_field() -> void:
+	var ok: bool = TrainingManager.upgrade_field()
+	if ok:
+		var new_level: int = TrainingManager.get_field_level()
+		print("[训练] 场地升级到 Lv.%d" % new_level)
+		for w in training_widgets:
+			w.field_lbl.text = "场地等级: Lv.%d" % new_level
+		_close_training_popup()
+
+
+func _on_train_popup_bg_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		_close_training_popup()
+
+
+func _close_training_popup() -> void:
+	if _train_popup and is_instance_valid(_train_popup):
+		_train_popup.queue_free()
+	_train_popup = null
+	_train_popup_player_index = -1
 
 
 func _update_equipment_widget(index: int) -> void:
@@ -763,7 +1093,7 @@ func _build_strategy_panel() -> void:
 	"""构建战术策略面板"""
 	var section_title := Label.new()
 	section_title.text = "— 战术策略 —"
-	section_title.position = Vector2(0, 565)
+	section_title.position = Vector2(0, 700)
 	section_title.size = Vector2(1200, 25)
 	section_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	section_title.add_theme_font_size_override("font_size", 18)
@@ -773,33 +1103,66 @@ func _build_strategy_panel() -> void:
 	# 个人策略
 	var personal_label := Label.new()
 	personal_label.text = "个人策略:"
-	personal_label.position = Vector2(80, 600)
+	personal_label.position = Vector2(80, 735)
 	personal_label.add_theme_font_size_override("font_size", 15)
 	personal_label.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
 	add_child(personal_label)
 	
-	_create_strategy_btn("突破进攻", PlayerStrategy.BREAKTHROUGH, 200, 597, 0)
-	_create_strategy_btn("防守反击", PlayerStrategy.DEFENSE, 310, 597, 1)
-	_create_strategy_btn("传球配合", PlayerStrategy.PASSING, 420, 597, 2)
+	_create_strategy_btn("突破进攻", PlayerStrategy.BREAKTHROUGH, 200, 732, 0)
+	_create_strategy_btn("防守反击", PlayerStrategy.DEFENSE, 310, 732, 1)
+	_create_strategy_btn("传球配合", PlayerStrategy.PASSING, 420, 732, 2)
 	
 	# 团队策略
 	var team_label := Label.new()
 	team_label.text = "团队策略:"
-	team_label.position = Vector2(560, 600)
+	team_label.position = Vector2(560, 735)
 	team_label.add_theme_font_size_override("font_size", 15)
 	team_label.add_theme_color_override("font_color", Color(1.0, 0.7, 0.3))
 	add_child(team_label)
 	
-	_create_strategy_btn("全力进攻", TeamStrategy.OFFENSIVE + 3, 680, 597, 3)
-	_create_strategy_btn("全力防守", TeamStrategy.DEFENSIVE + 3, 790, 597, 4)
-	_create_strategy_btn("攻守平衡", TeamStrategy.BALANCED + 3, 900, 597, 5)
+	_create_strategy_btn("全力进攻", TeamStrategy.OFFENSIVE + 3, 680, 732, 3)
+	_create_strategy_btn("全力防守", TeamStrategy.DEFENSIVE + 3, 790, 732, 4)
+	_create_strategy_btn("攻守平衡", TeamStrategy.BALANCED + 3, 900, 732, 5)
 	
 	# 策略说明
 	var desc := Label.new()
 	desc.text = "策略影响AI队友的行为模式，可随时切换"
-	desc.position = Vector2(350, 640)
+	desc.position = Vector2(350, 775)
 	desc.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
 	add_child(desc)
+
+	# === 食物选择（全队，整场1种1次） ===
+	var food_label := Label.new()
+	food_label.text = "赛前食物:"
+	food_label.position = Vector2(1020, 735)
+	food_label.add_theme_font_size_override("font_size", 14)
+	food_label.add_theme_color_override("font_color", Color(1.0, 0.8, 0.5))
+	add_child(food_label)
+
+	food_option = OptionButton.new()
+	food_option.position = Vector2(1020, 757)
+	food_option.size = Vector2(200, 30)
+	food_option.add_theme_font_size_override("font_size", 13)
+	add_child(food_option)
+
+	food_eat_btn = Button.new()
+	food_eat_btn.text = "食用"
+	food_eat_btn.position = Vector2(1230, 757)
+	food_eat_btn.size = Vector2(60, 30)
+	food_eat_btn.add_theme_font_size_override("font_size", 13)
+	food_eat_btn.add_theme_color_override("font_color", Color(0.9, 0.7, 0.3))
+	food_eat_btn.pressed.connect(_on_eat_food)
+	add_child(food_eat_btn)
+
+	food_status_label = Label.new()
+	food_status_label.text = ""
+	food_status_label.position = Vector2(1020, 790)
+	food_status_label.size = Vector2(270, 20)
+	food_status_label.add_theme_font_size_override("font_size", 12)
+	food_status_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	add_child(food_status_label)
+
+	_refresh_food_list()
 
 
 func _create_strategy_btn(text: String, strategy: int, x: float, y: float, btn_index: int) -> void:
@@ -825,6 +1188,8 @@ func load_battle_data(players: Array[CharacterBody2D]) -> void:
 			_update_player_widget(i, player)
 		if player and i < equipment_widgets.size():
 			_update_equipment_widget(i)
+		if player and i < training_widgets.size():
+			_update_training_widget(i)
 
 
 func _update_player_widget(index: int, player: CharacterBody2D) -> void:
@@ -844,6 +1209,42 @@ func _update_player_widget(index: int, player: CharacterBody2D) -> void:
 	
 	w.stamina_bar.value = 100.0
 	w.stamina_val.text = "100"
+	
+	# 更新增益色块显示（装备+食物）
+	if w.has("bonus_colors"):
+		var bonuses: Dictionary = _calc_player_bonuses(player.character_id)
+		var stat_keys: Array = ["stamina_bonus", "defense_bonus", "speed_bonus", "attack_bonus", "resilience_bonus", "ball_speed_bonus"]
+		var boxes: Array = w.bonus_colors
+		for s in range(6):
+			if s >= boxes.size():
+				continue
+			var bonus_val: float = float(bonuses.get(stat_keys[s], 0))
+			boxes[s].visible = bonus_val > 0.0
+
+
+## 计算球员总增益（装备+食物）
+func _calc_player_bonuses(char_id: String) -> Dictionary:
+	var result: Dictionary = {
+		"stamina_bonus": 0,
+		"defense_bonus": 0,
+		"speed_bonus": 0,
+		"attack_bonus": 0,
+		"resilience_bonus": 0,
+		"ball_speed_bonus": 0,
+	}
+	# 装备加成
+	if PlayerSaveManager != null:
+		var equip: Dictionary = PlayerSaveManager.get_equipment_bonuses(char_id)
+		for key in result:
+			if equip.has(key):
+				result[key] += int(equip[key])
+	# 食物加成（全队）
+	if NutritionManager != null:
+		var food: Dictionary = NutritionManager.get_team_bonuses()
+		for key in result:
+			if food.has(key):
+				result[key] += int(food[key])
+	return result
 
 
 # ===== 信号处理 =====
@@ -1288,6 +1689,73 @@ func _on_back_to_menu() -> void:
 	print("[备战] 返回主菜单")
 	visible = false
 	back_to_menu_requested.emit()
+
+
+# ===== 食物系统 =====
+
+## 刷新食物下拉列表（只显示背包里有的食物）
+func _refresh_food_list() -> void:
+	food_option.clear()
+	food_option.add_item("（不吃）", 0)
+	if InventoryManager == null:
+		return
+	var backpack: Array = InventoryManager.get_backpack_by_type("consumable")
+	for item in backpack:
+		var food_data: Dictionary = NutritionManager.get_food(item.get("item_id", ""))
+		if food_data.is_empty():
+			continue
+		var effect: Dictionary = food_data.get("effect", {})
+		var stat_name: String = {"stamina":"体力","defense":"防御","speed":"速度","attack":"攻击","resilience":"韧性","ball_speed":"球速"}.get(effect.get("stat",""), "?")
+		var display_text: String = "%s +%d（%s）" % [food_data.get("name",""), int(effect.get("value",0)), stat_name]
+		food_option.add_item(display_text, food_option.get_item_count())
+
+	# 如果已经吃过食物，显示状态
+	var active_id: String = NutritionManager.get_active_food_id()
+	if active_id != "":
+		var active_food: Dictionary = NutritionManager.get_food(active_id)
+		food_status_label.text = "已吃: %s" % active_food.get("name", "?")
+		food_status_label.add_theme_color_override("font_color", Color(0.3, 0.9, 0.3))
+		food_eat_btn.disabled = true
+		food_option.disabled = true
+	else:
+		food_status_label.text = "整场只能吃1种1次"
+		food_status_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+		food_eat_btn.disabled = false
+		food_option.disabled = false
+
+
+## 点击食用按钮
+func _on_eat_food() -> void:
+	var selected: int = food_option.selected
+	if selected <= 0:
+		food_status_label.text = "请选择食物"
+		food_status_label.add_theme_color_override("font_color", Color(0.9, 0.5, 0.3))
+		return
+
+	# 获取选中的食物ID（从背包列表里取）
+	var backpack: Array = InventoryManager.get_backpack_by_type("consumable")
+	var food_items: Array = []
+	for item in backpack:
+		var food_data: Dictionary = NutritionManager.get_food(item.get("item_id", ""))
+		if not food_data.is_empty():
+			food_items.append(item)
+
+	if selected - 1 >= food_items.size():
+		return
+
+	var food_id: String = food_items[selected - 1].get("item_id", "")
+	var ok: bool = NutritionManager.consume_food(food_id)
+	if ok:
+		var food_data: Dictionary = NutritionManager.get_food(food_id)
+		food_status_label.text = "已吃: %s" % food_data.get("name", "?")
+		food_status_label.add_theme_color_override("font_color", Color(0.3, 0.9, 0.3))
+		food_eat_btn.disabled = true
+		food_option.disabled = true
+		print("[备战] 已食用: %s" % food_data.get("name", ""))
+	else:
+		food_status_label.text = "食用失败（背包不足？）"
+		food_status_label.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
+		_refresh_food_list()
 
 
 # ===== 公开方法 =====
