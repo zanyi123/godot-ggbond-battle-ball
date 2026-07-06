@@ -309,20 +309,49 @@ func _on_skill_activated(skill_id: String, player_id: int) -> void:
 	"""技能已激活回调"""
 	print("[InputManager] 技能已激活: %s (玩家:%d)" % [skill_id, player_id])
 	_show_skill_toast(skill_id, "激活")
+	if controlled_player and controlled_player.get_instance_id() == player_id:
+		if controlled_player.has_method("set_active_skill"):
+			controlled_player.set_active_skill(skill_id)
+		
+		var skill_data = _get_skill_data(skill_id)
+		var tags: Array = skill_data.get("tags", [])
+		var has_ball_tag: bool = false
+		var has_field_tag: bool = false
+		var has_player_tag: bool = false
+		
+		for tag in tags:
+			var category: String = _get_tag_category(tag)
+			if category == "BALL":
+				has_ball_tag = true
+			elif category == "FIELD":
+				has_field_tag = true
+			elif category == "PLAYER":
+				has_player_tag = true
+		
+		if has_field_tag or has_player_tag:
+			print("[InputManager] 场地/球员类型技能，立即生效: %s" % skill_id)
+			if controlled_player.has_method("use_skill_by_id"):
+				controlled_player.use_skill_by_id(skill_id)
+			if skill_state_manager:
+				skill_state_manager.cancel_active_skill(player_id)
 
 
 func _on_skill_cancelled(skill_id: String, player_id: int) -> void:
 	"""技能已取消回调"""
 	print("[InputManager] 技能已取消: %s (玩家:%d)" % [skill_id, player_id])
 	_show_skill_toast(skill_id, "取消")
+	if controlled_player and controlled_player.get_instance_id() == player_id:
+		if controlled_player.has_method("clear_active_skill"):
+			controlled_player.clear_active_skill()
 
 
 func _on_skill_released(skill_id: String, player_id: int) -> void:
 	"""技能已释放回调"""
 	print("[InputManager] 技能已释放: %s (玩家:%d)" % [skill_id, player_id])
 	_show_skill_toast(skill_id, "释放")
-	# 通知玩家执行技能
 	if controlled_player and controlled_player.get_instance_id() == player_id:
+		if controlled_player.has_method("clear_active_skill"):
+			controlled_player.clear_active_skill()
 		if controlled_player.has_method("use_skill_by_id"):
 			controlled_player.use_skill_by_id(skill_id)
 
@@ -368,3 +397,55 @@ func _show_skill_toast(skill_id: String, state: String) -> void:
 	var hud = ui_layer.get_node_or_null("HUD")
 	if hud and hud.has_method("show_skill_toast"):
 		hud.show_skill_toast(skill_id, state)
+
+
+## ==================== 技能辅助方法 ====================
+
+var _skills_cache: Dictionary = {}
+var _tags_registry_cache: Dictionary = {}
+var _tags_loaded: bool = false
+
+
+func _get_skill_data(skill_id: String) -> Dictionary:
+	"""获取技能数据（带缓存）"""
+	if _skills_cache.has(skill_id):
+		return _skills_cache[skill_id]
+	
+	var skill_data: Dictionary = {}
+	if DataManager and DataManager.has_method("get_skill_by_id"):
+		skill_data = DataManager.get_skill_by_id(skill_id)
+	
+	_skills_cache[skill_id] = skill_data
+	return skill_data
+
+
+func _get_tag_category(tag_id: String) -> String:
+	"""获取标签分类（BALL/FIELD/PLAYER）"""
+	if not _tags_loaded:
+		_load_tags_registry()
+	
+	if _tags_registry_cache.has(tag_id):
+		return _tags_registry_cache[tag_id].get("category", "")
+	return ""
+
+
+func _load_tags_registry() -> void:
+	"""加载标签注册表"""
+	_tags_loaded = true
+	if not FileAccess.file_exists("res://data/spirits/tags_registry.json"):
+		return
+	
+	var file = FileAccess.open("res://data/spirits/tags_registry.json", FileAccess.READ)
+	if not file:
+		return
+	
+	var json_text = file.get_as_text()
+	file.close()
+	
+	var json = JSON.new()
+	if json.parse(json_text) != OK:
+		return
+	
+	var tags_array = json.data.get("tags", [])
+	for tag in tags_array:
+		_tags_registry_cache[tag.id] = tag

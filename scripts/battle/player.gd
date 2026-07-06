@@ -44,6 +44,131 @@ var _stagger_timer: float = 0.0  # 僵直持续时间（被击中后无法移动
 # 状态灯（第2步：控制状态系统）
 var _status_lights: Dictionary = {}  # { "stunned": { "remaining": 2.0, ... }, ... }
 
+# 状态指示器基础色（由 enter_catch / set_carrying_ball 设置，状态灯/技能激活可覆盖）
+var _base_indicator_color: Color = Color.TRANSPARENT
+
+# 状态灯 → 指示器颜色映射
+const _STATUS_COLORS: Dictionary = {
+	"stunned": Color.ORANGE,
+	"silenced": Color.GRAY,
+	"disarmed": Color(0.6, 0.1, 0.1),
+	"rooted": Color.SADDLE_BROWN,
+	"invincible": Color.GOLD,
+	"vulnerable": Color.RED,
+	"cc_immune": Color.CYAN,
+	"reveal": Color.WHITE,
+	"stealthed": Color(0.5, 0.5, 0.5, 0.5),
+}
+
+# 状态灯显示优先级（高→低，控制状态优先）
+const _STATUS_PRIORITY: PackedStringArray = [
+	"stunned", "silenced", "disarmed", "rooted",
+	"invincible", "vulnerable", "cc_immune", "reveal", "stealthed",
+]
+
+# 元素颜色映射（与 spirits.json 的 icon_color 保持一致）
+const _ELEMENT_COLORS: Dictionary = {
+	"金刚": Color("#FFD700"),
+	"大地": Color("#8B4513"),
+	"雷火": Color("#FF4500"),
+	"冰雪": Color("#87CEEB"),
+	"草木": Color("#32CD32"),
+	"梦幻": Color("#DA70D6"),
+}
+
+# 技能标签分类 → 视觉反馈类型
+const _TAG_CATEGORIES: Dictionary = {
+	"ball_dmg_up_pct": "BALL",
+	"ball_dmg_down_pct": "BALL",
+	"ball_dmg_up_flat": "BALL",
+	"ball_dmg_down_flat": "BALL",
+	"ball_speed_up_pct": "BALL",
+	"ball_speed_down_pct": "BALL",
+	"ball_speed_up_flat": "BALL",
+	"ball_speed_down_flat": "BALL",
+	"ball_tracking": "BALL",
+	"ball_avoid": "BALL",
+	"ball_boomerang": "BALL",
+	"ball_straight": "BALL",
+	"ball_lockon": "BALL",
+	"ball_spread": "BALL",
+	"ball_penetrate": "BALL",
+	"ball_range_up": "BALL",
+	"ball_range_down": "BALL",
+
+	"field_obs_add": "FIELD",
+	"field_obs_clear": "FIELD",
+	"field_terra_change": "FIELD",
+	"field_terra_revert": "FIELD",
+	"field_zone_mark": "FIELD",
+	"field_zone_clear": "FIELD",
+	"field_zone_boost": "FIELD",
+	"field_zone_slow": "FIELD",
+	"field_zone_danger": "FIELD",
+	"field_zone_safe": "FIELD",
+	"field_illusion_add": "FIELD",
+	"field_illusion_clear": "FIELD",
+
+	"player_atk_up_pct": "PLAYER",
+	"player_atk_down_pct": "PLAYER",
+	"player_atk_up_flat": "PLAYER",
+	"player_atk_down_flat": "PLAYER",
+	"player_def_up_pct": "PLAYER",
+	"player_def_down_pct": "PLAYER",
+	"player_def_up_flat": "PLAYER",
+	"player_def_down_flat": "PLAYER",
+	"player_spd_up_pct": "PLAYER",
+	"player_spd_down_pct": "PLAYER",
+	"player_spd_up_flat": "PLAYER",
+	"player_spd_down_flat": "PLAYER",
+	"player_res_up_pct": "PLAYER",
+	"player_res_down_pct": "PLAYER",
+	"player_res_up_flat": "PLAYER",
+	"player_res_down_flat": "PLAYER",
+	"player_invincible": "PLAYER",
+	"player_vulnerable": "PLAYER",
+	"player_stealth": "PLAYER",
+	"player_reveal": "PLAYER",
+	"player_hp_heal_pct": "PLAYER",
+	"player_hp_damage_pct": "PLAYER",
+	"player_hp_heal_flat": "PLAYER",
+	"player_hp_damage_flat": "PLAYER",
+	"player_hp_regen": "PLAYER",
+	"player_hp_dot": "PLAYER",
+	"player_move_slow": "PLAYER",
+	"player_move_boost": "PLAYER",
+	"player_root": "PLAYER",
+	"player_unroot": "PLAYER",
+	"player_energy_gain_pct": "PLAYER",
+	"player_energy_cost_pct": "PLAYER",
+	"player_energy_gain_flat": "PLAYER",
+	"player_energy_cost_flat": "PLAYER",
+	"player_energy_max_up_pct": "PLAYER",
+	"player_energy_max_down_pct": "PLAYER",
+	"player_energy_max_up_flat": "PLAYER",
+	"player_energy_max_down_flat": "PLAYER",
+	"player_spirit_cost_down": "PLAYER",
+	"player_spirit_cost_up": "PLAYER",
+	"player_spirit_uses_up": "PLAYER",
+	"player_spirit_cd_down": "PLAYER",
+	"player_spirit_cd_up": "PLAYER",
+	"player_spirit_double": "PLAYER",
+	"player_spirit_half": "PLAYER",
+	"player_stun": "PLAYER",
+	"player_cc_immune": "PLAYER",
+	"player_silence": "PLAYER",
+	"player_disarm": "PLAYER",
+	"player_teleport": "PLAYER",
+	"player_return": "PLAYER",
+}
+
+# 当前激活技能的视觉反馈类型
+var _active_skill_visual_type: String = ""
+var _active_skill_color: Color = Color.TRANSPARENT
+
+# 场地指示条（FIELD类型技能激活时显示）
+var _field_indicator: ColorRect = null
+
 # 闹钟纸条（第3步：持续效果系统）
 var _tick_effects: Dictionary = {}  # { "hp_regen": { "type": "regen", "rate": 5.0, "remaining": 5.0 }, ... }
 
@@ -678,13 +803,14 @@ func set_view_mode(mode: int) -> void:
 
 func _teardown_visuals() -> void:
 	# 释放所有视觉子节点(不含碰撞,碰撞靠 _setup_visuals 里的 has_node 判断保留)
-	for node in [avatar_bg, avatar_label, state_indicator, model_3d_anchor]:
+	for node in [avatar_bg, avatar_label, state_indicator, model_3d_anchor, _field_indicator]:
 		if node and is_instance_valid(node):
 			node.queue_free()
 	avatar_bg = null
 	avatar_label = null
 	state_indicator = null
 	model_3d_anchor = null
+	_field_indicator = null
 	# 清掉 3D 相关引用(避免悬挂指针,防止幂等重建时复用旧引用)
 	_animation_player = null
 	_model_slot = null
@@ -1102,29 +1228,28 @@ func set_penalized(penalized: bool) -> void:
 func enter_catch_state() -> void:
 	"""进入待接球状态"""
 	is_ready_to_catch = true
-	if state_indicator:
-		state_indicator.color = Color.YELLOW
+	_base_indicator_color = Color.YELLOW
+	_update_state_indicator()
 
 
 func exit_catch_state() -> void:
 	"""退出待接球状态"""
 	is_ready_to_catch = false
-	if state_indicator:
-		state_indicator.color = Color.TRANSPARENT
+	_base_indicator_color = Color.TRANSPARENT
+	_update_state_indicator()
 
 
 func set_carrying_ball(carrying: bool) -> void:
 	is_carrying_ball = carrying
 	if carrying:
-		if state_indicator:
-			state_indicator.color = Color.GREEN
+		_base_indicator_color = Color.GREEN
 		# 持球时显示已激活技能的光环
 		_update_ball_skill_aura()
 	elif not is_ready_to_catch:
-		if state_indicator:
-			state_indicator.color = Color.TRANSPARENT
+		_base_indicator_color = Color.TRANSPARENT
 		# 不持球时清除光环
 		_clear_ball_skill_aura()
+	_update_state_indicator()
 
 
 func can_be_scored_against() -> bool:
@@ -1216,19 +1341,96 @@ var _active_skill_id: String = ""
 func set_active_skill(skill_id: String) -> void:
 	"""设置当前激活的技能（外部调用）"""
 	_active_skill_id = skill_id
+	
+	var skill_data: Dictionary = DataManager.get_skill_by_id(skill_id)
+	if skill_data.is_empty():
+		_active_skill_visual_type = ""
+		_active_skill_color = Color.TRANSPARENT
+	else:
+		var element: String = skill_data.get("element", "")
+		_active_skill_color = _ELEMENT_COLORS.get(element, Color(1.0, 1.0, 0.5))
+		_active_skill_visual_type = _get_skill_visual_type(skill_data.get("tags", []))
+	
 	if is_carrying_ball:
 		_update_ball_skill_aura()
+	
+	_update_skill_visuals()
 
 
 func clear_active_skill() -> void:
 	"""清除当前激活的技能（外部调用）"""
 	_active_skill_id = ""
+	_active_skill_visual_type = ""
+	_active_skill_color = Color.TRANSPARENT
+	
 	_clear_ball_skill_aura()
+	_update_skill_visuals()
 
 
 func get_active_skill_id() -> String:
 	"""获取当前激活的技能ID"""
 	return _active_skill_id
+
+
+func _get_skill_visual_type(tags: Array) -> String:
+	"""根据技能标签判断视觉反馈类型（BALL > FIELD > PLAYER）"""
+	var has_ball: bool = false
+	var has_field: bool = false
+	var has_player: bool = false
+	
+	for tag in tags:
+		var category: String = _TAG_CATEGORIES.get(tag, "")
+		if category == "BALL":
+			has_ball = true
+		elif category == "FIELD":
+			has_field = true
+		elif category == "PLAYER":
+			has_player = true
+	
+	if has_ball:
+		return "BALL"
+	elif has_field:
+		return "FIELD"
+	elif has_player:
+		return "PLAYER"
+	return ""
+
+
+func _update_skill_visuals() -> void:
+	"""根据技能类型更新所有视觉反馈"""
+	_update_state_indicator()
+	_update_player_outline()
+	_update_field_indicator()
+
+
+func _update_player_outline() -> void:
+	"""更新球员轮廓发光（技能激活时显示元素色）"""
+	if not avatar_bg:
+		return
+	
+	if not _active_skill_visual_type.is_empty() and not _active_skill_color.a < 0.1:
+		avatar_bg.color = _active_skill_color
+	else:
+		avatar_bg.color = Color.BLUE if team == "a" else Color.RED
+
+
+func _update_field_indicator() -> void:
+	"""更新场地指示条（FIELD类型技能激活时，显示在球员朝向一侧）"""
+	if not _field_indicator:
+		_field_indicator = ColorRect.new()
+		_field_indicator.size = Vector2(8, 40)
+		_field_indicator.visible = false
+		add_child(_field_indicator)
+	
+	if _active_skill_visual_type == "FIELD" and not _active_skill_color.a < 0.1:
+		_field_indicator.color = _active_skill_color
+		_field_indicator.visible = true
+		
+		var facing_dir: Vector2 = facing_direction if facing_direction.length() > 0.1 else Vector2.RIGHT
+		var offset: Vector2 = facing_dir.normalized() * 36
+		_field_indicator.position = Vector2(-4, -20) + offset
+	else:
+		_field_indicator.visible = false
 
 
 func _update_ball_skill_aura() -> void:
@@ -1415,6 +1617,27 @@ func _tick_status_lights(delta: float) -> void:
 			_status_lights[status]["remaining"] = remaining
 	for status in to_remove:
 		_status_lights.erase(status)
+	_update_state_indicator()
+
+
+## 根据状态灯 > 技能激活 > 基础状态 的优先级更新指示器颜色
+func _update_state_indicator() -> void:
+	if not state_indicator or not is_instance_valid(state_indicator):
+		return
+
+	# 1. 状态灯优先级最高（控制状态优先）
+	for status in _STATUS_PRIORITY:
+		if is_status_active(status):
+			state_indicator.color = _STATUS_COLORS[status]
+			return
+
+	# 2. 技能激活（显示元素色）
+	if not _active_skill_visual_type.is_empty():
+		state_indicator.color = _active_skill_color
+		return
+
+	# 3. 恢复基础颜色（待接球/持球/正常）
+	state_indicator.color = _base_indicator_color
 
 
 ## ==================== 闹钟纸条系统（第3步：持续效果）====================

@@ -326,8 +326,29 @@ func _on_open_spirits() -> void:
 	print("[Main] 元灵系统已打开")
 
 
+var base_ui: Control = null
+
+
 func _on_open_base() -> void:
-	print("[Main] 基地 - 待实现")
+	if base_ui and is_instance_valid(base_ui) and base_ui.visible:
+		return
+	
+	if base_ui and is_instance_valid(base_ui):
+		base_ui.queue_free()
+		base_ui = null
+	
+	var BaseSystemClass = load("res://scripts/ui/base_system.gd")
+	base_ui = BaseSystemClass.new()
+	base_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(base_ui)
+	
+	_hide_menu_interactive_nodes()
+	
+	if base_ui.has_signal("closed"):
+		base_ui.closed.connect(func() -> void:
+			_show_menu_interactive_nodes()
+			base_ui = null
+		)
 
 
 func _on_open_dev_settings() -> void:

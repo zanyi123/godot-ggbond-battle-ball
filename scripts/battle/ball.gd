@@ -583,16 +583,16 @@ func _process_aura(delta: float) -> void:
 
 
 func _get_element_color(element: String) -> Color:
-	"""获取元素对应的颜色"""
+	"""获取元素对应的颜色（与 spirits.json 的 icon_color 保持一致）"""
 	var colors: Dictionary = {
-		"金刚": Color(0.85, 0.75, 0.3),
-		"大地": Color(0.7, 0.55, 0.35),
-		"雷火": Color(1.0, 0.4, 0.2),
-		"冰雪": Color(0.4, 0.8, 1.0),
-		"草木": Color(0.3, 0.8, 0.3),
-		"梦幻": Color(0.7, 0.5, 0.9),
+		"金刚": Color("#FFD700"),
+		"大地": Color("#8B4513"),
+		"雷火": Color("#FF4500"),
+		"冰雪": Color("#87CEEB"),
+		"草木": Color("#32CD32"),
+		"梦幻": Color("#DA70D6"),
 	}
-	return colors.get(element, Color(1.0, 1.0, 0.5))
+	return colors.get(element, Color("#FFFF00"))
 
 
 func _create_aura_texture(color: Color) -> Texture2D:
