@@ -59,7 +59,7 @@ const MODE_SLOT_ADMIN: int = 2
 signal phase_changed(new_phase: MatchPhase)
 signal match_time_updated(time: float)
 signal score_updated(team: String, new_score: int)
-signal match_ended(score_a: int, score_b: int)
+signal match_ended(score_a: int, score_b: int, result: String)  # result: "win"/"lose"/"draw"
 signal match_paused()
 signal match_resumed()
 
@@ -73,6 +73,7 @@ func _process(delta: float) -> void:
 		match_time_updated.emit(match_time)
 		
 		if match_time <= 0.0:
+			print("[GameManager] 时间到! 当前阶段=%s 剩余时间=%.2f" % [MatchPhase.keys()[match_phase], match_time])
 			_advance_phase()
 
 
@@ -81,6 +82,11 @@ func start_match() -> void:
 	score_team_b = 0
 	_set_phase(MatchPhase.FIRST_HALF)
 	match_time = get_first_half_duration()
+	# 确保比赛未暂停（备战界面 pause_match 后此处恢复）
+	if is_paused:
+		is_paused = false
+		match_resumed.emit()
+		print("[GameManager] 比赛恢复（start_match）")
 
 
 func _advance_phase() -> void:
@@ -95,16 +101,9 @@ func _advance_phase() -> void:
 			print("[GameManager] 下半场开始")
 		MatchPhase.SECOND_HALF:
 			_set_phase(MatchPhase.RESULTS)
-			print("[GameManager] 下半场结束，比赛结果: 队A %d - 队B %d" % [score_team_a, score_team_b])
-			match_ended.emit(score_team_a, score_team_b)
-			
-			# 宣布胜者
-			if score_team_a > score_team_b:
-				print("[GameManager] 胜者：队A！")
-			elif score_team_b > score_team_a:
-				print("[GameManager] 胜者：队B！")
-			else:
-				print("[GameManager] 平局！")
+			var result := _determine_result()
+			print("[GameManager] 下半场结束，比赛结果: 队A %d - 队B %d (%s)" % [score_team_a, score_team_b, result])
+			match_ended.emit(score_team_a, score_team_b, result)
 
 
 func _set_phase(phase: MatchPhase) -> void:
@@ -145,7 +144,8 @@ func _check_defeat_condition() -> void:
 		print("[GameManager] 队%s全部被击败，比赛结束！" % ("A" if all_a_defeated else "B"))
 		# 提前结束比赛
 		_set_phase(MatchPhase.RESULTS)
-		match_ended.emit(score_team_a, score_team_b)
+		var result := _determine_result()
+		match_ended.emit(score_team_a, score_team_b, result)
 
 
 func pause_match() -> void:
@@ -162,3 +162,24 @@ func resume_match() -> void:
 		is_paused = false
 		match_resumed.emit()
 		print("[GameManager] 比赛恢复")
+
+
+func _determine_result() -> String:
+	"""判定比赛结果（从玩家视角: 队A为玩家队）"""
+	if score_team_a > score_team_b:
+		return "win"
+	elif score_team_b > score_team_a:
+		return "lose"
+	else:
+		return "draw"
+
+
+func freeze_all() -> void:
+	"""冻结全场球员和球"""
+	is_paused = true
+	# 冻结所有球员
+	for player: CharacterBody2D in team_a + team_b:
+		if player and is_instance_valid(player):
+			player.velocity = Vector2.ZERO
+			player.set_physics_process(false)
+	print("[GameManager] 全场已冻结")

@@ -27,6 +27,7 @@ var max_spirit_energy: float = 100.0
 # 状态
 var is_defeated: bool = false
 signal defeated(player: CharacterBody2D)  # 被击败信号
+var _last_hit_by: CharacterBody2D = null  # 最近攻击者（用于击杀归属判定）
 var is_carrying_ball: bool = false
 var is_ready_to_catch: bool = false  # 待接球状态
 var is_charging_throw: bool = false   # 预发球状态
@@ -928,6 +929,10 @@ func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
 	if is_defeated:
 		return {"damage": 0, "effect": "none"}
 
+	# 记录最近攻击者（用于击杀归属判定）
+	if attacker:
+		_last_hit_by = attacker
+
 	# 无敌检查：灯亮则不受伤
 	if is_status_active("invincible"):
 		return {"damage": 0, "effect": "none"}
@@ -990,6 +995,14 @@ func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
 		print("[Player] %s 待接球受伤 %d(衰减%.0f%% 防御抗力%.1f) 效果=%s 剩余体力%d" % [pname, actual_damage, decay_rate * 100.0, defense_resist, effect, stamina])
 	else:
 		print("[Player] %s 非接球受伤 %d(防御抗力%.1f) 剩余体力%d" % [pname, actual_damage, defense_resist, stamina])
+
+	# 上报个人数据统计
+	if actual_damage > 0:
+		var mps = _get_match_stats()
+		if mps and mps.is_recording():
+			mps.report_damage_taken(self, actual_damage)
+			if attacker:
+				mps.report_damage_dealt(attacker, actual_damage)
 
 	return {"damage": actual_damage, "effect": effect}
 
@@ -1199,12 +1212,21 @@ func _on_defeated() -> void:
 	if avatar_label:
 		avatar_label.add_theme_color_override("font_color", Color.GRAY)
 
+	# 上报个人数据：击杀者需要从球获取
+	var _killer: CharacterBody2D = null
+	if is_instance_valid(_last_hit_by):
+		_killer = _last_hit_by
 	# 发出被击败信号(通知 battle_manager 移动到外场)
 	defeated.emit(self)
 
 	# 对手得分
 	var scoring_team := "b" if team == "a" else "a"
 	GameManager.add_score(scoring_team)
+
+	# 上报个人数据统计
+	var mps = _get_match_stats()
+	if mps and mps.is_recording():
+		mps.report_defeat(_killer if _killer else self, self)
 
 	print("[Player] %s 被击败! 属性减半" % (char_data["name"] if char_data.has("name") else ""))
 
@@ -1885,3 +1907,15 @@ func return_to_previous() -> void:
 	if _pre_teleport_pos != Vector2.ZERO:
 		global_position = _pre_teleport_pos
 		_pre_teleport_pos = Vector2.ZERO
+
+
+## 获取 MatchPlayerStats 实例（统一查找逻辑）
+func _get_match_stats() -> Node:
+	var mps = get_node_or_null("/root/MatchPlayerStats")
+	if mps:
+		return mps
+	# 从battle_manager查找
+	var bm = get_parent()
+	if bm and bm.has_node("MatchPlayerStats"):
+		return bm.get_node("MatchPlayerStats")
+	return null

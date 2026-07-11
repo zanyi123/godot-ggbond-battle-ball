@@ -27,6 +27,7 @@ PlayerSaveManager="*res://scripts/core/player_save_manager.gd"
 InventoryManager="*res://scripts/systems/inventory/inventory_manager.gd"
 TrainingManager="*res://scripts/systems/training/training_manager.gd"
 NutritionManager="*res://scripts/systems/nutrition/nutrition_manager.gd"
+RewardSystem="*res://scripts/systems/reward_system.gd"
 
 [display]
 

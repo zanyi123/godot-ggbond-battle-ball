@@ -273,6 +273,12 @@ func _on_body_entered(body: Node2D) -> void:
 	var actual_damage: int = result.get("damage", 0)
 	var effect: String = result.get("effect", "none")
 	ball_hit_player.emit(player, actual_damage)
+	
+	# 上报个人数据：待接球时被击中视为截球尝试
+	if player.is_ready_to_catch:
+		var mps = _get_match_stats()
+		if mps and mps.is_recording():
+			mps.report_ball_intercepted(player)
 
 	# === AOE范围伤害：以被击中球员为圆心，对范围内敌方球员造成伤害 ===
 	if tag_effect_handler and tag_effect_handler.has_ball_aoe():
@@ -360,6 +366,10 @@ func _catch_ball(player: CharacterBody2D) -> void:
 	player.set_carrying_ball(true)
 	_set_idle_visual()
 	ball_caught.emit(player)
+	# 上报个人数据：接球
+	var mps = _get_match_stats()
+	if mps and mps.is_recording():
+		mps.report_ball_caught(player)
 	print("[Ball] %s 接住球!" % _pname(player))
 
 
@@ -895,3 +905,14 @@ func _get_obstacle_hit_radius(obs: Node) -> float:
 		return obs.get_hit_radius()
 	# 默认基于碰撞形状估算
 	return 40.0
+
+
+## 获取 MatchPlayerStats 实例
+func _get_match_stats() -> Node:
+	var mps = get_node_or_null("/root/MatchPlayerStats")
+	if mps:
+		return mps
+	var bm = get_parent()
+	if bm and bm.has_node("MatchPlayerStats"):
+		return bm.get_node("MatchPlayerStats")
+	return null

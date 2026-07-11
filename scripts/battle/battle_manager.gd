@@ -45,6 +45,9 @@ var sim_time_scale: float = 6.0       # 模拟加速倍率（默认 6：物理�
 # 默认快速模式参数（可被命令行覆盖）：每半场8秒 → 约30秒一场
 const DEFAULT_SIM_HALF: float = 8.0
 var match_stats: Node = null          # 指标采集器
+var player_stats: Node = null         # 个人数据采集器（MatchPlayerStats）
+var match_duration: float = 0.0       # 比赛总时长（秒）
+var result_ui: Control = null         # 结算界面
 
 # 违规处理队列
 var pending_transfers: Array[Dictionary] = []  # [{player, offset_index, timer}]
@@ -546,6 +549,10 @@ func _schedule_transfer(player: CharacterBody2D, violation_type: int) -> void:
 
 func _process(delta: float) -> void:
 	"""每帧处理:违规检测 + 传送队列 + 朝向箭头 + 通信 + 气泡"""
+	# 累计比赛时长
+	if match_started and not GameManager.is_paused:
+		match_duration += delta
+	
 	_check_violations()
 	_update_all_player_arrows()
 	_update_message_bubbles(delta)
@@ -605,9 +612,23 @@ func _on_phase_changed(new_phase: int) -> void:
 			print("[Match] 下半场开始!")
 		GameManager.MatchPhase.RESULTS:
 			print("[Match] 比赛结束! 最终比分: %d - %d" % [GameManager.score_team_a, GameManager.score_team_b])
+			# 锁定输入（防止结算期间玩家继续操作）
+			match_started = false
+			if input_mgr:
+				input_mgr.match_started = false
 			# 比赛结束，清空已吃食物
 			if NutritionManager != null:
 				NutritionManager.clear_active_food()
+			# 停止个人数据采集
+			if player_stats:
+				player_stats.stop_recording()
+				# 记录最终体力
+				for p in team_a_players + team_b_players:
+					if p and is_instance_valid(p):
+						player_stats.record_final_stamina(p)
+				player_stats.print_report()
+			# 延迟2秒后弹出结算界面
+			_show_result_ui_delayed()
 
 
 # ===== 隔离墙管理 =====
@@ -1335,6 +1356,18 @@ func _on_prep_match_started() -> void:
 		if ai_mgr:
 			ai_mgr.match_stats = match_stats  # 注入给 ai_manager 上报卡死/状态切换
 		Engine.time_scale = sim_time_scale  # 加速整场模拟（含物理+计时）
+	
+	# === 个人数据采集器 ===
+	var mps_script := load("res://scripts/battle/match_player_stats.gd")
+	player_stats = Node.new()
+	player_stats.set_script(mps_script)
+	player_stats.name = "MatchPlayerStats"
+	add_child(player_stats)
+	player_stats.start_recording()
+	for p in team_a_players + team_b_players:
+		if p and is_instance_valid(p):
+			player_stats.register_player(p)
+	match_duration = 0.0  # 重置比赛时长
 
 	# 发球:球给随机一方
 	_assign_initial_ball()
@@ -1354,7 +1387,7 @@ func _on_back_to_menu() -> void:
 
 
 ## 自动模拟模式：比赛结束回调→停止采集+输出报告+退出
-func _on_sim_match_ended(score_a: int, score_b: int) -> void:
+func _on_sim_match_ended(score_a: int, score_b: int, _result: String) -> void:
 	Engine.time_scale = 1.0  # 恢复正常速度
 	if match_stats:
 		match_stats.stop_recording()
@@ -1362,3 +1395,89 @@ func _on_sim_match_ended(score_a: int, score_b: int) -> void:
 		match_stats.print_report()
 	print("[Sim] 比赛结束，退出")
 	get_tree().quit()
+
+
+# ===== 结算界面 =====
+
+func _show_result_ui_delayed() -> void:
+	"""延迟2秒后弹出结算界面"""
+	GameManager.freeze_all()
+	# 延迟显示
+	get_tree().create_timer(2.0).timeout.connect(_show_result_ui)
+
+
+func _show_result_ui() -> void:
+	"""弹出结算界面"""
+	var score_a: int = GameManager.score_team_a
+	var score_b: int = GameManager.score_team_b
+	var result: String = ""
+	if score_a > score_b:
+		result = "win"
+	elif score_b > score_a:
+		result = "lose"
+	else:
+		result = "draw"
+	
+	# 计算奖励
+	var rewards: Dictionary = RewardSystem.grant_rewards(result)
+	
+	# 获取统计数据
+	var stats_data: Dictionary = {}
+	if player_stats:
+		stats_data = player_stats.get_report()
+	
+	# 创建结算界面
+	var script := load("res://scripts/ui/match_result_ui.gd")
+	result_ui = Control.new()
+	result_ui.set_script(script)
+	result_ui.setup(score_a, score_b, match_duration, result, rewards, stats_data)
+	result_ui.result_confirmed.connect(_on_result_confirmed)
+	
+	# 添加到CanvasLayer上
+	if ui_layer:
+		ui_layer.add_child(result_ui)
+	else:
+		add_child(result_ui)
+	
+	print("[Match] 结算界面已显示")
+
+
+func _on_result_confirmed() -> void:
+	"""结算界面确认返回"""
+	print("[Match] 结算确认，返回主菜单")
+	GameManager.match_phase = GameManager.MatchPhase.PREP
+	GameManager.score_team_a = 0
+	GameManager.score_team_b = 0
+	GameManager.match_time = 0.0
+	GameManager.is_paused = false
+	GameManager.last_menu_mode = GameManager.last_menu_mode  # 保持模式
+	get_tree().change_scene_to_file("res://scenes/main/main_menu.tscn")
+
+
+# ===== 中途退出 =====
+
+func _unhandled_input(event: InputEvent) -> void:
+	"""ESC键中途退出比赛（不发奖励、不记历史）"""
+	if event.is_action_pressed("ui_cancel"):
+		var phase: int = GameManager.match_phase
+		if match_started and (phase == GameManager.MatchPhase.FIRST_HALF or phase == GameManager.MatchPhase.SECOND_HALF):
+			_forfeit_match()
+
+
+func _forfeit_match() -> void:
+	"""中途退出：不发奖励、不更新连胜、不记录对局历史"""
+	print("[Match] 中途退出，不结算，返回主菜单")
+	
+	# 停止数据采集
+	if player_stats and player_stats.is_recording():
+		player_stats.stop_recording()
+	
+	# 清空全场状态
+	GameManager.freeze_all()
+	GameManager.match_phase = GameManager.MatchPhase.PREP
+	GameManager.score_team_a = 0
+	GameManager.score_team_b = 0
+	GameManager.match_time = 0.0
+	GameManager.is_paused = false
+	
+	get_tree().change_scene_to_file("res://scenes/main/main_menu.tscn")

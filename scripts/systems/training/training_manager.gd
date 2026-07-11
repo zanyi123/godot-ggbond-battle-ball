@@ -58,19 +58,19 @@ func _generate_default_growth_curves() -> void:
 		"ball_speed": 30,
 	}
 	
-	for char in chars:
-		var cid: String = char.get("id", "")
-		var cname: String = char.get("name", "")
+	for char_data in chars:
+		var cid: String = char_data.get("id", "")
+		var cname: String = char_data.get("name", "")
 		if cid == "":
 			continue
 		
 		var base_stats := {
-			"stamina": float(char.get("stamina", 80)),
-			"defense": float(char.get("defense", 60)),
-			"speed": float(char.get("speed", 70)),
-			"attack": float(char.get("attack", 40)),
-			"resilience": float(char.get("resilience", 50)),
-			"ball_speed": float(char.get("ball_speed", 400))
+			"stamina": float(char_data.get("stamina", 80)),
+			"defense": float(char_data.get("defense", 60)),
+			"speed": float(char_data.get("speed", 70)),
+			"attack": float(char_data.get("attack", 40)),
+			"resilience": float(char_data.get("resilience", 50)),
+			"ball_speed": float(char_data.get("ball_speed", 400))
 		}
 		
 		var char_curve: Dictionary = {

@@ -238,12 +238,17 @@ func _show_equipment_tab() -> void:
 			grid.add_child(card)
 
 
-func _create_item_card(item_def: Dictionary, count: int) -> ColorRect:
-	var card := ColorRect.new()
-	card.color = Color(0.12, 0.15, 0.22, 0.98)
+func _create_item_card(item_def: Dictionary, count: int) -> Control:
+	var card := Control.new()
+	card.size = Vector2(270, 100)
 	card.custom_minimum_size = Vector2(270, 100)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.clip_contents = true
+	
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.12, 0.15, 0.22, 0.98)
+	card.add_child(bg)
 	
 	var icon_path: String = item_def.get("icon", "")
 	var item_name: String = item_def.get("name", "未知物品")
@@ -255,29 +260,85 @@ func _create_item_card(item_def: Dictionary, count: int) -> ColorRect:
 	if InventoryManager and InventoryManager.has_method("get_rarity_color"):
 		rarity_color = InventoryManager.get_rarity_color(rarity)
 	
-	var icon_bg := ColorRect.new()
-	icon_bg.position = Vector2(8, 8)
-	icon_bg.size = Vector2(80, 80)
-	icon_bg.color = Color(0.08, 0.1, 0.15)
-	card.add_child(icon_bg)
-	
 	var final_icon_path: String = ""
 	if icon_path != "" and ResourceLoader.exists(icon_path):
 		final_icon_path = icon_path
+		print("[Base] ✓ 图标路径有效: %s" % icon_path)
 	else:
 		final_icon_path = _get_fallback_icon_path(item_type, sub_type, rarity)
+		print("[Base] ! fallback: %s" % final_icon_path)
 	
-	if final_icon_path != "" and ResourceLoader.exists(final_icon_path):
-		var tex := load(final_icon_path)
+	if final_icon_path != "":
+		var tex = load(final_icon_path)
 		if tex is Texture2D:
+			var icon_bg := ColorRect.new()
+			icon_bg.position = Vector2(8, 8)
+			icon_bg.size = Vector2(80, 80)
+			icon_bg.color = Color(0.08, 0.1, 0.15)
+			icon_bg.z_index = 5
+			card.add_child(icon_bg)
+			
 			var icon_rect := TextureRect.new()
-			icon_rect.position = Vector2(0, 0)
+			icon_rect.position = Vector2(8, 8)
 			icon_rect.size = Vector2(80, 80)
 			icon_rect.texture = tex
 			icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-			icon_bg.add_child(icon_rect)
+			icon_rect.clip_contents = true
+			icon_rect.z_index = 10
+			card.add_child(icon_rect)
+		else:
+			print("[Base] ✗ 加载失败")
+	else:
+		print("[Base] ✗ 无可用图标路径")
 	
-	_create_item_card_remaining(card, item_name, rarity_color, item_def, count)
+	var name_label := Label.new()
+	name_label.text = item_name
+	name_label.position = Vector2(96, 10)
+	name_label.size = Vector2(160, 25)
+	name_label.add_theme_font_size_override("font_size", 16)
+	name_label.add_theme_color_override("font_color", rarity_color)
+	card.add_child(name_label)
+	
+	var stats_dict: Dictionary = item_def.get("stats", {})
+	var effect_dict: Dictionary = item_def.get("effect", {})
+	var stat_text: String = ""
+	
+	if stats_dict.size() > 0:
+		var idx: int = 0
+		for key in stats_dict:
+			var val = stats_dict[key]
+			if stat_text != "":
+				stat_text += "\n"
+			stat_text += "%s +%s" % [key, str(val)]
+			idx += 1
+			if idx >= 2:
+				break
+	
+	if effect_dict.size() > 0 and stat_text == "":
+		var effect_stat: String = effect_dict.get("stat", "")
+		var effect_val = effect_dict.get("value", 0)
+		stat_text = "%s +%s" % [effect_stat, str(effect_val)]
+	
+	if stat_text == "":
+		stat_text = "暂无属性"
+	
+	var stats_label := Label.new()
+	stats_label.text = stat_text
+	stats_label.position = Vector2(96, 40)
+	stats_label.size = Vector2(160, 50)
+	stats_label.add_theme_font_size_override("font_size", 12)
+	stats_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
+	card.add_child(stats_label)
+	
+	if count > 1:
+		var count_label := Label.new()
+		count_label.text = "x%d" % count
+		count_label.position = Vector2(230, 10)
+		count_label.size = Vector2(30, 20)
+		count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		count_label.add_theme_font_size_override("font_size", 14)
+		count_label.add_theme_color_override("font_color", Color(0.9, 0.8, 0.5))
+		card.add_child(count_label)
 	
 	return card
 
@@ -321,58 +382,6 @@ func _get_fallback_icon_path(item_type: String, sub_type: String, rarity: String
 			return path
 	
 	return ""
-
-
-func _create_item_card_remaining(card: ColorRect, item_name: String, rarity_color: Color, item_def: Dictionary, count: int) -> void:
-	var name_label := Label.new()
-	name_label.text = item_name
-	name_label.position = Vector2(96, 10)
-	name_label.size = Vector2(160, 25)
-	name_label.add_theme_font_size_override("font_size", 16)
-	name_label.add_theme_color_override("font_color", rarity_color)
-	name_label.clip_contents = true
-	card.add_child(name_label)
-	
-	var stats_dict: Dictionary = item_def.get("stats", {})
-	var effect_dict: Dictionary = item_def.get("effect", {})
-	var stat_text: String = ""
-	
-	if stats_dict.size() > 0:
-		var idx: int = 0
-		for key in stats_dict:
-			var val = stats_dict[key]
-			if stat_text != "":
-				stat_text += "\n"
-			stat_text += "%s +%s" % [key, str(val)]
-			idx += 1
-			if idx >= 2:
-				break
-	
-	if effect_dict.size() > 0 and stat_text == "":
-		var effect_stat: String = effect_dict.get("stat", "")
-		var effect_val = effect_dict.get("value", 0)
-		stat_text = "%s +%s" % [effect_stat, str(effect_val)]
-	
-	if stat_text == "":
-		stat_text = "暂无属性"
-	
-	var stats_label := Label.new()
-	stats_label.text = stat_text
-	stats_label.position = Vector2(96, 40)
-	stats_label.size = Vector2(160, 50)
-	stats_label.add_theme_font_size_override("font_size", 12)
-	stats_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
-	card.add_child(stats_label)
-	
-	if count > 1:
-		var count_label := Label.new()
-		count_label.text = "x%d" % count
-		count_label.position = Vector2(230, 10)
-		count_label.size = Vector2(30, 20)
-		count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		count_label.add_theme_font_size_override("font_size", 14)
-		count_label.add_theme_color_override("font_color", Color(0.9, 0.8, 0.5))
-		card.add_child(count_label)
 
 
 func _show_training_tab() -> void:
