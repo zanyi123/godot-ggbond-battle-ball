@@ -65,6 +65,12 @@ var food_status_label: Label
 
 # 开始按钮引用
 var start_btn: Button
+# 标题引用（用于中场休息时修改文本）
+var _title_label: Label
+# 中场休息倒计时标签
+var _half_time_timer_label: Label
+# 中场休息模式标记
+var _is_half_time: bool = false
 
 
 func _ready() -> void:
@@ -73,6 +79,15 @@ func _ready() -> void:
 	if NutritionManager != null:
 		NutritionManager.load_from_save()
 		_refresh_food_list()
+
+
+func _process(_delta: float) -> void:
+	# 中场休息时更新倒计时显示
+	if _is_half_time and GameManager:
+		var t: float = max(0.0, GameManager.match_time)
+		var mins: int = int(t) / 60
+		var secs: int = int(t) % 60
+		_half_time_timer_label.text = "中场休息 %02d:%02d" % [mins, secs]
 
 
 func _build_ui() -> void:
@@ -84,14 +99,14 @@ func _build_ui() -> void:
 	add_child(bg)
 	
 	# 标题
-	var title := Label.new()
-	title.text = "⚔ 备战界面 ⚔"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.position = Vector2(0, 15)
-	title.size = Vector2(1200, 35)
-	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color(1, 0.9, 0.3))
-	add_child(title)
+	_title_label = Label.new()
+	_title_label.text = "⚔ 备战界面 ⚔"
+	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title_label.position = Vector2(0, 15)
+	_title_label.size = Vector2(1200, 35)
+	_title_label.add_theme_font_size_override("font_size", 28)
+	_title_label.add_theme_color_override("font_color", Color(1, 0.9, 0.3))
+	add_child(_title_label)
 	
 	# 返回主菜单按钮（左上角）
 	var back_btn := Button.new()
@@ -126,6 +141,17 @@ func _build_ui() -> void:
 	start_btn.add_theme_font_size_override("font_size", 22)
 	start_btn.pressed.connect(_on_start_match)
 	add_child(start_btn)
+
+	# === 底部：中场休息倒计时（默认隐藏）===
+	_half_time_timer_label = Label.new()
+	_half_time_timer_label.text = "中场休息 01:00"
+	_half_time_timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_half_time_timer_label.position = Vector2(0, 835)
+	_half_time_timer_label.size = Vector2(1200, 35)
+	_half_time_timer_label.add_theme_font_size_override("font_size", 26)
+	_half_time_timer_label.add_theme_color_override("font_color", Color(1, 0.9, 0.3))
+	_half_time_timer_label.visible = false
+	add_child(_half_time_timer_label)
 
 
 # ===== 第一行：球员状态 =====
@@ -810,7 +836,7 @@ func _update_equipment_widget(index: int) -> void:
 	
 	for s in range(3):
 		var slot_key: String = EQUIP_SLOT_ORDER[s]
-		var item_id: String = equipped.get(slot_key, "")
+		var item_id: String = PlayerSaveManager.get_equipped_item(char_id, slot_key)
 		var slot_lbl: Label = w.slot_labels[s]
 		if item_id == "":
 			var info: Dictionary = EQUIP_SLOT_INFO.get(slot_key, {})
@@ -819,9 +845,18 @@ func _update_equipment_widget(index: int) -> void:
 		else:
 			var def: Dictionary = InventoryManager.get_item_def(item_id)
 			var name: String = str(def.get("name", item_id))
-			slot_lbl.text = name
+			# 耐久值显示
+			var cur_dur: float = PlayerSaveManager.get_equipped_durability(char_id, slot_key)
+			var rarity_key: String = str(def.get("rarity", "common"))
+			var max_dur: int = PlayerSaveManager.RARITY_MAX_DURABILITY.get(rarity_key, 50)
+			var dur_pct: float = cur_dur / float(max_dur) if max_dur > 0 else 0.0
+			var dur_color: Color = Color(0.3, 0.9, 0.4) if dur_pct > 0.5 else (Color(0.9, 0.8, 0.2) if dur_pct > 0.2 else Color(0.9, 0.3, 0.3))
+			slot_lbl.text = "%s  [耐久:%d/%d]" % [name, int(cur_dur), max_dur]
 			var rarity: String = str(def.get("rarity", "common"))
 			slot_lbl.add_theme_color_override("font_color", InventoryManager.get_rarity_color(rarity))
+			# 耐久低时用颜色警示（覆盖稀有度色）
+			if dur_pct <= 0.3:
+				slot_lbl.add_theme_color_override("font_color", dur_color)
 
 
 # ===== 装备选择弹窗 =====
@@ -890,14 +925,17 @@ func _open_equipment_select_popup(player_index: int) -> void:
 	
 	for slot_key in EQUIP_SLOT_ORDER:
 		var info: Dictionary = EQUIP_SLOT_INFO.get(slot_key, {})
-		var item_id: String = equipped.get(slot_key, "")
+		var item_id: String = PlayerSaveManager.get_equipped_item(char_id, slot_key)
 		var slot_lbl := Label.new()
 		if item_id == "":
 			slot_lbl.text = str(info.get("icon", "")) + " " + str(info.get("name", "")) + ": 未装备"
 			slot_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
 		else:
 			var def: Dictionary = InventoryManager.get_item_def(item_id)
-			slot_lbl.text = str(info.get("icon", "")) + " " + str(def.get("name", item_id))
+			var cur_dur: float = PlayerSaveManager.get_equipped_durability(char_id, slot_key)
+			var rarity_str: String = str(def.get("rarity", "common"))
+			var max_dur: int = PlayerSaveManager.RARITY_MAX_DURABILITY.get(rarity_str, 50)
+			slot_lbl.text = str(info.get("icon", "")) + " " + str(def.get("name", item_id)) + " [%d/%d]" % [int(cur_dur), max_dur]
 			var rarity: String = str(def.get("rarity", "common"))
 			slot_lbl.add_theme_color_override("font_color", InventoryManager.get_rarity_color(rarity))
 		slot_lbl.add_theme_font_size_override("font_size", 14)
@@ -930,16 +968,19 @@ func _open_equipment_select_popup(player_index: int) -> void:
 		vbox.add_child(slot_title)
 		
 		# 当前穿戴的装备 - 卸下按钮
-		var cur_item_id: String = equipped.get(slot_key, "")
+		var cur_item_id: String = PlayerSaveManager.get_equipped_item(char_id, slot_key)
 		if cur_item_id != "":
 			var cur_def: Dictionary = InventoryManager.get_item_def(cur_item_id)
 			var cur_row := HBoxContainer.new()
 			cur_row.custom_minimum_size = Vector2(0, 36)
-			
+
+			var cur_dur: float = PlayerSaveManager.get_equipped_durability(char_id, slot_key)
+			var cur_rarity: String = str(cur_def.get("rarity", "common"))
+			var cur_max_dur: int = PlayerSaveManager.RARITY_MAX_DURABILITY.get(cur_rarity, 50)
 			var cur_name := Label.new()
-			cur_name.text = "当前: " + str(cur_def.get("name", cur_item_id))
+			cur_name.text = "当前: %s [耐久:%d/%d]" % [str(cur_def.get("name", cur_item_id)), int(cur_dur), cur_max_dur]
 			cur_name.add_theme_font_size_override("font_size", 14)
-			cur_name.add_theme_color_override("font_color", InventoryManager.get_rarity_color(str(cur_def.get("rarity", "common"))))
+			cur_name.add_theme_color_override("font_color", InventoryManager.get_rarity_color(cur_rarity))
 			cur_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			cur_row.add_child(cur_name)
 			
@@ -1677,6 +1718,25 @@ func _close_spirit_popup() -> void:
 	_spirit_popup_player_index = -1
 
 
+## 设置中场休息模式（隐藏开始按钮，显示倒计时）
+func set_half_time_mode(is_half_time: bool) -> void:
+	_is_half_time = is_half_time
+	if is_half_time:
+		if _title_label:
+			_title_label.text = "⚔ 中场休息 ⚔"
+		if start_btn:
+			start_btn.visible = false
+		if _half_time_timer_label:
+			_half_time_timer_label.visible = true
+	else:
+		if _title_label:
+			_title_label.text = "⚔ 备战界面 ⚔"
+		if start_btn:
+			start_btn.visible = true
+		if _half_time_timer_label:
+			_half_time_timer_label.visible = false
+
+
 func _on_start_match() -> void:
 	"""开始比赛"""
 	print("[备战] 开始比赛!")
@@ -1752,6 +1812,7 @@ func _on_eat_food() -> void:
 		food_eat_btn.disabled = true
 		food_option.disabled = true
 		print("[备战] 已食用: %s" % food_data.get("name", ""))
+		_refresh_food_list()
 	else:
 		food_status_label.text = "食用失败（背包不足？）"
 		food_status_label.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))

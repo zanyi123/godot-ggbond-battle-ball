@@ -3,7 +3,29 @@ extends Node
 ## 挂载为Autoload单例，全局访问
 ## 支持3个存档位、版本迁移、坏档备份、自动保存
 
-const SAVE_VERSION := 1
+const SAVE_VERSION := 2
+
+## 装备耐久消耗常量
+const DURABILITY_LOSS_PER_HIT := 0.1
+const DURABILITY_LOSS_PER_CATCH := 0.1
+
+## 稀有度对应的耐久衰减阈值（低于此值属性减半）
+const RARITY_DURABILITY_THRESHOLD := {
+	"common": 30,
+	"good": 40,
+	"rare": 50,
+	"epic": 60,
+	"legendary": 75
+}
+
+## 稀有度对应的最大耐久
+const RARITY_MAX_DURABILITY := {
+	"common": 50,
+	"good": 80,
+	"rare": 100,
+	"epic": 120,
+	"legendary": 150
+}
 const SAVE_DIR := "user://saves/"
 const SAVE_FILE_PREFIX := "save_"
 const SAVE_FILE_SUFFIX := ".json"
@@ -170,6 +192,25 @@ func _migrate_save(data: Dictionary, from_version: int) -> Dictionary:
 		if not result.has("equipment"):
 			result["equipment"] = {"equipped": {}, "inventory": []}
 	
+	# v2: 装备耐久系统 - 旧格式 {slot: "item_id"} 迁移为新格式 {slot: {"item_id":"xxx", "durability": max}}
+	if from_version < 2:
+		var equipment: Dictionary = result.get("equipment", {})
+		var equipped: Dictionary = equipment.get("equipped", {})
+		for char_id in equipped.keys():
+			var char_eq: Dictionary = equipped[char_id]
+			for slot in EQUIP_SLOTS:
+				var val = char_eq.get(slot, "")
+				if val is String and val != "":
+					var def: Dictionary = InventoryManager.get_item_def(val)
+					var rarity: String = def.get("rarity", "common")
+					var max_dur: int = RARITY_MAX_DURABILITY.get(rarity, 50)
+					char_eq[slot] = {"item_id": val, "durability": float(max_dur)}
+				elif val is String and val == "":
+					char_eq[slot] = {"item_id": "", "durability": 0}
+			equipped[char_id] = char_eq
+		equipment["equipped"] = equipped
+		result["equipment"] = equipment
+	
 	result["version"] = SAVE_VERSION
 	print("[PlayerSaveManager] 存档迁移: v%d -> v%d" % [from_version, SAVE_VERSION])
 	return result
@@ -334,36 +375,133 @@ func get_total_stat(char_id: String, stat_key: String) -> int:
 const EQUIP_SLOTS := ["glove", "jersey", "shoes"]
 
 
-## 获取某角色的全部已穿戴装备 {slot: item_id}
+## 获取某角色的全部已穿戴装备 {slot: {"item_id":"xxx", "durability": float}}
 func get_equipped(char_id: String) -> Dictionary:
 	var equipment: Dictionary = save_data.get("equipment", {})
 	var equipped: Dictionary = equipment.get("equipped", {})
 	if not equipped.has(char_id):
-		equipped[char_id] = {"glove": "", "jersey": "", "shoes": ""}
+		var empty_eq := {}
+		for slot in EQUIP_SLOTS:
+			empty_eq[slot] = {"item_id": "", "durability": 0}
+		equipped[char_id] = empty_eq
 		equipment["equipped"] = equipped
 		save_data["equipment"] = equipment
-	return equipped.get(char_id, {"glove": "", "jersey": "", "shoes": ""})
+	return equipped.get(char_id, {})
 
 
 ## 获取某角色某槽位的装备ID（空字符串=未穿戴）
 func get_equipped_item(char_id: String, slot: String) -> String:
 	var eq: Dictionary = get_equipped(char_id)
-	return eq.get(slot, "")
+	var slot_data = eq.get(slot, {"item_id": ""})
+	if slot_data is String:
+		return slot_data
+	return slot_data.get("item_id", "")
+
+
+## 获取某角色某槽位装备的耐久值
+func get_equipped_durability(char_id: String, slot: String) -> float:
+	var eq: Dictionary = get_equipped(char_id)
+	var slot_data = eq.get(slot, {})
+	if slot_data is Dictionary:
+		return slot_data.get("durability", 0.0)
+	return 0.0
+
+
+## 开发者工具：直接设置某角色某槽位的装备耐久
+func set_equipped_durability(char_id: String, slot: String, new_dur: float) -> void:
+	var equipment: Dictionary = save_data.get("equipment", {})
+	var equipped: Dictionary = equipment.get("equipped", {})
+	if not equipped.has(char_id):
+		return
+	var char_eq: Dictionary = equipped[char_id]
+	var slot_data = char_eq.get(slot, {})
+	if slot_data is Dictionary:
+		slot_data["durability"] = clamp(new_dur, 0.0, 9999.0)
+		char_eq[slot] = slot_data
+		equipped[char_id] = char_eq
+		equipment["equipped"] = equipped
+		save_data["equipment"] = equipment
+		save_slot()
+
+
+## 修复某角色全部装备耐久为最大值（开发者工具用）
+func repair_all_equipment_max(char_id: String) -> void:
+	var eq: Dictionary = get_equipped(char_id)
+	for slot in EQUIP_SLOTS:
+		var slot_data = eq.get(slot, {})
+		if slot_data is Dictionary:
+			var item_id: String = slot_data.get("item_id", "")
+			if item_id != "":
+				var def: Dictionary = InventoryManager.get_item_def(item_id)
+				var rarity: String = def.get("rarity", "common")
+				var max_dur: int = RARITY_MAX_DURABILITY.get(rarity, 50)
+				slot_data["durability"] = float(max_dur)
+				eq[slot] = slot_data
+	save_data["equipment"]["equipped"][char_id] = eq
+	save_slot()
+
+
+func get_backpack_item_durability(item_id: String) -> float:
+	var inv: Dictionary = save_data.get("inventory", {})
+	var items: Array = inv.get("items", [])
+	for entry in items:
+		if entry.get("item_id", "") == item_id:
+			return float(entry.get("durability", 0))
+	return 0.0
+
+
+func get_all_equipped() -> Dictionary:
+	var equipment: Dictionary = save_data.get("equipment", {})
+	return equipment.get("equipped", {}).duplicate(true)
+
+
+## 清空所有已穿戴装备（开发者清空物资用）
+func clear_all_equipment() -> void:
+	var equipment: Dictionary = save_data.get("equipment", {})
+	var equipped: Dictionary = equipment.get("equipped", {})
+	for char_id in equipped.keys():
+		var empty_eq := {}
+		for s in EQUIP_SLOTS:
+			empty_eq[s] = {"item_id": "", "durability": 0}
+		equipped[char_id] = empty_eq
+	equipment["equipped"] = equipped
+	save_data["equipment"] = equipment
+	save_slot()
 
 
 ## 穿戴装备：只更新存档里的装备记录，不操作背包
 ## 返回被替换下来的旧装备ID（空字符串=原本没穿）
-func equip_item(char_id: String, slot: String, item_id: String) -> String:
+## initial_durability >= 0 时使用指定耐久值，否则使用最大值
+func equip_item(char_id: String, slot: String, item_id: String, initial_durability: float = -1.0) -> String:
 	var equipment: Dictionary = save_data.get("equipment", {})
 	var equipped: Dictionary = equipment.get("equipped", {})
 	if not equipped.has(char_id):
-		equipped[char_id] = {"glove": "", "jersey": "", "shoes": ""}
-	var old: String = equipped[char_id].get(slot, "")
-	equipped[char_id][slot] = item_id
+		var empty_eq := {}
+		for s in EQUIP_SLOTS:
+			empty_eq[s] = {"item_id": "", "durability": 0}
+		equipped[char_id] = empty_eq
+	var char_eq: Dictionary = equipped[char_id]
+	var old_slot = char_eq.get(slot, {"item_id": ""})
+	var old_id: String = ""
+	if old_slot is String:
+		old_id = old_slot
+	elif old_slot is Dictionary:
+		old_id = old_slot.get("item_id", "")
+	# 新装备耐久
+	var dur: float = 0.0
+	if item_id != "":
+		if initial_durability >= 0:
+			dur = initial_durability
+		else:
+			var def: Dictionary = InventoryManager.get_item_def(item_id)
+			var rarity: String = def.get("rarity", "common")
+			dur = float(RARITY_MAX_DURABILITY.get(rarity, 50))
+	char_eq[slot] = {"item_id": item_id, "durability": dur}
+	equipped[char_id] = char_eq
 	equipment["equipped"] = equipped
 	save_data["equipment"] = equipment
 	save_slot()
-	return old
+	return old_id
 
 
 ## 卸下装备：清空槽位，返回被卸下的装备ID
@@ -371,7 +509,46 @@ func unequip_item(char_id: String, slot: String) -> String:
 	return equip_item(char_id, slot, "")
 
 
+## 消耗装备耐久（接球/被击中时调用）
+## reason: "catch" 或 "hit"
+func reduce_equipment_durability(char_id: String, reason: String) -> void:
+	print("[PlayerSaveManager] reduce_equipment_durability 被调用: char=%s reason=%s" % [char_id, reason])
+	var equipment: Dictionary = save_data.get("equipment", {})
+	var equipped: Dictionary = equipment.get("equipped", {})
+	if not equipped.has(char_id):
+		print("[PlayerSaveManager] 角色 %s 无装备记录，跳过" % char_id)
+		return
+	var char_eq: Dictionary = equipped[char_id]
+	var loss: float = DURABILITY_LOSS_PER_HIT if reason == "hit" else DURABILITY_LOSS_PER_CATCH
+	var changed: bool = false
+	for slot in EQUIP_SLOTS:
+		var slot_data = char_eq.get(slot, {})
+		if slot_data is Dictionary:
+			var item_id: String = slot_data.get("item_id", "")
+			if item_id == "":
+				continue
+			var cur_dur: float = float(slot_data.get("durability", 0.0))
+			var new_dur: float = max(0, cur_dur - loss)
+			print("[PlayerSaveManager] 装备损耗: %s[%s] %s: %.2f → %.2f" % [char_id, slot, item_id, cur_dur, new_dur])
+			if new_dur <= 0:
+				# 装备耐久为0，消失
+				print("[PlayerSaveManager] 装备 %s 耐久归零，已消失 (char=%s slot=%s)" % [item_id, char_id, slot])
+				char_eq[slot] = {"item_id": "", "durability": 0}
+			else:
+				char_eq[slot] = {"item_id": item_id, "durability": new_dur}
+			changed = true
+	if changed:
+		equipped[char_id] = char_eq
+		equipment["equipped"] = equipped
+		save_data["equipment"] = equipment
+		save_slot()
+		print("[PlayerSaveManager] 装备耐久已保存到存档")
+	else:
+		print("[PlayerSaveManager] 角色 %s 无装备损耗" % char_id)
+
+
 ## 获取某角色的装备总加成 {stat_key: total_bonus}
+## 衰减阈值仅在开局判断：低于阈值的装备属性减半
 func get_equipment_bonuses(char_id: String) -> Dictionary:
 	var result := {
 		"stamina_bonus": 0,
@@ -383,14 +560,27 @@ func get_equipment_bonuses(char_id: String) -> Dictionary:
 	}
 	var eq: Dictionary = get_equipped(char_id)
 	for slot in EQUIP_SLOTS:
-		var item_id: String = eq.get(slot, "")
+		var slot_data = eq.get(slot, {})
+		var item_id: String = ""
+		var durability: float = 0.0
+		if slot_data is String:
+			item_id = slot_data
+		elif slot_data is Dictionary:
+			item_id = slot_data.get("item_id", "")
+			durability = slot_data.get("durability", 0.0)
 		if item_id == "":
 			continue
 		var def: Dictionary = InventoryManager.get_item_def(item_id)
 		if def.is_empty():
 			continue
 		var stats: Dictionary = def.get("stats", {})
+		# 衰减阈值判断：低于阈值的装备属性减半
+		var rarity: String = def.get("rarity", "common")
+		var threshold: int = RARITY_DURABILITY_THRESHOLD.get(rarity, 30)
+		var multiplier: float = 1.0
+		if durability < threshold:
+			multiplier = 0.5
 		for key in stats:
 			if result.has(key):
-				result[key] += int(stats[key])
+				result[key] += int(stats[key] * multiplier)
 	return result

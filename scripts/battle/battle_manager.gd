@@ -39,6 +39,9 @@ var message_bubbles: Array[Dictionary] = []  # [{label, timer, player}]
 # 比赛是否已开始
 var match_started: bool = false
 
+# 中场休息备战标记（区分开场备战和中场备战）
+var _is_half_time_prep: bool = false
+
 # === P1方案A：自动模拟模式（headless 验证用，跳过备战面板）===
 var auto_simulate: bool = false       # 是否自动开始比赛（命令行 --sim 开启）
 var sim_time_scale: float = 6.0       # 模拟加速倍率（默认 6：物理稳定上限，更高会穿墙失真）
@@ -608,8 +611,24 @@ func _on_phase_changed(new_phase: int) -> void:
 			print("[Match] 上半场开始!")
 		GameManager.MatchPhase.HALF_TIME:
 			print("[Match] 中场休息")
+			# 自动模拟模式跳过备战面板，直接等倒计时进入下半场
+			if auto_simulate:
+				return
+			_is_half_time_prep = true
+			# 锁定输入（比赛停止，但倒计时继续）
+			match_started = false
+			if input_mgr:
+				input_mgr.match_started = false
+			# 冻结全场（球员停止、球停止）
+			_freeze_all_for_half_time()
+			# 显示中场备战面板（倒计时自动结束，无需玩家点按钮）
+			_show_half_time_prep()
 		GameManager.MatchPhase.SECOND_HALF:
 			print("[Match] 下半场开始!")
+			# 从中场休息恢复：隐藏备战面板、恢复场地、解锁输入
+			if _is_half_time_prep:
+				_is_half_time_prep = false
+				_hide_half_time_prep()
 		GameManager.MatchPhase.RESULTS:
 			print("[Match] 比赛结束! 最终比分: %d - %d" % [GameManager.score_team_a, GameManager.score_team_b])
 			# 锁定输入（防止结算期间玩家继续操作）
@@ -629,6 +648,109 @@ func _on_phase_changed(new_phase: int) -> void:
 				player_stats.print_report()
 			# 延迟2秒后弹出结算界面
 			_show_result_ui_delayed()
+
+
+## 中场休息冻结全场
+func _freeze_all_for_half_time() -> void:
+	# 球员停止移动
+	for player: CharacterBody2D in team_a_players + team_b_players:
+		if player and is_instance_valid(player):
+			player.velocity = Vector2.ZERO
+	# 球停止（Area2D 使用 is_active 控制飞行）
+	if ball_node and ball_node.has_method("set"):
+		ball_node.is_active = false
+	print("[Match] 中场休息：全场已冻结")
+
+
+## 显示中场休息备战面板（倒计时自动结束，无需玩家点按钮）
+func _show_half_time_prep() -> void:
+	# 注意：不暂停 GameManager，倒计时正常走，时间到自动进下半场
+
+	# 隐藏比赛场地
+	if field_zone:
+		field_zone.visible = false
+	if ball_node:
+		ball_node.visible = false
+	for p: CharacterBody2D in team_a_players + team_b_players:
+		if p and is_instance_valid(p):
+			p.visible = false
+	if penalty_walls:
+		penalty_walls.visible = false
+	if aim_line:
+		aim_line.visible = false
+	if mouse_cursor:
+		mouse_cursor.visible = false
+	if aim_arrow and is_instance_valid(aim_arrow):
+		aim_arrow.visible = false
+	if cursor_ring and is_instance_valid(cursor_ring):
+		cursor_ring.visible = false
+
+	# 隐藏比赛HUD
+	var hud_node = ui_layer.get_node_or_null("HUD") if ui_layer else null
+	if hud_node:
+		hud_node.visible = false
+
+	# 显示备战界面
+	preparation_ui.visible = true
+
+	# 设置中场休息模式（隐藏开始按钮，显示倒计时）
+	if preparation_ui.has_method("set_half_time_mode"):
+		preparation_ui.set_half_time_mode(true)
+
+	print("[Match] 中场休息备战面板已显示")
+
+
+## 隐藏中场休息备战面板，恢复下半场
+func _hide_half_time_prep() -> void:
+	# 恢复中场休息模式（恢复按钮等）
+	if preparation_ui.has_method("set_half_time_mode"):
+		preparation_ui.set_half_time_mode(false)
+
+	# 隐藏备战界面
+	preparation_ui.visible = false
+
+	# 显示比赛场地
+	if field_zone:
+		field_zone.visible = true
+	if ball_node:
+		ball_node.visible = true
+	for p: CharacterBody2D in team_a_players + team_b_players:
+		if p and is_instance_valid(p):
+			p.visible = true
+	if penalty_walls:
+		penalty_walls.visible = true
+	if aim_line:
+		aim_line.visible = true
+	if mouse_cursor:
+		mouse_cursor.visible = true
+	if aim_arrow and is_instance_valid(aim_arrow):
+		aim_arrow.visible = true
+	if cursor_ring and is_instance_valid(cursor_ring):
+		cursor_ring.visible = true
+
+	# 显示比赛HUD
+	var hud_node = ui_layer.get_node_or_null("HUD") if ui_layer else null
+	if hud_node:
+		hud_node.visible = true
+
+	# 解锁输入
+	match_started = true
+	if input_mgr:
+		input_mgr.match_started = true
+
+	# 重新计算属性加成（确保中场换的装备/食物生效）
+	for player: CharacterBody2D in team_a_players + team_b_players:
+		if player and is_instance_valid(player) and player.has_method("refresh_bonuses"):
+			player.refresh_bonuses()
+	# 刷新AI速度
+	if ai_mgr and ai_mgr.has_method("refresh_all_speeds"):
+		ai_mgr.refresh_all_speeds()
+
+	# 刷新主控球员技能
+	if input_mgr and input_mgr.has_method("refresh_controlled_skills"):
+		input_mgr.refresh_controlled_skills()
+
+	print("[Match] 中场休息结束，下半场已恢复")
 
 
 # ===== 隔离墙管理 =====
@@ -1306,6 +1428,9 @@ func _on_spirit_changed(index: int, spirit_id: String) -> void:
 		input_mgr.refresh_controlled_skills()
 
 
+var _pre_match_equipment: Dictionary = {}
+
+
 func _on_prep_match_started() -> void:
 	"""备战界面点击开始比赛后:恢复场地、开始比赛、发球、解锁输入"""
 	print("[Match] 备战完成,开始比赛!")
@@ -1332,6 +1457,10 @@ func _on_prep_match_started() -> void:
 	# 隐藏备战界面
 	preparation_ui.visible = false
 
+	# 恢复备战面板标题和按钮文本
+	if preparation_ui.has_method("set_half_time_mode"):
+		preparation_ui.set_half_time_mode(false)
+
 	# 显示比赛HUD
 	var hud_node = ui_layer.get_node_or_null("HUD") if ui_layer else null
 	if hud_node:
@@ -1341,36 +1470,51 @@ func _on_prep_match_started() -> void:
 	match_started = true
 	if input_mgr:
 		input_mgr.match_started = true
-		# 比赛正式开始：重新读取主控球员最新装备的技能（修复setup时机早于选元灵）
 		if input_mgr.has_method("refresh_controlled_skills"):
 			input_mgr.refresh_controlled_skills()
 
-	# 正式开始比赛
-	GameManager.start_match()
+	if _is_half_time_prep:
+		# ===== 中场休息后恢复下半场 =====
+		_is_half_time_prep = false
+		# 切换到下半场阶段，设置下半场时间，恢复倒计时
+		GameManager._set_phase(GameManager.MatchPhase.SECOND_HALF)
+		GameManager.match_time = GameManager.get_second_half_duration()
+		GameManager.is_paused = false
+		GameManager.match_resumed.emit()
+		print("[Match] 中场休息结束，下半场恢复")
+	else:
+		# ===== 开场备战后正式开始比赛 =====
+		# 记录赛前装备耐久状态（用于结算显示损耗）
+		_pre_match_equipment = {}
+		if PlayerSaveManager and PlayerSaveManager.has_method("get_all_equipped"):
+			_pre_match_equipment = PlayerSaveManager.get_all_equipped()
 
-	# === P1方案A：自动模拟模式下创建指标采集器 + 加速 ===
-	if auto_simulate:
-		match_stats = MatchStats.new()
-		add_child(match_stats)
-		match_stats.start_recording(ball_node)
-		if ai_mgr:
-			ai_mgr.match_stats = match_stats  # 注入给 ai_manager 上报卡死/状态切换
-		Engine.time_scale = sim_time_scale  # 加速整场模拟（含物理+计时）
-	
-	# === 个人数据采集器 ===
-	var mps_script := load("res://scripts/battle/match_player_stats.gd")
-	player_stats = Node.new()
-	player_stats.set_script(mps_script)
-	player_stats.name = "MatchPlayerStats"
-	add_child(player_stats)
-	player_stats.start_recording()
-	for p in team_a_players + team_b_players:
-		if p and is_instance_valid(p):
-			player_stats.register_player(p)
-	match_duration = 0.0  # 重置比赛时长
+		# 正式开始比赛
+		GameManager.start_match()
 
-	# 发球:球给随机一方
-	_assign_initial_ball()
+		# === P1方案A：自动模拟模式下创建指标采集器 + 加速 ===
+		if auto_simulate:
+			match_stats = MatchStats.new()
+			add_child(match_stats)
+			match_stats.start_recording(ball_node)
+			if ai_mgr:
+				ai_mgr.match_stats = match_stats
+			Engine.time_scale = sim_time_scale
+
+		# === 个人数据采集器 ===
+		var mps_script := load("res://scripts/battle/match_player_stats.gd")
+		player_stats = Node.new()
+		player_stats.set_script(mps_script)
+		player_stats.name = "MatchPlayerStats"
+		add_child(player_stats)
+		player_stats.start_recording()
+		for p in team_a_players + team_b_players:
+			if p and is_instance_valid(p):
+				player_stats.register_player(p)
+		match_duration = 0.0
+
+		# 发球:球给随机一方
+		_assign_initial_ball()
 
 
 func _on_back_to_menu() -> void:
@@ -1425,12 +1569,15 @@ func _show_result_ui() -> void:
 	var stats_data: Dictionary = {}
 	if player_stats:
 		stats_data = player_stats.get_report()
-	
+
+	# 记录比赛历史（中途退出走_forfeit_match不会到这里）
+	RewardSystem.record_match_history(result, score_a, score_b, match_duration, stats_data, rewards)
+
 	# 创建结算界面
 	var script := load("res://scripts/ui/match_result_ui.gd")
 	result_ui = Control.new()
 	result_ui.set_script(script)
-	result_ui.setup(score_a, score_b, match_duration, result, rewards, stats_data)
+	result_ui.setup(score_a, score_b, match_duration, result, rewards, stats_data, _pre_match_equipment)
 	result_ui.result_confirmed.connect(_on_result_confirmed)
 	
 	# 添加到CanvasLayer上

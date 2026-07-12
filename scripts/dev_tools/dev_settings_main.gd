@@ -102,6 +102,14 @@ func _build_ui() -> void:
 	btn_growth.pressed.connect(_open_growth_panel)
 	center.add_child(btn_growth)
 
+	var btn_reward := Button.new()
+	btn_reward.text = "奖励设置"
+	btn_reward.custom_minimum_size = Vector2(400, 55)
+	btn_reward.add_theme_font_size_override("font_size", 20)
+	btn_reward.add_theme_color_override("font_color", Color(0.9, 0.8, 0.3))
+	btn_reward.pressed.connect(_open_reward_panel)
+	center.add_child(btn_reward)
+
 
 func _open_account_panel() -> void:
 	_clear_current_panel()
@@ -157,6 +165,16 @@ func _open_growth_panel() -> void:
 	_clear_current_panel()
 	var DevGrowthPanelClass = load("res://scripts/dev_tools/dev_growth_panel.gd")
 	var panel: Control = DevGrowthPanelClass.new()
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.closed.connect(_on_sub_panel_closed)
+	add_child(panel)
+	_current_panel = panel
+
+
+func _open_reward_panel() -> void:
+	_clear_current_panel()
+	var DevRewardPanelClass = load("res://scripts/dev_tools/dev_reward_panel.gd")
+	var panel: Control = DevRewardPanelClass.new()
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	panel.closed.connect(_on_sub_panel_closed)
 	add_child(panel)

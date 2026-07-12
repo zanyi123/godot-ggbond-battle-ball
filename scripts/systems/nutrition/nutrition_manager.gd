@@ -107,10 +107,14 @@ func consume_food(food_id: String) -> bool:
 	if InventoryManager == null:
 		push_error("[NutritionManager] InventoryManager未就绪")
 		return false
+	var before_count: int = InventoryManager.get_item_count(food_id)
+	print("[NutritionManager] 吃食物前背包数量: %s = %d" % [food_id, before_count])
 	var removed: bool = InventoryManager.remove_item(food_id, 1)
 	if not removed:
 		push_warning("[NutritionManager] 背包中食物不足或不存在: " + food_id)
 		return false
+	var after_count: int = InventoryManager.get_item_count(food_id)
+	print("[NutritionManager] 吃食物后背包数量: %s = %d (扣减%d)" % [food_id, after_count, before_count - after_count])
 
 	# 记录已吃食物
 	_active_food_id = food_id

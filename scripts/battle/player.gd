@@ -1003,6 +1003,8 @@ func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
 			mps.report_damage_taken(self, actual_damage)
 			if attacker:
 				mps.report_damage_dealt(attacker, actual_damage)
+		# 装备耐久消耗（被击中）
+		PlayerSaveManager.reduce_equipment_durability(character_id, "hit")
 
 	return {"damage": actual_damage, "effect": effect}
 

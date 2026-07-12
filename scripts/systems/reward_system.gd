@@ -8,13 +8,13 @@ var reward_config: Dictionary = {
 	"reward_enabled": false,       # 奖励开关（开发测试默认关闭）
 	"win_fairy_coin": 300,
 	"win_spirit_ore": 10,
-	"win_crystal": 2,
+	"win_crystal": 3,
 	"lose_fairy_coin": 150,
 	"lose_spirit_ore": 5,
 	"lose_crystal": 1,
 	"draw_fairy_coin": 200,
 	"draw_spirit_ore": 7,
-	"draw_crystal": 1,
+	"draw_crystal": 2,
 	"streak_fairy_coin_bonus": 10,  # 连胜每场额外童话币
 	"streak_spirit_ore_bonus": 2,   # 连胜每场额外元灵矿石
 	"streak_crystal_bonus": 1,      # 连胜每场额外水晶
@@ -25,6 +25,10 @@ var _win_streak: int = 0
 
 # 配置文件路径
 const REWARD_CONFIG_PATH: String = "user://reward_config.json"
+# 比赛历史记录路径
+const MATCH_HISTORY_PATH: String = "user://match_history.json"
+# 最多保留多少条历史记录
+const MAX_HISTORY: int = 50
 
 signal rewards_granted(rewards: Dictionary)
 
@@ -79,7 +83,7 @@ func grant_rewards(result: String, is_forfeit: bool = false) -> Dictionary:
 	PlayerSaveManager.add_currency("fairy_coin", rewards.fairy_coin)
 	PlayerSaveManager.add_currency("spirit_ore", rewards.spirit_ore)
 	PlayerSaveManager.add_currency("crystal", rewards.crystal)
-	PlayerSaveManager.save_game()
+	PlayerSaveManager.save_slot()
 	
 	print("[RewardSystem] 奖励发放: %s → 童话币+%d 元灵矿石+%d 水晶+%d (连胜%d)" % [
 		result, rewards.fairy_coin, rewards.spirit_ore, rewards.crystal, _win_streak
@@ -143,3 +147,80 @@ func _load_config() -> void:
 			if data.has("win_streak"):
 				_win_streak = int(data.win_streak)
 			print("[RewardSystem] 配置已加载, 奖励开关: %s" % ("开启" if reward_config.reward_enabled else "关闭"))
+
+
+# ===== 比赛历史记录 =====
+
+## 记录比赛历史（比赛正常结束时调用，中途退出不调用）
+## result: "win"/"lose"/"draw"
+## score_a, score_b: 比分
+## duration: 比赛时长（秒）
+## stats_data: player_stats.get_report() 返回的数据
+## rewards: 发放的奖励字典
+func record_match_history(result: String, score_a: int, score_b: int, duration: float, stats_data: Dictionary, rewards: Dictionary) -> void:
+	var history: Array = _load_history()
+
+	# 提取我方（team a）击杀/死亡总数
+	var total_kills: int = 0
+	var total_deaths: int = 0
+	var players: Array = stats_data.get("players", [])
+	for pstats: Dictionary in players:
+		if pstats.get("team", "") == "a":
+			total_kills += int(pstats.get("kills", 0))
+			total_deaths += int(pstats.get("deaths", 0))
+
+	var record: Dictionary = {
+		"date": Time.get_datetime_string_from_system(false, true),
+		"result": result,
+		"score": "%d:%d" % [score_a, score_b],
+		"duration": round(duration * 10.0) / 10.0,
+		"kills": total_kills,
+		"deaths": total_deaths,
+		"rewards": {
+			"fairy_coin": int(rewards.get("fairy_coin", 0)),
+			"spirit_ore": int(rewards.get("spirit_ore", 0)),
+			"crystal": int(rewards.get("crystal", 0)),
+		},
+	}
+
+	history.push_front(record)  # 最新的放最前
+
+	# 超过上限截断
+	if history.size() > MAX_HISTORY:
+		history = history.slice(0, MAX_HISTORY)
+
+	_save_history(history)
+	print("[RewardSystem] 比赛历史已记录: %s %s 击杀%d/死亡%d (共%d条)" % [result, record.score, total_kills, total_deaths, history.size()])
+
+
+## 获取比赛历史记录（最新在前）
+func get_match_history() -> Array:
+	return _load_history()
+
+
+## 清空所有比赛历史（开发者工具可调用）
+func clear_match_history() -> void:
+	_save_history([])
+	print("[RewardSystem] 比赛历史已清空")
+
+
+## 保存历史到文件
+func _save_history(history: Array) -> void:
+	var file := FileAccess.open(MATCH_HISTORY_PATH, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(history, "\t"))
+		file.close()
+
+
+## 加载历史记录
+func _load_history() -> Array:
+	if not FileAccess.file_exists(MATCH_HISTORY_PATH):
+		return []
+	var file := FileAccess.open(MATCH_HISTORY_PATH, FileAccess.READ)
+	if file:
+		var json := JSON.new()
+		var err := json.parse(file.get_as_text())
+		file.close()
+		if err == OK and json.data is Array:
+			return json.data
+	return []

@@ -142,21 +142,30 @@ func is_full() -> bool:
 	return get_used_slots() >= get_max_slots()
 
 
-func add_item(item_id: String, count: int = 1) -> bool:
+func add_item(item_id: String, count: int = 1, initial_durability: float = -1.0) -> bool:
 	if count <= 0:
 		return false
 	var def: Dictionary = get_item_def(item_id)
 	if def.is_empty():
 		push_error("[InventoryManager] 未知道具ID: %s" % item_id)
 		return false
-	
+
 	_ensure_inventory_structure()
 	var inv: Dictionary = PlayerSaveManager.save_data["inventory"]
 	var items: Array = inv["items"]
+	var is_equip: bool = str(def.get("type", "")) == "equipment"
 	var stack_max: int = int(def.get("stack_max", 1))
+	if is_equip:
+		stack_max = 1
 	var remaining: int = count
-	
-	if stack_max > 1:
+
+	var default_dur: float = 0.0
+	if is_equip:
+		default_dur = float(def.get("max_durability", 50))
+	if initial_durability >= 0:
+		default_dur = initial_durability
+
+	if stack_max > 1 and not is_equip:
 		for entry in items:
 			if entry.get("item_id", "") == item_id:
 				var current_count: int = int(entry.get("count", 0))
@@ -167,7 +176,7 @@ func add_item(item_id: String, count: int = 1) -> bool:
 					remaining -= add_amount
 					if remaining <= 0:
 						break
-	
+
 	while remaining > 0:
 		if items.size() >= get_max_slots():
 			if remaining < count:
@@ -176,13 +185,16 @@ func add_item(item_id: String, count: int = 1) -> bool:
 				item_added.emit(item_id, count - remaining)
 			push_warning("[InventoryManager] 背包已满，只添加了%d个%s" % [count - remaining, def.get("name", "")])
 			return false
-		
+
 		var add_amount: int = remaining
 		if stack_max > 0:
 			add_amount = min(remaining, stack_max)
-		items.append({"item_id": item_id, "count": add_amount})
+		var new_entry: Dictionary = {"item_id": item_id, "count": add_amount}
+		if is_equip:
+			new_entry["durability"] = default_dur
+		items.append(new_entry)
 		remaining -= add_amount
-	
+
 	PlayerSaveManager.save_slot()
 	inventory_changed.emit()
 	item_added.emit(item_id, count)
@@ -282,6 +294,24 @@ func get_all_rarities() -> Array[String]:
 
 ## ==================== 装备穿戴系统 ====================
 
+## 从背包移除一件装备，返回其耐久值（-1表示失败）
+func _remove_one_equipment(item_id: String) -> float:
+	_ensure_inventory_structure()
+	var inv: Dictionary = PlayerSaveManager.save_data["inventory"]
+	var items: Array = inv["items"]
+	for i in range(items.size() - 1, -1, -1):
+		var entry: Dictionary = items[i]
+		if entry.get("item_id", "") == item_id:
+			var dur: float = float(entry.get("durability", 0))
+			var entry_count: int = int(entry.get("count", 0))
+			if entry_count <= 1:
+				items.remove_at(i)
+			else:
+				entry["count"] = entry_count - 1
+			return dur
+	return -1.0
+
+
 ## 穿戴装备：从背包扣1个，记录到角色装备槽
 ## 如果该槽位原本有装备，先把旧装备加回背包
 ## 返回 true=成功，false=背包没这个装备
@@ -295,15 +325,21 @@ func equip_to_character(char_id: String, slot: String, item_id: String) -> bool:
 	# 检查背包有没有
 	if not has_item(item_id, 1):
 		return false
-	# 从背包扣1个
-	if not remove_item(item_id, 1):
+	# 从背包移除一件装备，获取其耐久值
+	var dur: float = _remove_one_equipment(item_id)
+	if dur < 0:
 		return false
 	# 记录到装备槽（如果原来有装备，旧装备回背包）
-	var old: String = PlayerSaveManager.equip_item(char_id, slot, item_id)
-	if old != "":
-		add_item(old, 1)
+	var old_item_id: String = PlayerSaveManager.get_equipped_item(char_id, slot)
+	var old_dur: float = 0.0
+	if old_item_id != "":
+		old_dur = PlayerSaveManager.get_equipped_durability(char_id, slot)
+	PlayerSaveManager.equip_item(char_id, slot, item_id, dur)
+	if old_item_id != "":
+		add_item(old_item_id, 1, old_dur)
+	PlayerSaveManager.save_slot()
 	inventory_changed.emit()
-	print("[Inventory] %s 穿戴 %s 槽位 %s" % [char_id, slot, item_id])
+	print("[Inventory] %s 穿戴 %s 槽位 %s (耐久: %.1f)" % [char_id, slot, item_id, dur])
 	return true
 
 
@@ -312,12 +348,14 @@ func unequip_from_character(char_id: String, slot: String) -> bool:
 	var item_id: String = PlayerSaveManager.get_equipped_item(char_id, slot)
 	if item_id == "":
 		return false
+	# 获取当前耐久值
+	var dur: float = PlayerSaveManager.get_equipped_durability(char_id, slot)
 	# 清空槽位
 	PlayerSaveManager.unequip_item(char_id, slot)
-	# 加回背包
-	add_item(item_id, 1)
+	# 加回背包，传入当前耐久值
+	add_item(item_id, 1, dur)
 	inventory_changed.emit()
-	print("[Inventory] %s 卸下 %s 槽位 %s" % [char_id, slot, item_id])
+	print("[Inventory] %s 卸下 %s 槽位 %s (耐久: %.1f)" % [char_id, slot, item_id, dur])
 	return true
 
 

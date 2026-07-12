@@ -12,7 +12,8 @@
 				"attack_bonus": 3.0
 			},
 			"sub_type": "glove",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 50
 		},
 		{
 			"description": "进阶竞技手套，攻击+6，球速+10。",
@@ -27,7 +28,8 @@
 				"ball_speed_bonus": 10.0
 			},
 			"sub_type": "glove",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 80
 		},
 		{
 			"description": "赛博科技打造的稀有手套，攻击+10，球速+25。",
@@ -42,7 +44,8 @@
 				"ball_speed_bonus": 25.0
 			},
 			"sub_type": "glove",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 100
 		},
 		{
 			"description": "金刚元灵加持，攻击+15，球速+40，韧性+5。",
@@ -58,7 +61,8 @@
 				"resilience_bonus": 5.0
 			},
 			"sub_type": "glove",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 120
 		},
 		{
 			"description": "传说级装备，攻击+22，球速+60，韧性+10。",
@@ -74,7 +78,8 @@
 				"resilience_bonus": 10.0
 			},
 			"sub_type": "glove",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 150
 		},
 		{
 			"description": "基础训练球衣，体力+10，防御+3。",
@@ -89,7 +94,8 @@
 				"stamina_bonus": 10.0
 			},
 			"sub_type": "jersey",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 50
 		},
 		{
 			"description": "进阶竞技球衣，体力+20，防御+6。",
@@ -104,7 +110,8 @@
 				"stamina_bonus": 20.0
 			},
 			"sub_type": "jersey",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 80
 		},
 		{
 			"description": "大地元灵编织而成，体力+35，防御+12，韧性+5。",
@@ -120,7 +127,8 @@
 				"stamina_bonus": 35.0
 			},
 			"sub_type": "jersey",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 100
 		},
 		{
 			"description": "冰原稀有材料打造，体力+55，防御+20，速度+5。",
@@ -136,7 +144,8 @@
 				"stamina_bonus": 55.0
 			},
 			"sub_type": "jersey",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 120
 		},
 		{
 			"description": "传说级装备，体力+80，防御+30，速度+10，韧性+10。",
@@ -153,7 +162,8 @@
 				"stamina_bonus": 80.0
 			},
 			"sub_type": "jersey",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 150
 		},
 		{
 			"description": "基础训练球鞋，速度+3。",
@@ -167,7 +177,8 @@
 				"speed_bonus": 3.0
 			},
 			"sub_type": "shoes",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 50
 		},
 		{
 			"description": "进阶竞技球鞋，速度+6，体力+5。",
@@ -182,7 +193,8 @@
 				"stamina_bonus": 5.0
 			},
 			"sub_type": "shoes",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 80
 		},
 		{
 			"description": "草木元灵加持，速度+10，体力+15。",
@@ -197,7 +209,8 @@
 				"stamina_bonus": 15.0
 			},
 			"sub_type": "shoes",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 100
 		},
 		{
 			"description": "幻影元灵加持，速度+16，体力+25，防御+5。",
@@ -213,7 +226,8 @@
 				"stamina_bonus": 25.0
 			},
 			"sub_type": "shoes",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 120
 		},
 		{
 			"description": "传说级装备，速度+24，体力+40，防御+10，球速+20。",
@@ -230,7 +244,8 @@
 				"stamina_bonus": 40.0
 			},
 			"sub_type": "shoes",
-			"type": "equipment"
+			"type": "equipment",
+			"max_durability": 150
 		},
 		{
 			"description": "赛前食用，体力恢复20点。",

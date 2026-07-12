@@ -9,6 +9,7 @@ var _result: String = "draw"  # "win" / "lose" / "draw"
 var _duration_s: float = 0.0
 var _rewards: Dictionary = {}
 var _player_stats: Dictionary = {}  # MatchPlayerStats.PlayerStats 数组
+var _pre_match_equipment: Dictionary = {}  # 赛前装备状态（用于显示损耗）
 
 # UI元素
 var _tab_buttons: Array = []
@@ -32,8 +33,7 @@ func _ready() -> void:
 	# 全屏覆盖
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	print("[ResultUI] _ready 开始, size=", size)
-	
+
 	# 背景（不拦截鼠标）
 	var bg := ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -72,17 +72,17 @@ func _ready() -> void:
 	
 	# 默认显示第一个Tab（延迟到布局完成后）
 	call_deferred("_show_tab", 0)
-	print("[ResultUI] _ready 完成, tab_buttons=", _tab_buttons.size())
 
 
 ## 初始化结算数据（由battle_manager调用）
-func setup(score_a: int, score_b: int, duration_s: float, result: String, rewards: Dictionary, stats_data: Dictionary) -> void:
+func setup(score_a: int, score_b: int, duration_s: float, result: String, rewards: Dictionary, stats_data: Dictionary, pre_match_equipment: Dictionary = {}) -> void:
 	_score_a = score_a
 	_score_b = score_b
 	_duration_s = duration_s
 	_result = result
 	_rewards = rewards
 	_player_stats = stats_data
+	_pre_match_equipment = pre_match_equipment
 
 
 # ===== UI构建 =====
@@ -154,7 +154,7 @@ func _add_tab_bar(parent: VBoxContainer) -> void:
 		btn.custom_minimum_size = Vector2(100, 36)
 		btn.add_theme_font_size_override("font_size", 16)
 		var tab_index: int = i
-		btn.pressed.connect(func(): print("[ResultUI] 按钮", tab_index, "被点击"); _show_tab(tab_index))
+		btn.pressed.connect(func(): _show_tab(tab_index))
 		tab_bar.add_child(btn)
 		_tab_buttons.append(btn)
 	
@@ -165,8 +165,7 @@ func _add_tab_bar(parent: VBoxContainer) -> void:
 
 func _show_tab(index: int) -> void:
 	_current_tab = index
-	print("[ResultUI] _show_tab(", index, ") called, tab_container=", is_instance_valid(_tab_container))
-	
+
 	# 清除旧内容（立即释放，避免与新内容叠加）
 	for child in _tab_container.get_children():
 		child.free()
@@ -185,8 +184,6 @@ func _show_tab(index: int) -> void:
 		1: _show_data_panel()
 		2: _show_rewards_panel()
 		3: _show_confirm_panel()
-	
-	print("[ResultUI] _show_tab(", index, ") 完成, tab_container子节点数=", _tab_container.get_child_count())
 
 
 ## Tab 1: 战报
@@ -253,6 +250,59 @@ func _show_rewards_panel() -> void:
 	food_label.add_theme_color_override("font_color", TEXT_COLOR)
 	food_label.add_theme_font_size_override("font_size", 14)
 	vbox.add_child(food_label)
+	
+	# 装备损耗（赛前→赛后）
+	_add_section_title(vbox, "── 装备损耗 ──")
+	var has_loss: bool = false
+	if PlayerSaveManager and PlayerSaveManager.has_method("get_all_equipped"):
+		var post_equip: Dictionary = PlayerSaveManager.get_all_equipped()
+		for char_id in _pre_match_equipment:
+			var pre_char: Dictionary = _pre_match_equipment.get(char_id, {})
+			var post_char: Dictionary = post_equip.get(char_id, {})
+			for slot in ["glove", "jersey", "shoes"]:
+				var pre_data = pre_char.get(slot, {"item_id": "", "durability": 0})
+				var post_data = post_char.get(slot, {"item_id": "", "durability": 0})
+				var pre_item: String = ""
+				var pre_dur: float = 0.0
+				if pre_data is Dictionary:
+					pre_item = pre_data.get("item_id", "")
+					pre_dur = float(pre_data.get("durability", 0))
+				else:
+					pre_item = str(pre_data)
+				var post_item: String = ""
+				var post_dur: float = 0.0
+				if post_data is Dictionary:
+					post_item = post_data.get("item_id", "")
+					post_dur = float(post_data.get("durability", 0))
+				else:
+					post_item = str(post_data)
+				if pre_item != "" or post_item != "":
+					var loss: float = pre_dur - post_dur
+					if loss > 0.001:
+						var item_name: String = ""
+						var max_dur: int = 0
+						if InventoryManager and pre_item != "":
+							var def: Dictionary = InventoryManager.get_item_def(pre_item)
+							item_name = def.get("name", pre_item)
+							max_dur = int(def.get("max_durability", 50))
+						elif InventoryManager and post_item != "":
+							var def: Dictionary = InventoryManager.get_item_def(post_item)
+							item_name = def.get("name", post_item)
+							max_dur = int(def.get("max_durability", 50))
+						if item_name == "":
+							item_name = "未知装备"
+						var loss_label := Label.new()
+						loss_label.text = "  %s: %d/%d → %d/%d (-%.1f)" % [item_name, int(pre_dur), max_dur, int(post_dur), max_dur, loss]
+						loss_label.add_theme_color_override("font_color", Color(1.0, 0.6, 0.3))
+						loss_label.add_theme_font_size_override("font_size", 14)
+						vbox.add_child(loss_label)
+						has_loss = true
+	if not has_loss:
+		var no_loss := Label.new()
+		no_loss.text = "  装备无损耗"
+		no_loss.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
+		no_loss.add_theme_font_size_override("font_size", 14)
+		vbox.add_child(no_loss)
 	
 	# 比赛奖励
 	_add_section_title(vbox, "── 比赛奖励 ──")

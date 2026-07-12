@@ -210,12 +210,25 @@ func _build_main_menu(is_admin: bool) -> void:
 	add_child(btn_trade)
 	_menu_interactive_nodes.append(btn_trade)
 
+	# 奖励开关按钮（所有玩家可用）
+	var btn_reward := Button.new()
+	btn_reward.name = "BtnReward"
+	var reward_on: bool = RewardSystem.reward_config.get("reward_enabled", false)
+	btn_reward.text = "比赛奖励: %s" % ("已开启" if reward_on else "已关闭")
+	btn_reward.position = Vector2(545, 635)
+	btn_reward.size = Vector2(350, 45)
+	btn_reward.add_theme_font_size_override("font_size", 16)
+	btn_reward.add_theme_color_override("font_color", Color(0.9, 0.8, 0.3) if reward_on else Color(0.6, 0.6, 0.6))
+	btn_reward.pressed.connect(_on_toggle_reward)
+	add_child(btn_reward)
+	_menu_interactive_nodes.append(btn_reward)
+
 	# 管理员专属：开发者工具按钮
 	if is_admin:
 		var btn_dev := Button.new()
 		btn_dev.name = "BtnDev"
 		btn_dev.text = "快捷设置（开发者）"
-		btn_dev.position = Vector2(545, 645)
+		btn_dev.position = Vector2(545, 700)
 		btn_dev.size = Vector2(350, 55)
 		btn_dev.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
 		btn_dev.pressed.connect(_on_open_dev_settings)
@@ -226,7 +239,7 @@ func _build_main_menu(is_admin: bool) -> void:
 		var btn_back_mode := Button.new()
 		btn_back_mode.name = "BtnBackMode"
 		btn_back_mode.text = "← 返回模式选择"
-		btn_back_mode.position = Vector2(545, 720)
+		btn_back_mode.position = Vector2(545, 775)
 		btn_back_mode.size = Vector2(350, 45)
 		btn_back_mode.add_theme_font_size_override("font_size", 16)
 		btn_back_mode.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8))
@@ -238,7 +251,7 @@ func _build_main_menu(is_admin: bool) -> void:
 		var btn_back_mode := Button.new()
 		btn_back_mode.name = "BtnBackMode"
 		btn_back_mode.text = "← 返回模式选择"
-		btn_back_mode.position = Vector2(545, 645)
+		btn_back_mode.position = Vector2(545, 700)
 		btn_back_mode.size = Vector2(350, 45)
 		btn_back_mode.add_theme_font_size_override("font_size", 16)
 		btn_back_mode.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8))
@@ -358,6 +371,21 @@ func _on_open_dev_settings() -> void:
 	dev_panel.closed.connect(dev_panel.queue_free)
 	add_child(dev_panel)
 	print("[Main] 快捷设置系统已打开")
+
+
+func _on_toggle_reward() -> void:
+	var current: bool = RewardSystem.reward_config.get("reward_enabled", false)
+	RewardSystem.set_reward_enabled(not current)
+	# 刷新菜单按钮显示
+	_rebuild_reward_button()
+
+
+func _rebuild_reward_button() -> void:
+	var btn = get_node_or_null("BtnReward")
+	if btn and is_instance_valid(btn):
+		var reward_on: bool = RewardSystem.reward_config.get("reward_enabled", false)
+		btn.text = "比赛奖励: %s" % ("已开启" if reward_on else "已关闭")
+		btn.add_theme_color_override("font_color", Color(0.9, 0.8, 0.3) if reward_on else Color(0.6, 0.6, 0.6))
 
 
 func _on_open_trade() -> void:

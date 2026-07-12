@@ -370,6 +370,8 @@ func _catch_ball(player: CharacterBody2D) -> void:
 	var mps = _get_match_stats()
 	if mps and mps.is_recording():
 		mps.report_ball_caught(player)
+	# 装备耐久消耗（接球）
+	PlayerSaveManager.reduce_equipment_durability(player.character_id, "catch")
 	print("[Ball] %s 接住球!" % _pname(player))
 
 

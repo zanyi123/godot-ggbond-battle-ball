@@ -221,7 +221,7 @@ func _show_equipment_tab() -> void:
 	var equip_list: Array = []
 	if InventoryManager:
 		equip_list = InventoryManager.get_backpack_equipment()
-	
+
 	if equip_list.size() == 0:
 		var empty_label := Label.new()
 		empty_label.text = "背包暂无装备"
@@ -234,11 +234,60 @@ func _show_equipment_tab() -> void:
 			var item_def: Dictionary = {}
 			if InventoryManager:
 				item_def = InventoryManager.get_item_def(item_id)
-			var card := _create_item_card(item_def, entry.get("count", 1))
+			var cur_dur: float = 0.0
+			if entry.has("durability"):
+				cur_dur = float(entry["durability"])
+			else:
+				cur_dur = float(item_def.get("max_durability", 50))
+			var card := _create_item_card(item_def, entry.get("count", 1), cur_dur)
 			grid.add_child(card)
 
+	# 已穿戴装备区
+	var equipped_title := Label.new()
+	equipped_title.text = "━━ 已穿戴装备 ━━"
+	equipped_title.add_theme_font_size_override("font_size", 16)
+	equipped_title.add_theme_color_override("font_color", Color(0.9, 0.8, 0.5))
+	content.add_child(equipped_title)
 
-func _create_item_card(item_def: Dictionary, count: int) -> Control:
+	var equipped_grid := GridContainer.new()
+	equipped_grid.columns = 3
+	equipped_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_child(equipped_grid)
+
+	var has_equipped: bool = false
+	if PlayerSaveManager and PlayerSaveManager.has_method("get_all_equipped"):
+		var all_eq: Dictionary = PlayerSaveManager.get_all_equipped()
+		var unlocked_chars: Array = PlayerSaveManager.save_data.get("unlocked_characters", [])
+		for char_id in all_eq:
+			if char_id not in unlocked_chars:
+				continue
+			var char_eq: Dictionary = all_eq.get(char_id, {})
+			for slot in ["glove", "jersey", "shoes"]:
+				var slot_data = char_eq.get(slot, {"item_id": "", "durability": 0})
+				var item_id: String = ""
+				var cur_dur: float = 0.0
+				if slot_data is Dictionary:
+					item_id = slot_data.get("item_id", "")
+					cur_dur = float(slot_data.get("durability", 0))
+				else:
+					item_id = slot_data
+				if item_id == "":
+					continue
+				var item_def: Dictionary = {}
+				if InventoryManager:
+					item_def = InventoryManager.get_item_def(item_id)
+				var card := _create_item_card(item_def, 1, cur_dur)
+				equipped_grid.add_child(card)
+				has_equipped = true
+	if not has_equipped:
+		var no_eq := Label.new()
+		no_eq.text = "暂无已穿戴装备"
+		no_eq.add_theme_font_size_override("font_size", 14)
+		no_eq.add_theme_color_override("font_color", Color(0.4, 0.4, 0.4))
+		equipped_grid.add_child(no_eq)
+
+
+func _create_item_card(item_def: Dictionary, count: int, cur_durability: float = 0.0) -> Control:
 	var card := Control.new()
 	card.size = Vector2(270, 100)
 	card.custom_minimum_size = Vector2(270, 100)
@@ -255,6 +304,7 @@ func _create_item_card(item_def: Dictionary, count: int) -> Control:
 	var rarity: String = item_def.get("rarity", "common")
 	var item_type: String = item_def.get("type", "")
 	var sub_type: String = item_def.get("sub_type", "")
+	var max_dur: int = item_def.get("max_durability", 50)
 	
 	var rarity_color := Color(0.7, 0.7, 0.7)
 	if InventoryManager and InventoryManager.has_method("get_rarity_color"):
@@ -339,6 +389,37 @@ func _create_item_card(item_def: Dictionary, count: int) -> Control:
 		count_label.add_theme_font_size_override("font_size", 14)
 		count_label.add_theme_color_override("font_color", Color(0.9, 0.8, 0.5))
 		card.add_child(count_label)
+	
+	if item_type == "equipment":
+		var dur_bg := ColorRect.new()
+		dur_bg.position = Vector2(96, 82)
+		dur_bg.size = Vector2(160, 10)
+		dur_bg.color = Color(0.15, 0.18, 0.25)
+		card.add_child(dur_bg)
+		
+		var dur_pct: float = 0.0
+		if max_dur > 0:
+			dur_pct = clamp(cur_durability / max_dur, 0.0, 1.0)
+		
+		var dur_bar := ColorRect.new()
+		dur_bar.position = Vector2(96, 82)
+		dur_bar.size = Vector2(160 * dur_pct, 10)
+		if dur_pct <= 0.3:
+			dur_bar.color = Color(1.0, 0.3, 0.3)
+		elif dur_pct <= 0.6:
+			dur_bar.color = Color(1.0, 0.8, 0.2)
+		else:
+			dur_bar.color = Color(0.3, 0.9, 0.3)
+		card.add_child(dur_bar)
+		
+		var dur_label := Label.new()
+		dur_label.text = "%d/%d" % [int(cur_durability), max_dur]
+		dur_label.position = Vector2(96, 72)
+		dur_label.size = Vector2(160, 12)
+		dur_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		dur_label.add_theme_font_size_override("font_size", 11)
+		dur_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
+		card.add_child(dur_label)
 	
 	return card
 
@@ -495,22 +576,53 @@ func _show_nutrition_tab() -> void:
 	content.add_child(desc)
 	
 	content.add_spacer(10)
-	
+
+	# 当前生效食物状态
+	var active_food_id: String = ""
+	if NutritionManager and NutritionManager.has_method("get_active_food_id"):
+		active_food_id = NutritionManager.get_active_food_id()
+	var active_box := PanelContainer.new()
+	var active_style := StyleBoxFlat.new()
+	active_style.bg_color = Color(0.15, 0.2, 0.15, 0.95)
+	active_style.border_width_bottom = 2
+	active_style.border_color = Color(0.3, 0.8, 0.3)
+	active_style.content_margin_left = 12
+	active_style.content_margin_right = 12
+	active_style.content_margin_top = 8
+	active_style.content_margin_bottom = 8
+	active_box.add_theme_stylebox_override("panel", active_style)
+	content.add_child(active_box)
+	var active_label := Label.new()
+	if active_food_id != "":
+		var food_data: Dictionary = {}
+		if NutritionManager and NutritionManager.has_method("get_food"):
+			food_data = NutritionManager.get_food(active_food_id)
+		var fname: String = food_data.get("name", active_food_id)
+		active_label.text = "🌿 当前生效食物: %s（比赛结束后清除）" % fname
+		active_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4))
+	else:
+		active_label.text = "💤 暂无生效食物（需在备战界面食用）"
+		active_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	active_label.add_theme_font_size_override("font_size", 14)
+	active_box.add_child(active_label)
+
+	content.add_spacer(8)
+
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_child(scroll)
-	
+
 	var grid := GridContainer.new()
 	grid.columns = 4
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(grid)
-	
+
 	var food_list: Array = []
 	if InventoryManager:
 		food_list = InventoryManager.get_backpack_consumables()
-	
+
 	if food_list.size() == 0:
 		var empty_label := Label.new()
 		empty_label.text = "背包暂无食物"
@@ -523,13 +635,13 @@ func _show_nutrition_tab() -> void:
 			var item_def: Dictionary = {}
 			if InventoryManager:
 				item_def = InventoryManager.get_item_def(item_id)
-			
+
 			if item_def.is_empty() and NutritionManager:
 				if NutritionManager.has_method("get_food"):
 					var food_data: Dictionary = NutritionManager.get_food(item_id)
 					if food_data:
 						item_def = food_data
-			
+
 			var card := _create_item_card(item_def, entry.get("count", 1))
 			grid.add_child(card)
 

@@ -42,6 +42,7 @@ var btn_cancel: Button
 var btn_back: Button
 var name_display: Label
 var sell_price_edit: LineEdit
+var max_durability_edit: LineEdit
 var icon_path_edit: LineEdit
 var icon_preview: TextureRect
 
@@ -314,6 +315,23 @@ func _build_ui() -> void:
 	price_row.add_child(sell_price_edit)
 	detail_container.add_child(price_row)
 
+	# 最大耐久
+	var dur_row := HBoxContainer.new()
+	dur_row.custom_minimum_size = Vector2(0, 32)
+	var d_lbl := Label.new()
+	d_lbl.text = "最大耐久:"
+	d_lbl.custom_minimum_size = Vector2(80, 28)
+	d_lbl.add_theme_font_size_override("font_size", 14)
+	d_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	dur_row.add_child(d_lbl)
+	max_durability_edit = LineEdit.new()
+	max_durability_edit.placeholder_text = "全新时的耐久最大值"
+	max_durability_edit.editable = false
+	max_durability_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	max_durability_edit.add_theme_font_size_override("font_size", 14)
+	dur_row.add_child(max_durability_edit)
+	detail_container.add_child(dur_row)
+
 	var sep1 := HSeparator.new()
 	sep1.custom_minimum_size = Vector2(0, 10)
 	detail_container.add_child(sep1)
@@ -479,6 +497,9 @@ func _update_detail_panel(data: Dictionary) -> void:
 	# 售价
 	sell_price_edit.text = str(data.get("sell_price", 0))
 
+	# 最大耐久
+	max_durability_edit.text = str(data.get("max_durability", 50))
+
 	# 图标
 	var icon_path: String = str(data.get("icon", ""))
 	icon_path_edit.text = icon_path
@@ -547,6 +568,7 @@ func _set_editable(editable: bool) -> void:
 	rarity_option.disabled = not editable
 	subtype_option.disabled = not editable
 	sell_price_edit.editable = editable
+	max_durability_edit.editable = editable
 	# 图标按钮
 	for child in detail_container.get_children():
 		if child is HBoxContainer:
@@ -603,6 +625,11 @@ func _collect_data_from_ui() -> Dictionary:
 	var price_str: String = sell_price_edit.text.strip_edges()
 	if price_str.is_valid_int():
 		data["sell_price"] = int(price_str)
+
+	# 最大耐久
+	var dur_str: String = max_durability_edit.text.strip_edges()
+	if dur_str.is_valid_int():
+		data["max_durability"] = int(dur_str)
 
 	# 图标
 	var icon_src := icon_path_edit.text.strip_edges()

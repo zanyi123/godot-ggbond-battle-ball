@@ -543,8 +543,11 @@ func _on_add_all_food() -> void:
 
 func _on_clear_backpack() -> void:
 	InventoryManager.clear_all()
+	PlayerSaveManager.clear_all_equipment()
+	if NutritionManager != null:
+		NutritionManager.clear_active_food()
 	_refresh_backpack()
-	print("[DevAccount] 背包已清空")
+	print("[DevAccount] 背包、装备、食物已全部清空")
 
 
 func _on_remove_item(item_id: String, count: int) -> void:
