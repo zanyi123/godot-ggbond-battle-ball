@@ -44,6 +44,7 @@ var _is_half_time_prep: bool = false
 
 # === P1方案A：自动模拟模式（headless 验证用，跳过备战面板）===
 var auto_simulate: bool = false       # 是否自动开始比赛（命令行 --sim 开启）
+var dev_prep_mode: bool = false       # 开发者测试备战模式（命令行 --dev-prep 开启）
 var sim_time_scale: float = 6.0       # 模拟加速倍率（默认 6：物理稳定上限，更高会穿墙失真）
 # 默认快速模式参数（可被命令行覆盖）：每半场8秒 → 约30秒一场
 const DEFAULT_SIM_HALF: float = 8.0
@@ -75,6 +76,8 @@ var player_arrows: Dictionary = {}  # {player: arrow_node}
 func _ready() -> void:
 	# === P1方案A：sim 种子必须最先设（抢在 Godot 自动 randomize() 后重新固化）===
 	_parse_sim_args()
+	if GameManager and GameManager.last_menu_mode == "admin" and not dev_prep_mode:
+		dev_prep_mode = true
 	if auto_simulate:
 		# sim 模式固定物理帧率，消除墙钟 delta 漂移导致的非确定性
 		Engine.physics_ticks_per_second = 60
@@ -129,20 +132,20 @@ func _ready() -> void:
 		print("[Sim] 自动模拟模式已启动 time_scale=%.1f 半场=%.1f秒" % [sim_time_scale, GameManager.sim_half_duration_override])
 
 
-## 解析命令行参数（--sim / --speed=N / --seed=N / --half=N）
+## 解析命令行参数（--sim / --speed=N / --seed=N / --half=N / --dev-prep）
 func _parse_sim_args() -> void:
 	for arg in OS.get_cmdline_args():
 		if arg == "--sim":
 			auto_simulate = true
+		elif arg == "--dev-prep":
+			dev_prep_mode = true
 		elif arg.begins_with("--speed="):
 			sim_time_scale = float(arg.substr(8))
 		elif arg.begins_with("--seed="):
 			var s: int = int(arg.substr(7))
-			seed(s)  # 固定随机种子，可复现
+			seed(s)
 			print("[Sim] 随机种子=%d" % s)
 		elif arg.begins_with("--half="):
-			# P1方案A：缩短比赛时长（半场秒数），30秒一场快速验证
-			# 默认 300秒/半场 → --half=8 则每半场8秒，约30秒一场
 			var h: float = float(arg.substr(7))
 			if h > 0.0:
 				GameManager.sim_half_duration_override = h
@@ -212,7 +215,9 @@ func _setup_input_manager() -> void:
 
 func _setup_teams() -> void:
 	"""创建双方球队"""
-	# 队A初始位置:内场左半(队A半场)
+	if dev_prep_mode:
+		return
+
 	var team_a_ids := ["char_001", "char_002", "char_003"]
 	var team_a_positions := [
 		Vector2(-260, -130),
@@ -224,7 +229,6 @@ func _setup_teams() -> void:
 		var player := _create_player(team_a_ids[i], "a", i == 0, team_a_positions[i])
 		team_a_players.append(player)
 
-	# 队B初始位置:内场右半(队B半场)
 	var team_b_ids := ["char_004", "char_005", "char_006"]
 	var team_b_positions := [
 		Vector2(260, -130),
@@ -236,15 +240,14 @@ func _setup_teams() -> void:
 		var player := _create_player(team_b_ids[i], "b", false, team_b_positions[i])
 		team_b_players.append(player)
 
-	# 队B策略在 _setup_ai_manager 中随 profile 生成
+	if auto_simulate:
+		_auto_equip_spirits_for_sim()
 
 	input_mgr.all_team_players = team_a_players
 	input_mgr.set_controlled_player(team_a_players[0])
 
 	GameManager.team_a = team_a_players
 	GameManager.team_b = team_b_players
-
-	# 球权分配推迟到备战完成后(_on_prep_match_started)
 
 
 func _create_player(char_id: String, team_name: String, controlled: bool, start_pos: Vector2) -> CharacterBody2D:
@@ -1101,6 +1104,9 @@ func _setup_ai_manager() -> void:
 	add_child(ai_mgr)
 	ai_mgr.initialize(self, input_mgr)
 
+	if dev_prep_mode:
+		return
+
 	# 队A:3个角色分工(前锋/后卫/支援)+ balanced
 	var team_a_roles := ["attacker", "defender", "supporter"]
 	for i in range(team_a_players.size()):
@@ -1156,29 +1162,43 @@ func _setup_comm_system() -> void:
 
 func _setup_preparation_ui() -> void:
 	"""设置备战界面"""
-	var prep_script := load("res://scripts/ui/preparation_ui.gd")
-	preparation_ui = Control.new()
-	preparation_ui.name = "PreparationUI"
-	preparation_ui.set_script(prep_script)
+	if dev_prep_mode:
+		var prep_script := load("res://scripts/dev_tools/dev_test_preparation.gd")
+		preparation_ui = Control.new()
+		preparation_ui.name = "DevTestPreparationUI"
+		preparation_ui.set_script(prep_script)
 
-	if ui_layer:
-		ui_layer.add_child(preparation_ui)
+		if ui_layer:
+			ui_layer.add_child(preparation_ui)
+		else:
+			add_child(preparation_ui)
+
+		preparation_ui.match_started.connect(_on_dev_prep_match_started)
+		preparation_ui.back_to_menu_requested.connect(_on_back_to_menu)
 	else:
-		add_child(preparation_ui)
+		var prep_script := load("res://scripts/ui/preparation_ui.gd")
+		preparation_ui = Control.new()
+		preparation_ui.name = "PreparationUI"
+		preparation_ui.set_script(prep_script)
 
-	# 加载数据
-	preparation_ui.load_battle_data(team_a_players)
+		if ui_layer:
+			ui_layer.add_child(preparation_ui)
+		else:
+			add_child(preparation_ui)
 
-	# 连接AI管理器
-	if ai_mgr:
-		preparation_ui.set_ai_manager(ai_mgr)
+		# 加载数据
+		preparation_ui.load_battle_data(team_a_players)
 
-	# 连接信号
-	preparation_ui.strategy_changed.connect(_on_strategy_changed)
-	preparation_ui.player_substituted.connect(_on_player_substituted)
-	preparation_ui.spirit_changed.connect(_on_spirit_changed)
-	preparation_ui.match_started_from_prep.connect(_on_prep_match_started)
-	preparation_ui.back_to_menu_requested.connect(_on_back_to_menu)
+		# 连接AI管理器
+		if ai_mgr:
+			preparation_ui.set_ai_manager(ai_mgr)
+
+		# 连接信号
+		preparation_ui.strategy_changed.connect(_on_strategy_changed)
+		preparation_ui.player_substituted.connect(_on_player_substituted)
+		preparation_ui.spirit_changed.connect(_on_spirit_changed)
+		preparation_ui.match_started_from_prep.connect(_on_prep_match_started)
+		preparation_ui.back_to_menu_requested.connect(_on_back_to_menu)
 
 	# 隐藏比赛场地(只显示备战窗口)
 	if field_zone:
@@ -1186,7 +1206,8 @@ func _setup_preparation_ui() -> void:
 	if ball_node:
 		ball_node.visible = false
 	for player: CharacterBody2D in team_a_players + team_b_players:
-		player.visible = false
+		if player and is_instance_valid(player):
+			player.visible = false
 
 	# 显示备战界面时暂停比赛处理
 	set_process(false)
@@ -1309,6 +1330,9 @@ func _deferred_init_spirit_system() -> void:
 	if spirit_system and spirit_system.has_signal("effect_finished"):
 		if not spirit_system.effect_finished.is_connected(_on_skill_effect_finished):
 			spirit_system.effect_finished.connect(_on_skill_effect_finished)
+
+	if ai_mgr and ai_mgr.has_method("refresh_spirit_ai_skills"):
+		ai_mgr.refresh_spirit_ai_skills()
 
 	print("[BattleManager] 元灵技能系统初始化完成")
 
@@ -1514,7 +1538,199 @@ func _on_prep_match_started() -> void:
 		match_duration = 0.0
 
 		# 发球:球给随机一方
-		_assign_initial_ball()
+	_assign_initial_ball()
+
+
+func _on_dev_prep_match_started(team_a_data: Array[Dictionary], team_b_data: Array[Dictionary], control_index: int, control_team: String) -> void:
+	"""开发者测试备战模式：根据选择的数据创建球员并开始比赛"""
+	print("[Match] 开发者测试模式开始比赛")
+
+	var team_a_positions := [
+		Vector2(-260, -130),
+		Vector2(-320, 0),
+		Vector2(-260, 130)
+	]
+	var team_b_positions := [
+		Vector2(260, -130),
+		Vector2(320, 0),
+		Vector2(260, 130)
+	]
+
+	for i in range(3):
+		var data = team_a_data[i]
+		if data["char_id"] != "":
+			var is_controlled = control_team == "a" and i == control_index
+			var player := _create_player(data["char_id"], "a", is_controlled, team_a_positions[i])
+			team_a_players.append(player)
+			_apply_player_data(player, data)
+
+	for i in range(3):
+		var data = team_b_data[i]
+		if data["char_id"] != "":
+			var is_controlled = control_team == "b" and i == control_index
+			var player := _create_player(data["char_id"], "b", is_controlled, team_b_positions[i])
+			team_b_players.append(player)
+			_apply_player_data(player, data)
+
+	input_mgr.all_team_players = team_a_players if control_team == "a" else team_b_players
+	if input_mgr.all_team_players.size() > 0:
+		input_mgr.set_controlled_player(input_mgr.all_team_players[control_index])
+
+	GameManager.team_a = team_a_players
+	GameManager.team_b = team_b_players
+
+	# 为开发者模式初始化 AI 管理器
+	_setup_ai_for_dev_prep()
+
+	# 为开发者模式初始化元灵系统
+	_setup_spirit_for_dev_prep()
+
+	var hud_node = ui_layer.get_node_or_null("HUD") if ui_layer else null
+	if hud_node and hud_node.has_method("setup_players"):
+		hud_node.setup_players(team_a_players, team_b_players)
+
+	# 显示比赛场地
+	if field_zone:
+		field_zone.visible = true
+	if ball_node:
+		ball_node.visible = true
+	for p: CharacterBody2D in team_a_players + team_b_players:
+		if p and is_instance_valid(p):
+			p.visible = true
+	if penalty_walls:
+		penalty_walls.visible = true
+	if aim_line:
+		aim_line.visible = true
+	if mouse_cursor:
+		mouse_cursor.visible = true
+	if aim_arrow and is_instance_valid(aim_arrow):
+		aim_arrow.visible = true
+	if cursor_ring and is_instance_valid(cursor_ring):
+		cursor_ring.visible = true
+
+	# 显示比赛HUD
+	if hud_node:
+		hud_node.visible = true
+
+	# 隐藏备战界面
+	preparation_ui.visible = false
+
+	match_started = true
+	if input_mgr:
+		input_mgr.match_started = true
+
+	_pre_match_equipment = {}
+	if PlayerSaveManager and PlayerSaveManager.has_method("get_all_equipped"):
+		_pre_match_equipment = PlayerSaveManager.get_all_equipped()
+
+	GameManager.start_match()
+
+	var mps_script := load("res://scripts/battle/match_player_stats.gd")
+	player_stats = Node.new()
+	player_stats.set_script(mps_script)
+	player_stats.name = "MatchPlayerStats"
+	add_child(player_stats)
+	player_stats.start_recording()
+	for p in team_a_players + team_b_players:
+		if p and is_instance_valid(p):
+			player_stats.register_player(p)
+
+	_assign_initial_ball()
+
+
+func _setup_ai_for_dev_prep() -> void:
+	"""开发者模式下初始化 AI 管理器"""
+	if not ai_mgr:
+		return
+
+	var team_a_roles := ["attacker", "defender", "supporter"]
+	for i in range(team_a_players.size()):
+		var profile: AIProfile = AIProfile.get_role_preset(team_a_roles[i])
+		AIProfile.apply_team_strategy(profile, "balanced")
+		AIProfile.apply_difficulty(profile, "normal")
+		ai_mgr.register_player(team_a_players[i], "a", i, profile)
+
+	var roles := ["attacker", "defender", "supporter"]
+	roles.shuffle()
+	var strategies := ["offensive", "defensive", "balanced"]
+	var team_b_strategy: String = strategies[randi() % strategies.size()]
+
+	for i in range(team_b_players.size()):
+		var profile: AIProfile = AIProfile.get_role_preset(roles[i])
+		AIProfile.apply_team_strategy(profile, team_b_strategy)
+		if randf() < 0.7:
+			var weaknesses := ["slow_reaction", "ball_focused", "over_chase", "predictable_target"]
+			var w: String = weaknesses[randi() % weaknesses.size()]
+			AIProfile.apply_weakness(profile, w)
+		AIProfile.apply_difficulty(profile, "normal")
+		ai_mgr.register_player(team_b_players[i], "b", i, profile)
+
+	print("[Match] 开发者模式 AI 管理器初始化完成")
+
+
+func _setup_spirit_for_dev_prep() -> void:
+	"""开发者模式下初始化元灵系统"""
+	if not spirit_system:
+		return
+
+	var all_players: Array[Node] = []
+	for p in team_a_players + team_b_players:
+		if p and is_instance_valid(p):
+			all_players.append(p)
+	spirit_system.initialize(self, all_players, ball_node)
+
+	for player: CharacterBody2D in team_a_players + team_b_players:
+		if player and is_instance_valid(player):
+			var skill_ids: Array[String] = player.get_equipped_skills()
+			var pid: int = player.get_instance_id()
+			spirit_system.set_player_skills(pid, skill_ids)
+
+			if not player.skill_used.is_connected(_on_player_skill_used):
+				player.skill_used.connect(_on_player_skill_used.bind(player))
+
+	# 技能视觉管理器
+	if skill_visual_manager and skill_visual_manager.has_method("setup"):
+		var all_players_arr: Array = []
+		for p in team_a_players + team_b_players:
+			if p and is_instance_valid(p):
+				all_players_arr.append(p)
+		skill_visual_manager.setup(self, ball_node, all_players_arr)
+
+	print("[Match] 开发者模式元灵系统初始化完成")
+
+
+func _apply_player_data(player: CharacterBody2D, data: Dictionary) -> void:
+	"""为球员应用元灵、装备、食物数据（开发者模式，不修改存档）"""
+	var char_id = player.char_data.get("id", "")
+
+	if data["spirit_id"] != "":
+		var spirit_data = DataManager.get_spirit_by_id(data["spirit_id"])
+		if not spirit_data.is_empty():
+			player.equip_spirit(spirit_data)
+
+	for slot in ["glove", "jersey", "shoes"]:
+		var item_id = data["equipment"].get(slot, "")
+		if item_id != "":
+			var item_def = InventoryManager.get_item_def(item_id)
+			if not item_def.is_empty():
+				var stats = item_def.get("stats", {})
+				for stat_key in stats:
+					var bonus_val = int(stats[stat_key])
+					if bonus_val != 0:
+						var buff_id = "dev_equip_%s_%s" % [slot, stat_key]
+						player.add_buff(buff_id, stat_key, 1.0, float(bonus_val), 0.0, "dev_test")
+
+	if data["food"] != "" and NutritionManager:
+		var food_data = NutritionManager.get_food(data["food"])
+		if not food_data.is_empty():
+			var effect = food_data.get("effect", {})
+			if effect.has("stat") and effect.has("value"):
+				var stat_key = effect["stat"]
+				var bonus_val = int(effect["value"])
+				if bonus_val != 0:
+					player.add_buff("dev_food_%s" % stat_key, stat_key, 1.0, float(bonus_val), 0.0, "dev_test")
+
+	player.refresh_bonuses()
 
 
 func _on_back_to_menu() -> void:
@@ -1539,6 +1755,19 @@ func _on_sim_match_ended(score_a: int, score_b: int, _result: String) -> void:
 		match_stats.print_report()
 	print("[Sim] 比赛结束，退出")
 	get_tree().quit()
+
+
+func _auto_equip_spirits_for_sim() -> void:
+	var spirits = DataManager.spirits
+	if spirits.size() == 0:
+		return
+	var spirit_index = 0
+	for player: CharacterBody2D in team_a_players + team_b_players:
+		if player and is_instance_valid(player) and player.has_method("equip_spirit"):
+			var spirit_data = spirits[spirit_index % spirits.size()]
+			player.equip_spirit(spirit_data)
+			spirit_index += 1
+	print("[Sim] 自动装备元灵完成")
 
 
 # ===== 结算界面 =====

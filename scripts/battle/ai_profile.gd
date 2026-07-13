@@ -52,6 +52,19 @@ var ball_attract_weight: float = 0.25
 var spread_force: float = 0.5
 var team_strategy_name: String = "balanced"  # 团队策略名称（阵型选择用）
 
+# ──── 站位约束参数（2026-07-12 新增，解决乱走位/卡中线问题）────
+var hold_range: float = 120.0              # 无球静止时最大活动半径（以阵型位为中心）
+var hold_range_teammate_ball: float = 100.0  # 队友持球时最大活动半径
+var hold_range_enemy_ball: float = 80.0    # 对手持球时最大活动半径（防守不乱跑）
+var stationary_when_ball_idle: bool = true  # 球落地静止时保持站位（不乱追）
+var formation_priority: float = 0.7        # 阵型优先级 0~1，越高越守阵型
+
+# ──── 微动待机参数（2026-07-12 新增，解决无球时抽搐/往复运动）────
+# 球不在飞行时，无球球员在阵型基准位附近做小幅偏移，到达后静止
+var idle_drift_radius: float = 25.0        # 微动偏移半径（px），0=完全静止
+var idle_drift_interval: float = 2.0       # 微动换位间隔（秒），到达后等这么久再换微动点
+var idle_arrive_snap: float = 8.0          # 到达此距离内直接停下（防止微观抖动）
+
 # ──── Steering 避障参数（P0，借鉴 GDQuest GSAI，结合决竞球内外场规则）────
 # 内场分离力强度：决竞球内场有阵型约束（spread_force 已存在），分离力只做微调防撞
 var separation_inner: float = 600.0
@@ -89,6 +102,13 @@ var curve_stamina: String = "exp"            # 体力健康：越好越想接（
 var curve_threat: String = "logistic"        # 球威胁：达阈值才躲（低威胁忽略）
 var curve_k: float = 1.0                     # 曲线斜率（越大越陡，默认1.0）
 
+# ──── 感知常识参数（2026-07-12 新增，解决感知不到队友/敌人导致不会传球的问题）────
+var teammate_awareness_always: bool = true   # 始终知道队友存在（常识，不依赖视野）
+var teammate_pos_accuracy: float = 0.6       # 队友位置感知精度（0~1，比视野低）
+var enemy_awareness_close: float = 150.0     # 此距离内敌人必知（近距离感知）
+var enemy_awareness_fallback: bool = true    # 感知不到时用全局最近敌人兜底（不瞎打）
+var pass_min_teammate_score: float = 0.0     # 传球目标最低评分（低于则不传）
+
 # ──── 个人策略名称（外场效用计算用，2026-06-15 新增）────
 # "breakthrough"(突破进攻) / "defense"(防守反击) / "passing"(传球配合)
 # 备战面板选择后存入，外场持球决策读此字段决定 PASS 还是 ATTACK
@@ -121,6 +141,32 @@ var facing_mode_dribble: String = "goal"
 var facing_mode_support: String = "ball"
 var facing_mode_defend: String = "enemy"
 
+# ──── 元灵技能AI参数（2026-07-13 新增）────
+var skill_use_threshold: float = 15.0
+var skill_energy_min: float = 10.0
+var skill_reserve_weight: float = 0.9
+var skill_attack_intent_weight: float = 1.0
+var skill_defense_intent_weight: float = 1.0
+var skill_support_intent_weight: float = 1.0
+var skill_think_interval: float = 0.5
+var skill_late_game_bonus: float = 1.5
+var skill_losing_bonus: float = 1.3
+var skill_leading_penalty: float = 0.7
+var skill_uncertainty_discount: float = 0.6
+var skill_expected_future_score: float = 50.0
+var skill_element_counter_bonus: float = 1.3
+var skill_element_counter_penalty: float = 0.7
+var skill_combo_bonus: float = 0.5
+var skill_threat_assessment_weight: float = 0.3
+var skill_distance_factor_weight: float = 0.1
+var skill_situation_reading_depth: int = 3
+var skill_accuracy: float = 0.7
+var skill_mistake_chance: float = 0.15
+var skill_synergy_bonus_critical: float = 1.5
+var skill_synergy_bonus_high: float = 1.3
+var skill_outnumbered_bonus: float = 1.15
+var skill_selection_temperature: float = 2.0
+
 
 ## 返回角色预设配置
 static func get_role_preset(role_name: String) -> AIProfile:
@@ -145,85 +191,118 @@ static func get_role_preset(role_name: String) -> AIProfile:
 			p.pass_range = 280.0        # 传球范围短（不爱传）
 			p.ball_attract_weight = 0.45 # 强烈被球吸引
 			p.spread_force = 0.2        # 不太散开（向前冲）
+			p.hold_range = 150.0
+			p.hold_range_teammate_ball = 120.0
+			p.hold_range_enemy_ball = 100.0
+			p.formation_priority = 0.5
+			p.idle_drift_radius = 35.0
+			p.idle_drift_interval = 1.5
 			p.prefer_forward_pass = true
 			p.prefer_distance_min = 100.0
 			p.prefer_distance_max = 250.0
-			p.random_factor = 12.0      # 较冲动
-			p.pass_angle_error = 5.0    # 传球还行
-			p.shoot_angle_error = 2.0   # 投球很准
-			p.field_of_view = 180.0     # 标准视野
-			p.vision_range = 400.0      # 看得远
-			p.awareness_accuracy = 0.85 # 感知较准
-			p.memory_duration = 1.5     # 记忆中等
+			p.random_factor = 12.0
+			p.pass_angle_error = 5.0
+			p.shoot_angle_error = 2.0
+			p.field_of_view = 180.0
+			p.vision_range = 400.0
+			p.awareness_accuracy = 0.85
+			p.memory_duration = 1.5
 			p.awareness_update_interval = 0.3
 			p.facing_mode_chase = "ball"
 			p.facing_mode_dribble = "goal"
 			p.facing_mode_support = "move"
 			p.facing_mode_defend = "enemy"
+			p.skill_reserve_weight = 0.7
+			p.skill_attack_intent_weight = 1.4
+			p.skill_defense_intent_weight = 0.9
+			p.skill_support_intent_weight = 1.0
+			p.skill_think_interval = 0.3
 
 		"defender":
-			p.weight_pass = 30.0        # 爱传球（安全）
-			p.weight_shoot = -10.0      # 不爱投球（但不会拒绝）
-			p.weight_dribble = -25.0    # 不爱带球
-			p.decision_hysteresis = 12.0  # 防御者：大容差，更稳定不乱切（P0）
-			p.hold_duration_min = 0.5   # 犹豫久
+			p.weight_pass = 30.0
+			p.weight_shoot = -10.0
+			p.weight_dribble = -25.0
+			p.decision_hysteresis = 12.0
+			p.hold_duration_min = 0.5
 			p.hold_duration_max = 1.2
-			p.think_interval = 0.3      # 决策慢
+			p.think_interval = 0.3
 			p.reaction_delay = 0.08
-			p.speed_chase_mult = 0.9    # 追球不急
-			p.speed_dribble_mult = 0.7   # 带球慢
-			p.speed_move_mult = 0.8    # 跑位稳
-			p.aggro_range = 300.0       # 攻击范围小
-			p.pass_range = 360.0        # 传球范围大（爱传远）
-			p.ball_attract_weight = 0.1  # 不被球吸引（守位）
-			p.spread_force = 0.7        # 强散开（保持阵型）
+			p.speed_chase_mult = 0.9
+			p.speed_dribble_mult = 0.7
+			p.speed_move_mult = 0.8
+			p.aggro_range = 300.0
+			p.pass_range = 360.0
+			p.ball_attract_weight = 0.1
+			p.spread_force = 0.7
+			p.hold_range = 80.0
+			p.hold_range_teammate_ball = 70.0
+			p.hold_range_enemy_ball = 90.0
+			p.formation_priority = 0.9
+			p.idle_drift_radius = 10.0
+			p.idle_drift_interval = 3.0
 			p.prefer_forward_pass = false
 			p.prefer_distance_min = 80.0
 			p.prefer_distance_max = 300.0
-			p.random_factor = 4.0       # 稳定少失误
-			p.pass_angle_error = 2.0    # 传球准
-			p.shoot_angle_error = 6.0   # 投球偏差但不是离谱
-			p.field_of_view = 200.0     # 宽视野（警惕四周）
-			p.vision_range = 400.0      # 看得远
-			p.awareness_accuracy = 0.92 # 感知精准
-			p.memory_duration = 2.5     # 记忆长
+			p.random_factor = 4.0
+			p.pass_angle_error = 2.0
+			p.shoot_angle_error = 6.0
+			p.field_of_view = 200.0
+			p.vision_range = 400.0
+			p.awareness_accuracy = 0.92
+			p.memory_duration = 2.5
 			p.awareness_update_interval = 0.2
 			p.facing_mode_chase = "ball"
-			p.facing_mode_dribble = "move"   # 带球看移动方向
-			p.facing_mode_support = "ball"    # 跑位时盯球
+			p.facing_mode_dribble = "move"
+			p.facing_mode_support = "ball"
 			p.facing_mode_defend = "enemy"
+			p.skill_reserve_weight = 1.1
+			p.skill_attack_intent_weight = 0.9
+			p.skill_defense_intent_weight = 1.4
+			p.skill_support_intent_weight = 1.0
+			p.skill_think_interval = 0.4
 
 		"supporter":
-			p.weight_pass = 40.0        # 最爱传球
-			p.weight_shoot = 0.0        # 中性投球
-			p.weight_dribble = 5.0      # 略微带球
-			p.decision_hysteresis = 8.0   # 支援者：中等容差（P0）
-			p.hold_duration_min = 0.25  # 中等节奏
+			p.weight_pass = 40.0
+			p.weight_shoot = 0.0
+			p.weight_dribble = 5.0
+			p.decision_hysteresis = 8.0
+			p.hold_duration_min = 0.25
 			p.hold_duration_max = 0.6
-			p.think_interval = 0.18     # 决策较快
+			p.think_interval = 0.18
 			p.reaction_delay = 0.0
-			p.speed_chase_mult = 1.0    # 追球中等
-			p.speed_dribble_mult = 0.78  # 带球中等
-			p.speed_move_mult = 0.95   # 跑位最快（满场飞）
-			p.aggro_range = 420.0       # 中等范围
-			p.pass_range = 380.0        # 传球范围最大
-			p.ball_attract_weight = 0.3  # 中等吸引
-			p.spread_force = 0.5        # 中等散开
+			p.speed_chase_mult = 1.0
+			p.speed_dribble_mult = 0.78
+			p.speed_move_mult = 0.95
+			p.aggro_range = 420.0
+			p.pass_range = 380.0
+			p.ball_attract_weight = 0.3
+			p.spread_force = 0.5
+			p.hold_range = 120.0
+			p.hold_range_teammate_ball = 100.0
+			p.hold_range_enemy_ball = 85.0
+			p.formation_priority = 0.7
+			p.idle_drift_radius = 20.0
+			p.idle_drift_interval = 2.0
 			p.prefer_forward_pass = true
 			p.prefer_distance_min = 120.0
 			p.prefer_distance_max = 300.0
-			p.random_factor = 8.0       # 中等随机
-			p.pass_angle_error = 3.0    # 传球还行
-			p.shoot_angle_error = 5.0   # 投球中等偏差
-			p.field_of_view = 180.0     # 标准视野
-			p.vision_range = 380.0      # 看得较远
+			p.random_factor = 8.0
+			p.pass_angle_error = 3.0
+			p.shoot_angle_error = 5.0
+			p.field_of_view = 180.0
+			p.vision_range = 380.0
 			p.awareness_accuracy = 0.88
 			p.memory_duration = 2.0
 			p.awareness_update_interval = 0.22
 			p.facing_mode_chase = "ball"
-			p.facing_mode_dribble = "ball"    # 带球盯球（随时准备传）
-			p.facing_mode_support = "ball"    # 跑位盯球
+			p.facing_mode_dribble = "ball"
+			p.facing_mode_support = "ball"
 			p.facing_mode_defend = "enemy"
+			p.skill_reserve_weight = 0.9
+			p.skill_attack_intent_weight = 1.0
+			p.skill_defense_intent_weight = 1.0
+			p.skill_support_intent_weight = 1.4
+			p.skill_think_interval = 0.35
 
 		_:
 			# 默认值（balanced）
@@ -249,6 +328,15 @@ static func apply_difficulty(profile: AIProfile, difficulty: String) -> void:
 			profile.speed_chase_mult *= 0.85
 			profile.speed_dribble_mult *= 0.85
 			profile.reaction_delay += 0.15
+			profile.skill_use_threshold = 60.0
+			profile.skill_energy_min = 40.0
+			profile.skill_accuracy = 0.5
+			profile.skill_mistake_chance = 0.3
+			profile.skill_late_game_bonus = 1.1
+			profile.skill_losing_bonus = 1.1
+			profile.skill_leading_penalty = 0.5
+			profile.skill_expected_future_score = 70.0
+			profile.skill_uncertainty_discount = 0.8
 		"normal":
 			pass  # 不修改
 		"hard":
@@ -263,6 +351,15 @@ static func apply_difficulty(profile: AIProfile, difficulty: String) -> void:
 			profile.speed_chase_mult *= 1.1
 			profile.speed_dribble_mult *= 1.1
 			profile.reaction_delay = 0.0
+			profile.skill_use_threshold = 25.0
+			profile.skill_energy_min = 10.0
+			profile.skill_accuracy = 0.95
+			profile.skill_mistake_chance = 0.03
+			profile.skill_late_game_bonus = 1.8
+			profile.skill_losing_bonus = 1.5
+			profile.skill_leading_penalty = 0.85
+			profile.skill_expected_future_score = 30.0
+			profile.skill_uncertainty_discount = 0.4
 
 
 ## 叠加弱点

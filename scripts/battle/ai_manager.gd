@@ -4,11 +4,13 @@ extends Node
 ## 包含:180度朝向视野感知系统、评分决策、阵型跑位
 
 const AIProfile = preload("res://scripts/battle/ai_profile.gd")
+const SpiritAIManager = preload("res://scripts/battle/spirit_ai_manager.gd")
 
 var battle_manager: Node2D
 var input_manager: Node
 var ball_node: Area2D
-var match_stats: Node = null  # P1方案A：指标采集器引用（可选，sim模式用）
+var match_stats: Node = null
+var spirit_ai_mgr: Node = null
 
 enum State {
 	IDLE,
@@ -68,7 +70,23 @@ func _ready() -> void:
 func initialize(battle_mgr: Node2D, input_mgr: Node) -> void:
 	battle_manager = battle_mgr
 	input_manager = input_mgr
+	
+	spirit_ai_mgr = SpiritAIManager.new()
+	spirit_ai_mgr.name = "SpiritAIManager"
+	add_child(spirit_ai_mgr)
+	
+	call_deferred("_deferred_init_spirit_ai")
+	
 	print("[AI] 初始化完成")
+
+func _deferred_init_spirit_ai() -> void:
+	if battle_manager and battle_manager.spirit_system:
+		spirit_ai_mgr.initialize(battle_manager, battle_manager.spirit_system, self)
+		spirit_ai_mgr.refresh_all_skills_analysis()
+
+func refresh_spirit_ai_skills() -> void:
+	if spirit_ai_mgr:
+		spirit_ai_mgr.refresh_all_skills_analysis()
 
 
 func _physics_process(delta: float) -> void:
@@ -81,6 +99,9 @@ func _physics_process(delta: float) -> void:
 		ball_node = battle_manager.ball_node
 	if not ball_node:
 		return
+
+	if spirit_ai_mgr:
+		spirit_ai_mgr._physics_process(delta)
 
 	for ap in ai_players:
 		if not _is_valid(ap):
@@ -112,12 +133,10 @@ func _physics_process(delta: float) -> void:
 # ==============================
 
 func register_player(player: CharacterBody2D, team_name: String, index: int, profile: AIProfile) -> void:
-	# 初始朝向：队A朝右(向对方)，队B朝左(向对方)
 	var initial_facing: Vector2 = Vector2(1, 0) if team_name == "a" else Vector2(-1, 0)
 	player.facing_direction = initial_facing
 
-	# 根据角色基础速度 * profile乘数 计算AI实际速度
-	var base_speed: float = player.speed  # 已含SPEED_SCALE缩放
+	var base_speed: float = player.speed
 	profile.speed_chase = base_speed * profile.speed_chase_mult
 	profile.speed_dribble = base_speed * profile.speed_dribble_mult
 	profile.speed_move = base_speed * profile.speed_move_mult
@@ -135,13 +154,17 @@ func register_player(player: CharacterBody2D, team_name: String, index: int, pro
 		"dribble_target": Vector2.ZERO,
 		"total_carry_time": 0.0,
 		"last_pos": player.global_position,
-		"last_state": State.IDLE,  # P0：Hysteresis 防抖用，记录上次状态
+		"last_state": State.IDLE,
 		"stuck_timer": 0.0,
-		"think_timer": randf() * profile.think_interval,  # 错开初始决策时间
+		"think_timer": randf() * profile.think_interval,
 		"known_positions": {},
 		"awareness_timer": 0.0,
 		"last_shoot_target": null,
 	})
+	
+	if spirit_ai_mgr:
+		spirit_ai_mgr.register_player(player, profile)
+	
 	print("[AI] 注册 队%s 位置%d 角色=%s 弱点=%s base_speed=%.0f chase=%.0f" % [team_name, index, profile.role, profile.weakness, base_speed, profile.speed_chase])
 
 
@@ -181,11 +204,10 @@ func _is_in_field_of_view(ap: Dictionary, target_pos: Vector2) -> bool:
 
 
 func _update_awareness(ap: Dictionary, delta: float) -> void:
-	"""刷新AI对场上其他球员的感知"""
+	"""刷新AI对场上其他球员的感知（视野感知 + 常识感知）"""
 	var profile: AIProfile = ap.profile
 	ap.awareness_timer += delta
 
-	# 每隔 awareness_update_interval 秒刷新一次视野内的信息
 	if ap.awareness_timer < profile.awareness_update_interval:
 		_decay_memory(ap, delta)
 		return
@@ -203,8 +225,9 @@ func _update_awareness(ap: Dictionary, delta: float) -> void:
 		var other_pos: Vector2 = other.global_position
 		var dist: float = my_pos.distance_to(other_pos)
 		var id: int = other.get_instance_id()
+		var is_teammate: bool = other.team == ap.team
 
-		# 在视野锥内 + 在视野距离内
+		# === 视野感知（高精度）===
 		if _is_in_field_of_view(ap, other_pos) and dist <= profile.vision_range:
 			var noise_scale: float = (1.0 - profile.awareness_accuracy) * 40.0
 			var known_pos: Vector2 = other_pos + Vector2(
@@ -216,22 +239,62 @@ func _update_awareness(ap: Dictionary, delta: float) -> void:
 				"timer": 0.0,
 				"team": other.team,
 				"ref": other,
+				"source": "vision",  # 来源：视野（高精度）
 			}
-		else:
-			# 不在视野内:不刷新,让已有记忆自然衰减
-			pass
+			continue
 
-	# 衰减记忆
+		# === 常识感知：队友始终知道存在（低精度，不依赖视野）===
+		if is_teammate and profile.teammate_awareness_always:
+			# 如果已有视野数据，不覆盖（视野精度更高）
+			if ap.known_positions.has(id) and ap.known_positions[id].get("source", "") == "vision":
+				if ap.known_positions[id]["timer"] < profile.memory_duration:
+					continue
+			# 常识感知：队友位置有更大偏差
+			var common_noise: float = (1.0 - profile.teammate_pos_accuracy) * 80.0
+			var common_pos: Vector2 = other_pos + Vector2(
+				randf_range(-common_noise, common_noise),
+				randf_range(-common_noise, common_noise)
+			)
+			ap.known_positions[id] = {
+				"pos": common_pos,
+				"timer": 0.0,
+				"team": other.team,
+				"ref": other,
+				"source": "common",  # 来源：常识（低精度，不衰减）
+			}
+			continue
+
+		# === 近距离必感知（敌人贴脸了还不知道就太假了）===
+		if not is_teammate and dist <= profile.enemy_awareness_close:
+			var close_noise: float = (1.0 - profile.awareness_accuracy) * 30.0
+			var close_pos: Vector2 = other_pos + Vector2(
+				randf_range(-close_noise, close_noise),
+				randf_range(-close_noise, close_noise)
+			)
+			ap.known_positions[id] = {
+				"pos": close_pos,
+				"timer": 0.0,
+				"team": other.team,
+				"ref": other,
+				"source": "close",
+			}
+			continue
+
+	# 衰减记忆（常识感知不衰减，视野感知正常衰减）
 	_decay_memory(ap, 0.0)
 
 
 func _decay_memory(ap: Dictionary, delta: float) -> void:
-	"""衰减不在视野内的已知信息"""
+	"""衰减不在视野内的已知信息（常识感知不衰减）"""
 	var profile: AIProfile = ap.profile
 	var expired_ids: Array = []
 	for id in ap.known_positions:
-		ap.known_positions[id]["timer"] += delta
-		if ap.known_positions[id]["timer"] > profile.memory_duration:
+		var info: Dictionary = ap.known_positions[id]
+		# 常识感知不衰减（队友一直知道存在）
+		if info.get("source", "") == "common":
+			continue
+		info["timer"] += delta
+		if info["timer"] > profile.memory_duration:
 			expired_ids.append(id)
 	for id in expired_ids:
 		ap.known_positions.erase(id)
@@ -462,59 +525,68 @@ func _decide(ap: Dictionary) -> void:
 # ==============================
 
 func _decide_off_ball_role(ap: Dictionary, ball_pos: Vector2) -> void:
-	"""无球且不需要追球时，按角色选择行为"""
+	"""无球且不需要追球时，按角色选择行为，球不飞时用微动待机"""
 	var profile: AIProfile = ap.profile
+	var p: CharacterBody2D = ap.player
+	var hold_range: float = _get_current_hold_range(ap)
+
+	# 球不在飞行时 → 微动待机（不追着球跑，防抽搐）
+	if not ball_node.is_active:
+		ap.state = State.DEFEND
+		ap.target_pos = _get_idle_drift_pos(ap)
+		return
+
 	match profile.role:
 		"defender":
-			# 防御手：看球是否飞向己方，尝试拦截
-			if ball_node.is_active:
-				if _should_intercept_for_team(ap, ball_pos):
-					ap.state = State.READY_CATCH
-					ap.target_pos = ap.player.global_position
-					if ap.player.has_method("enter_catch_state"):
-						ap.player.enter_catch_state()
-					return  # 无论有没有enter_catch_state，已决定拦截
-			# 没有拦截机会：跑保护位
+			if _should_intercept_for_team(ap, ball_pos):
+				ap.state = State.READY_CATCH
+				ap.target_pos = p.global_position
+				if p.has_method("enter_catch_state"):
+					p.enter_catch_state()
+				return
 			ap.state = State.DEFEND
-			ap.target_pos = _get_protect_pos(ap)
+			var protect_pos: Vector2 = _get_protect_pos(ap)
+			ap.target_pos = _clamp_to_hold_range(ap, protect_pos, hold_range)
 		"supporter":
-			# 辅助手：看球是否飞向己方，尝试拦截
-			if ball_node.is_active:
-				if _should_intercept_for_team(ap, ball_pos):
-					ap.state = State.READY_CATCH
-					ap.target_pos = ap.player.global_position
-					if ap.player.has_method("enter_catch_state"):
-						ap.player.enter_catch_state()
-					return  # 无论有没有enter_catch_state，已决定拦截
-			# 跑接应位
+			if _should_intercept_for_team(ap, ball_pos):
+				ap.state = State.READY_CATCH
+				ap.target_pos = p.global_position
+				if p.has_method("enter_catch_state"):
+					p.enter_catch_state()
+				return
 			ap.state = State.SUPPORT
-			ap.target_pos = _get_assist_pos(ap)
+			var assist_pos: Vector2 = _get_assist_pos(ap)
+			ap.target_pos = _clamp_to_hold_range(ap, assist_pos, hold_range)
 		_:
-			# 主攻手：跑前方进攻位等待传球
 			ap.state = State.SUPPORT
-			ap.target_pos = _get_attack_wait_pos(ap)
+			var attack_pos: Vector2 = _get_attack_wait_pos(ap)
+			ap.target_pos = _clamp_to_hold_range(ap, attack_pos, hold_range)
 
 
 func _decide_teammate_has_ball(ap: Dictionary) -> void:
-	"""球在队友手里：按角色分化"""
+	"""球在队友手里：按角色分化跑位+微动待机"""
 	var profile: AIProfile = ap.profile
+	var hold_range: float = _get_current_hold_range(ap)
+
 	match profile.role:
 		"defender":
-			# 防御手：跑到持球者与最近敌人之间，保护持球者
+			# 防御手：微动待机（不需要跟着持球队友跑）
 			ap.state = State.DEFEND
-			ap.target_pos = _get_protect_pos(ap)
+			ap.target_pos = _get_idle_drift_pos(ap)
 		"supporter":
-			# 辅助手：跑到持球者侧面方便接应传球
+			# 辅助手：在持球者侧方接应（受活动范围限制）
 			ap.state = State.SUPPORT
-			ap.target_pos = _get_assist_pos(ap)
+			var assist_pos: Vector2 = _get_assist_pos(ap)
+			ap.target_pos = _clamp_to_hold_range(ap, assist_pos, hold_range)
 		_:
-			# 主攻手：跑到前方等传球，准备进攻
+			# 主攻手：前方等传球（受活动范围限制）
 			ap.state = State.SUPPORT
-			ap.target_pos = _get_attack_wait_pos(ap)
+			var attack_pos: Vector2 = _get_attack_wait_pos(ap)
+			ap.target_pos = _clamp_to_hold_range(ap, attack_pos, hold_range)
 
 
 func _decide_enemy_has_ball(ap: Dictionary) -> void:
-	"""对手持球时：保持阵型站位，有冲刺保护/拦截倾向"""
+	"""对手持球时：全员微动待机，防御手近距离才上前，非防御手不追玩家"""
 	var p: CharacterBody2D = ap.player
 	var team: String = ap.team
 	var profile: AIProfile = ap.profile
@@ -522,41 +594,25 @@ func _decide_enemy_has_ball(ap: Dictionary) -> void:
 	var ball_pos: Vector2 = ball_node.global_position
 	var enemy_carrier: CharacterBody2D = ball_node.owner_player
 	var dist_to_ball: float = my_pos.distance_to(ball_pos)
+	var hold_range: float = _get_current_hold_range(ap)
 
-	# === 角色分化拦截：近距离时冲刺逼抢 ===
-	# 主攻手/辅助手：如果离对手持球者近，有冲刺逼抢倾向
-	if profile.role != "defender":
-		if dist_to_ball < profile.aggro_range * 0.8:
-			# 检查是否是最接近对手持球者的己方球员
-			if _am_i_closest_to_pos(ap, team, enemy_carrier.global_position):
-				ap.state = State.CHASE_BALL
-				var chase_pos: Vector2
-				if profile.weakness_overextend:
-					chase_pos = enemy_carrier.global_position
-				else:
-					chase_pos = _clamp_to_half_field(enemy_carrier.global_position, team)
-				ap.target_pos = chase_pos
-				return
-
-	# === 防御手：如果对手逼近，上前保护 ===
+	# === 防御手：对手在己方半场近距离时上前防守 ===
 	if profile.role == "defender":
-		# 对手持球者在己方半场→上前保护
 		var enemy_in_my_half: bool = false
 		if team == "a" and enemy_carrier.global_position.x < 0:
 			enemy_in_my_half = true
 		elif team == "b" and enemy_carrier.global_position.x > 0:
 			enemy_in_my_half = true
-		if enemy_in_my_half and dist_to_ball < profile.aggro_range:
-			# 冲向对手持球者（保持一定距离，不贴身）
+		if enemy_in_my_half and dist_to_ball < profile.aggro_range * 0.6:
 			var dir_to_enemy: Vector2 = (enemy_carrier.global_position - my_pos).normalized()
 			var press_pos: Vector2 = enemy_carrier.global_position - dir_to_enemy * 60.0
 			ap.state = State.DEFEND
-			ap.target_pos = _clamp_to_half_field(press_pos, team)
+			ap.target_pos = _clamp_to_hold_range(ap, press_pos, hold_range)
 			return
 
-	# === 默认：回到阵型站位（保持原有场上位置） ===
+	# === 非防御手：微动待机，不追玩家（防抽搐）===
 	ap.state = State.DEFEND
-	ap.target_pos = _get_formation_hold_pos(ap)
+	ap.target_pos = _get_idle_drift_pos(ap)
 
 
 # ============================================================================
@@ -1703,17 +1759,16 @@ func _move(ap: Dictionary, delta: float) -> void:
 				ap.state = State.IDLE
 
 		State.DEFEND:
-			if dist < arrive:
+			if dist < maxf(arrive, profile.idle_arrive_snap):
 				p.velocity = Vector2.ZERO
-				_force_redecide_if_at_boundary(ap)
+				# 到达后不再强制重决策（微动待机有自己的换位节奏）
 			else:
 				p.velocity = _apply_steering(ap, (target - p.global_position).normalized() * profile.speed_move)
 				p.move_and_slide()
 
 		State.SUPPORT:
-			if dist < arrive:
+			if dist < maxf(arrive, profile.idle_arrive_snap):
 				p.velocity = Vector2.ZERO
-				_force_redecide_if_at_boundary(ap)
 			else:
 				p.velocity = _apply_steering(ap, (target - p.global_position).normalized() * profile.speed_move)
 				p.move_and_slide()
@@ -1862,14 +1917,68 @@ func _get_formation_hold_pos(ap: Dictionary) -> Vector2:
 	var half_center: Vector2 = Vector2(-190.0, 0.0) if team == "a" else Vector2(190.0, 0.0)
 	var base_pos: Vector2 = half_center + formation_pos
 
-	# 球位置微弱吸引（防守时只微微偏向球的方向）
+	# 球位置微弱吸引（防守时只微微偏向球的方向，受formation_priority抑制）
 	var ball_pos: Vector2 = ball_node.global_position
 	var ball_in_my_half: bool = (team == "a" and ball_pos.x < 0) or (team == "b" and ball_pos.x > 0)
 	if ball_in_my_half:
-		var ball_pull: Vector2 = (ball_pos - base_pos).normalized() * 20.0 * profile.ball_attract_weight
+		var pull_strength: float = 20.0 * profile.ball_attract_weight * (1.0 - profile.formation_priority)
+		var ball_pull: Vector2 = (ball_pos - base_pos).normalized() * pull_strength
 		base_pos += ball_pull
 
 	return _clamp_to_half_field(base_pos, team)
+
+
+func _clamp_to_hold_range(ap: Dictionary, target_pos: Vector2, range_radius: float) -> Vector2:
+	"""将目标位置限制在以阵型基准位为中心的活动范围内（解决乱跑/卡中线）"""
+	var formation_base: Vector2 = _get_formation_hold_pos(ap)
+	var to_target: Vector2 = target_pos - formation_base
+	var dist: float = to_target.length()
+	if dist > range_radius and dist > 0.0:
+		return formation_base + to_target.normalized() * range_radius
+	return target_pos
+
+
+func _get_current_hold_range(ap: Dictionary) -> float:
+	"""根据当前场上局势获取活动半径"""
+	var profile: AIProfile = ap.profile
+	if not ball_node:
+		return profile.hold_range
+	if ball_node.owner_player:
+		if ball_node.owner_player.team == ap.team:
+			return profile.hold_range_teammate_ball
+		else:
+			return profile.hold_range_enemy_ball
+	return profile.hold_range
+
+
+## 微动待机：球不在飞行时，无球球员在阵型基准位附近做小幅偏移
+## 解决"每帧重算目标导致往复抽搐"问题：偏移点有持久性，到达后静止等待
+func _get_idle_drift_pos(ap: Dictionary) -> Vector2:
+	"""获取微动待机位置（阵型基准位 + 持久随机偏移）"""
+	var profile: AIProfile = ap.profile
+	var formation_base: Vector2 = _get_formation_hold_pos(ap)
+
+	# 如果半径为0，完全静止
+	if profile.idle_drift_radius <= 0.0:
+		return formation_base
+
+	# 检查是否需要换新偏移点
+	var need_new_drift: bool = false
+	if not ap.has("idle_drift_pos"):
+		need_new_drift = true
+	else:
+		ap["idle_drift_timer"] = ap.get("idle_drift_timer", 0.0) + profile.think_interval
+		if ap["idle_drift_timer"] >= profile.idle_drift_interval:
+			need_new_drift = true
+
+	if need_new_drift:
+		# 在阵型位附近生成新的随机偏移点
+		var angle: float = randf() * TAU
+		var r: float = randf() * profile.idle_drift_radius
+		ap["idle_drift_pos"] = formation_base + Vector2(cos(angle), sin(angle)) * r
+		ap["idle_drift_timer"] = 0.0
+
+	return ap["idle_drift_pos"]
 
 
 func _am_i_closest_to_pos(ap: Dictionary, team: String, target_pos: Vector2) -> bool:
@@ -2151,11 +2260,21 @@ func _find_nearest_enemy(ap: Dictionary) -> CharacterBody2D:
 
 
 func _has_visible_enemy_nearby(ap: Dictionary, range_val: float) -> bool:
-	"""基于感知系统判断是否有可见敌人在范围内"""
+	"""基于感知系统判断是否有可见敌人在范围内（近距离兜底）"""
 	var known_enemies: Array[Dictionary] = _get_known_enemies(ap)
 	var my_pos: Vector2 = ap.player.global_position
 	for e in known_enemies:
 		if my_pos.distance_to(e["pos"]) < range_val:
+			return true
+	# 兜底：近距离内一定能感知到敌人（贴脸了还不知道就太假了）
+	var enemy_team: String = "b" if ap.team == "a" else "a"
+	for other_ap in ai_players:
+		if other_ap.team != enemy_team:
+			continue
+		var other: CharacterBody2D = other_ap.player
+		if not other or not is_instance_valid(other) or other.is_defeated or other.is_penalized:
+			continue
+		if my_pos.distance_to(other.global_position) < range_val:
 			return true
 	return false
 

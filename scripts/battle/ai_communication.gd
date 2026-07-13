@@ -13,6 +13,9 @@ enum MsgType {
 	DEFEND_ALERT,   # 注意防守
 	PASS_TO_ME,     # 传球给我
 	DONT_PASS,      # 别传球
+	SKILL_READY,    # 技能就绪（我大招好了）
+	BUFF_ON_YOU,    # 我给你加buff了
+	NEED_BUFF,      # 我需要buff支援
 }
 
 # 消息文本（队友可见）
@@ -20,6 +23,9 @@ const MSG_TEXT = {
 	MsgType.DEFEND_ALERT: "防守!",
 	MsgType.PASS_TO_ME: "传我!",
 	MsgType.DONT_PASS: "别传!",
+	MsgType.SKILL_READY: "技能就绪!",
+	MsgType.BUFF_ON_YOU: "加油!",
+	MsgType.NEED_BUFF: "需要支援!",
 }
 
 # 信号：某球员发送了消息（由 battle_manager 连接处理显示）
@@ -292,6 +298,80 @@ func has_defend_alert(team: String) -> bool:
 			if ap.last_msg_type == MsgType.DEFEND_ALERT:
 				if elapsed_time - ap.last_msg_time < 1.5:
 					return true
+	return false
+
+func has_skill_ready(team: String) -> bool:
+	"""检查队伍中是否有活跃的技能就绪消息"""
+	if not ai_manager:
+		return false
+	for ap in ai_manager.ai_players:
+		if ap.team != team:
+			continue
+		if ap.has("last_msg_type") and ap.has("last_msg_time"):
+			if ap.last_msg_type == MsgType.SKILL_READY:
+				if elapsed_time - ap.last_msg_time < 5.0:
+					return true
+	return false
+
+func get_skill_ready_sender(team: String) -> CharacterBody2D:
+	"""获取最近发'技能就绪'的球员"""
+	if not ai_manager:
+		return null
+	var best_sender: CharacterBody2D = null
+	var best_time: float = -1.0
+	for ap in ai_manager.ai_players:
+		if ap.team != team:
+			continue
+		if ap.has("last_msg_type") and ap.has("last_msg_time"):
+			if ap.last_msg_type == MsgType.SKILL_READY:
+				if elapsed_time - ap.last_msg_time < 5.0:
+					if ap.last_msg_time > best_time:
+						best_time = ap.last_msg_time
+						best_sender = ap.player
+	return best_sender
+
+func has_need_buff(team: String) -> bool:
+	"""检查队伍中是否有活跃的需要buff消息"""
+	if not ai_manager:
+		return false
+	for ap in ai_manager.ai_players:
+		if ap.team != team:
+			continue
+		if ap.has("last_msg_type") and ap.has("last_msg_time"):
+			if ap.last_msg_type == MsgType.NEED_BUFF:
+				if elapsed_time - ap.last_msg_time < 3.0:
+					return true
+	return false
+
+func get_need_buff_sender(team: String) -> CharacterBody2D:
+	"""获取最近发'需要buff'的球员"""
+	if not ai_manager:
+		return null
+	var best_sender: CharacterBody2D = null
+	var best_time: float = -1.0
+	for ap in ai_manager.ai_players:
+		if ap.team != team:
+			continue
+		if ap.has("last_msg_type") and ap.has("last_msg_time"):
+			if ap.last_msg_type == MsgType.NEED_BUFF:
+				if elapsed_time - ap.last_msg_time < 3.0:
+					if ap.last_msg_time > best_time:
+						best_time = ap.last_msg_time
+						best_sender = ap.player
+	return best_sender
+
+func has_buff_on_you(player: CharacterBody2D) -> bool:
+	"""检查是否有'我给你加buff了'消息针对该球员"""
+	if not ai_manager:
+		return false
+	for ap in ai_manager.ai_players:
+		if ap.team != player.team:
+			continue
+		if ap.has("last_msg_type") and ap.has("last_msg_time"):
+			if ap.last_msg_type == MsgType.BUFF_ON_YOU:
+				if elapsed_time - ap.last_msg_time < 2.0:
+					if ap.player.global_position.distance_to(player.global_position) < 100.0:
+						return true
 	return false
 
 
