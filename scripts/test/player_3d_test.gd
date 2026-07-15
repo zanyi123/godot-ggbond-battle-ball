@@ -76,6 +76,15 @@ const BIG_CAM_FOV: float = 62.0              # 透视模式视野角
 ## 球员切换
 var _current_control_index: int = 0
 
+## 按键边缘检测：上一帧状态（用独立变量，避免 Dictionary key 类型问题）
+var _prev_tab := false
+var _prev_f1 := false
+var _prev_f2 := false
+var _prev_f3 := false
+var _prev_f4 := false
+var _prev_f5 := false
+var _prev_f6 := false
+
 ## 手动动画锁：F键按下时置 true，防止 _physics_process 同帧覆盖
 ## throw/catch 播完后自动清零（在 _physics_process 里检测 is_playing()）
 var _manual_anim_locked: bool = false
@@ -376,6 +385,9 @@ func _make_3d_player(team_color: Color) -> Node3D:
 	# ========== 2. 重命名默认动画为 "idle" ==========
 	if anim_player != null:
 		anim_player.set("process_callback", AnimationPlayer.ANIMATION_PROCESS_PHYSICS)
+		# 关键：深拷贝动画库，断开与 PackedScene 缓存的共享引用
+		# 否则第二次 instantiate() 会继承第一次的修改，导致动画错乱
+		_deep_copy_anim_library(anim_player)
 		_rename_default_anim_to(anim_player, "idle")
 		# idle 必须循环播放（FBX 原始动画可能默认 LOOP_NONE）
 		if anim_player.has_animation("idle"):
@@ -432,7 +444,8 @@ func _make_3d_player(team_color: Color) -> Node3D:
 		# 关键：显式播放 idle
 		if anim_player != null and anim_player.has_animation("idle"):
 			anim_player.play("idle")
-			# 等一帧让 play 生效，再检查
+			_manual_anim_locked = true  # 锁定初始状态，防止第一帧自动切换覆盖
+			call_deferred("_unlock_animation_after_init")  # 延迟解锁
 			print("[Player3DTest] ✅ 调用 ap.play('idle'), current_animation=%s" % anim_player.current_animation)
 		else:
 			push_warning("[Player3DTest] ❌ 无法播 idle: ap=%s, has_idle=%s" % [
@@ -478,9 +491,30 @@ static func _rename_default_anim_to(ap: AnimationPlayer, new_name: String) -> vo
 	if old_name == new_name:
 		return
 	var anim := default_lib.get_animation(old_name)
-	default_lib.add_animation(new_name, anim)
+	# 用 duplicate(true) 断开与原始资源的引用
+	var anim_copy: Animation = anim.duplicate(true)
+	default_lib.add_animation(new_name, anim_copy)
 	if default_lib.has_animation(old_name):
 		default_lib.remove_animation(old_name)
+
+
+## 深拷贝 AnimationPlayer 中所有动画库，断开与 PackedScene 缓存的共享引用
+## Godot 的 AnimationLibrary/Animation 是 Resource，instantiate() 后仍共享同一份
+## 必须深拷贝后才能安全修改（重命名/合并），否则第二次 instantiate 会继承第一次的修改
+static func _deep_copy_anim_library(ap: AnimationPlayer) -> void:
+	if ap == null:
+		return
+	var lib_keys = ap.get_animation_library_list()
+	for lib_key in lib_keys:
+		var old_lib: AnimationLibrary = ap.get_animation_library(lib_key)
+		var new_lib := AnimationLibrary.new()
+		for anim_name in old_lib.get_animation_list():
+			var old_anim: Animation = old_lib.get_animation(anim_name)
+			var new_anim: Animation = old_anim.duplicate(true)
+			new_lib.add_animation(anim_name, new_anim)
+		# 用新库替换旧库（断开共享引用）
+		ap.remove_animation_library(lib_key)
+		ap.add_animation_library(lib_key, new_lib)
 
 
 ## 把 run/throw/catch 三个 GLB 的动画合并到主动画播放器的默认库
@@ -764,6 +798,8 @@ func _apply_camera_mode_to_players() -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	_poll_hotkeys()  # 快捷键轮询移到最前面，不依赖 controlled_player
+
 	if not controlled_player or not is_instance_valid(controlled_player):
 		return
 
@@ -831,96 +867,138 @@ func _physics_process(_delta: float) -> void:
 						anim_res.loop_mode = Animation.LOOP_LINEAR
 
 	_update_debug_label()
+	_poll_hotkeys()  # 轮询快捷键（替代 _input，更可靠）
 
 
-## ==================== 输入处理 ====================
+## ==================== 快捷键轮询（边缘检测） ====================
 
-func _input(event: InputEvent) -> void:
-	if not event is InputEventKey or not event.pressed:
-		return
+func _poll_hotkeys() -> void:
+	var k: bool
+	k = Input.is_key_pressed(KEY_TAB)
+	if k and not _prev_tab:
+		print("[Player3DTest] TAB 触发")
+		_hk_tab()
+	_prev_tab = k
 
-	match event.keycode:
-		16777217:  # KEY_TAB
-			_current_control_index = 1 - _current_control_index
-			controlled_player = player_a if _current_control_index == 0 else player_b
-			print("[Player3DTest] 切换到球员 %s" % ("A" if _current_control_index == 0 else "B"))
-			get_viewport().set_input_as_handled()
+	k = Input.is_key_pressed(KEY_F1)
+	if k and not _prev_f1:
+		print("[Player3DTest] F1 触发")
+		_hk_throw()
+	_prev_f1 = k
 
-		16777248:  # KEY_F1
-			# 找到当前 controlled_player 对应的 proxy, 直接操作 AnimationPlayer
-			var px1 = _proxy_a if (controlled_player and controlled_player == player_a) else _proxy_b
-			print("[Player3DTest] F1: controlled=%s, px=%s" % [controlled_player, px1])
-			if px1 and is_instance_valid(px1):
-				var ap1: AnimationPlayer = px1.get_meta("anim_player", null)
-				print("[Player3DTest] F1: ap=%s, has_throw=%s" % [ap1, ap1.has_animation("throw") if ap1 else "N/A"])
-				if ap1 and ap1.has_animation("throw"):
-					ap1.play("throw")
-					px1.set_meta("current_anim", "throw")
-					_manual_anim_locked = true  # 锁定，防止 _physics_process 同帧覆盖
-					var a1 := ap1.get_animation("throw")
-					if a1: a1.loop_mode = Animation.LOOP_NONE
-					print("[Player3DTest] ✅ 切 throw 动作")
-			else:
-				push_warning("[Player3DTest] F1: 找不到 proxy！_proxy_a=%s, _proxy_b=%s" % [_proxy_a, _proxy_b])
-			get_viewport().set_input_as_handled()
+	k = Input.is_key_pressed(KEY_F2)
+	if k and not _prev_f2:
+		print("[Player3DTest] F2 触发")
+		_hk_catch()
+	_prev_f2 = k
 
-		16777249:  # KEY_F2
-			var px2 = _proxy_a if (controlled_player and controlled_player == player_a) else _proxy_b
-			print("[Player3DTest] F2: controlled=%s, px=%s" % [controlled_player, px2])
-			if px2 and is_instance_valid(px2):
-				var ap2: AnimationPlayer = px2.get_meta("anim_player", null)
-				print("[Player3DTest] F2: ap=%s, has_catch=%s" % [ap2, ap2.has_animation("catch") if ap2 else "N/A"])
-				if ap2 and ap2.has_animation("catch"):
-					ap2.play("catch")
-					px2.set_meta("current_anim", "catch")
-					_manual_anim_locked = true  # 锁定，防止 _physics_process 同帧覆盖
-					var a2 := ap2.get_animation("catch")
-					if a2: a2.loop_mode = Animation.LOOP_NONE
-					print("[Player3DTest] ✅ 切 catch 动作")
-			else:
-				push_warning("[Player3DTest] F2: 找不到 proxy！_proxy_a=%s, _proxy_b=%s" % [_proxy_a, _proxy_b])
-			get_viewport().set_input_as_handled()
+	k = Input.is_key_pressed(KEY_F3)
+	if k and not _prev_f3:
+		print("[Player3DTest] F3 触发")
+		_hk_idle()
+	_prev_f3 = k
 
-		16777250:  # KEY_F3
-			var px3 = _proxy_a if (controlled_player and controlled_player == player_a) else _proxy_b
-			print("[Player3DTest] F3: controlled=%s, px=%s" % [controlled_player, px3])
-			if px3 and is_instance_valid(px3):
-				var ap3: AnimationPlayer = px3.get_meta("anim_player", null)
-				print("[Player3DTest] F3: ap=%s, has_idle=%s" % [ap3, ap3.has_animation("idle") if ap3 else "N/A"])
-				if ap3 and ap3.has_animation("idle"):
-					ap3.play("idle")
-					px3.set_meta("current_anim", "idle")
-					_manual_anim_locked = false  # idle 是循环动画，直接解锁恢复自动切换
-					var a3 := ap3.get_animation("idle")
-					if a3: a3.loop_mode = Animation.LOOP_LINEAR
-					print("[Player3DTest] ✅ 切 idle 动作")
-			else:
-				push_warning("[Player3DTest] F3: 找不到 proxy！_proxy_a=%s, _proxy_b=%s" % [_proxy_a, _proxy_b])
-			get_viewport().set_input_as_handled()
+	k = Input.is_key_pressed(KEY_F4)
+	if k and not _prev_f4:
+		print("[Player3DTest] F4 触发")
+		_hk_camera()
+	_prev_f4 = k
 
-		16777251:  # KEY_F4
-			# 循环切换相机模式 → 同步更新大相机+小相机
-			_camera_mode = (_camera_mode + 1) % 3
-			_apply_camera_mode_to_players()         # 小相机
-			_apply_big_camera_mode(_camera_mode)    # 大相机
-			if _camera_mode == CAMERA_MODE_FOLLOW and camera_2d and controlled_player:
-				camera_2d.global_position = controlled_player.global_position
-			print("[Player3DTest] 相机模式: %s" % CAMERA_MODE_NAMES[_camera_mode])
-			get_viewport().set_input_as_handled()
+	k = Input.is_key_pressed(KEY_F5)
+	if k and not _prev_f5:
+		print("[Player3DTest] F5 触发")
+		_hk_reset()
+	_prev_f5 = k
 
-		16777252:  # KEY_F5
-			if player_a:
-				player_a.global_position = Vector2(-300.0, 0.0)
-			if player_b:
-				player_b.global_position = Vector2(300.0, 0.0)
-			print("[Player3DTest] 重置位置")
-			get_viewport().set_input_as_handled()
+	k = Input.is_key_pressed(KEY_F6)
+	if k and not _prev_f6:
+		print("[Player3DTest] F6 触发")
+		_hk_bigcam()
+	_prev_f6 = k
 
-		16777253:  # KEY_F6
-			# 切换大相机3D覆盖层
-			_set_big_cam_visibility(not _big_cam_active)
-			print("[Player3DTest] 大相机视图: %s" % ("ON" if _big_cam_active else "OFF(2D模式)"))
-			get_viewport().set_input_as_handled()
+
+func _hk_tab() -> void:
+	_current_control_index = 1 - _current_control_index
+	controlled_player = player_a if _current_control_index == 0 else player_b
+	print("[Player3DTest] 切换到球员 %s" % ("A" if _current_control_index == 0 else "B"))
+
+
+func _hk_throw() -> void:
+	var px = _proxy_a if (controlled_player and controlled_player == player_a) else _proxy_b
+	if px and is_instance_valid(px):
+		var ap1: AnimationPlayer = px.get_meta("anim_player", null)
+		if ap1 and ap1.has_animation("throw"):
+			ap1.play("throw")
+			px.set_meta("current_anim", "throw")
+			_manual_anim_locked = true
+			var a1 := ap1.get_animation("throw")
+			if a1: a1.loop_mode = Animation.LOOP_NONE
+			print("[Player3DTest] ✅ 切 throw 动作")
+		else:
+			push_warning("[Player3DTest] F1: ap=%s, has_throw=%s" % [ap1, ap1.has_animation("throw") if ap1 else "N/A"])
+	else:
+		push_warning("[Player3DTest] F1: 找不到 proxy！_proxy_a=%s, _proxy_b=%s" % [_proxy_a, _proxy_b])
+
+
+func _hk_catch() -> void:
+	var px = _proxy_a if (controlled_player and controlled_player == player_a) else _proxy_b
+	if px and is_instance_valid(px):
+		var ap2: AnimationPlayer = px.get_meta("anim_player", null)
+		if ap2 and ap2.has_animation("catch"):
+			ap2.play("catch")
+			px.set_meta("current_anim", "catch")
+			_manual_anim_locked = true
+			var a2 := ap2.get_animation("catch")
+			if a2: a2.loop_mode = Animation.LOOP_NONE
+			print("[Player3DTest] ✅ 切 catch 动作")
+		else:
+			push_warning("[Player3DTest] F2: ap=%s, has_catch=%s" % [ap2, ap2.has_animation("catch") if ap2 else "N/A"])
+	else:
+		push_warning("[Player3DTest] F2: 找不到 proxy！_proxy_a=%s, _proxy_b=%s" % [_proxy_a, _proxy_b])
+
+
+func _hk_idle() -> void:
+	var px = _proxy_a if (controlled_player and controlled_player == player_a) else _proxy_b
+	if px and is_instance_valid(px):
+		var ap3: AnimationPlayer = px.get_meta("anim_player", null)
+		if ap3 and ap3.has_animation("idle"):
+			ap3.play("idle")
+			px.set_meta("current_anim", "idle")
+			_manual_anim_locked = false
+			var a3 := ap3.get_animation("idle")
+			if a3: a3.loop_mode = Animation.LOOP_LINEAR
+			print("[Player3DTest] ✅ 切 idle 动作")
+		else:
+			push_warning("[Player3DTest] F3: ap=%s, has_idle=%s" % [ap3, ap3.has_animation("idle") if ap3 else "N/A"])
+	else:
+		push_warning("[Player3DTest] F3: 找不到 proxy！_proxy_a=%s, _proxy_b=%s" % [_proxy_a, _proxy_b])
+
+
+func _hk_camera() -> void:
+	_camera_mode = (_camera_mode + 1) % 3
+	_apply_camera_mode_to_players()
+	_apply_big_camera_mode(_camera_mode)
+	if _camera_mode == CAMERA_MODE_FOLLOW and camera_2d and controlled_player:
+		camera_2d.global_position = controlled_player.global_position
+	print("[Player3DTest] 相机模式: %s" % CAMERA_MODE_NAMES[_camera_mode])
+
+
+func _hk_reset() -> void:
+	if player_a:
+		player_a.global_position = Vector2(-300.0, 0.0)
+	if player_b:
+		player_b.global_position = Vector2(300.0, 0.0)
+	print("[Player3DTest] 重置位置")
+
+
+func _hk_bigcam() -> void:
+	_set_big_cam_visibility(not _big_cam_active)
+	print("[Player3DTest] 大相机视图: %s" % ("ON" if _big_cam_active else "OFF(2D模式)"))
+
+
+func _unlock_animation_after_init() -> void:
+	_manual_anim_locked = false
+	print("[Player3DTest] 动画锁定已解锁")
 
 
 ## ==================== 调试 UI ====================
@@ -932,6 +1010,7 @@ func _create_debug_ui() -> void:
 
 	var ctrl := Control.new()
 	ctrl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ctrl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.add_child(ctrl)
 
 	debug_label = Label.new()
