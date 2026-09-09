@@ -1321,8 +1321,13 @@ func _on_skill_confirm(
 	# 收集标签参数（从UI输入框读取）
 	var collected_params: Dictionary = {}
 	if skill_edit_panel:
-		var popup_scroll = skill_edit_panel.get_child(1)  # ScrollContainer
-		if popup_scroll:
+		# 通过类型查找 ScrollContainer，避免硬编码索引导致越界
+		var popup_scroll: ScrollContainer = null
+		for child in skill_edit_panel.get_children():
+			if child is ScrollContainer:
+				popup_scroll = child as ScrollContainer
+				break
+		if popup_scroll and popup_scroll.get_child_count() > 0:
 			var popup_vbox = popup_scroll.get_child(0)  # VBoxContainer
 			if popup_vbox:
 				var params_container = popup_vbox.get_node_or_null("TagParamsContainer")

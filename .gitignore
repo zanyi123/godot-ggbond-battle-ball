@@ -19,6 +19,7 @@ desktop.ini
 
 # Test artifacts
 *.uid
+*.translation
 
 # Sim 运行产物（方案A自动模拟，保留基线例外）
 sim_results/*
@@ -33,11 +34,50 @@ sim_results/*
 *.blend1
 *_texture_*.png
 建模素材库/3D图片素材/*.png
+建模素材库/2D图片素材/*.png
+建模素材库/2D图片素材/**/*.png
+建模素材库/3D模型素材/
 assets/characters/avatars/*.png
+assets/BinbunVFX_Vol2/
+特效储存/
+
+# Unity 迁移到 Godot 的中间产物（C# 暂存文件，非项目实际代码）
+*_CLEAN.cs
+*_REAL.cs
+*_REAL2.cs
+*_STUB.cs
+_tmp_*.cs
+AiProfile.cs
+AiProfile_CLEAN.cs
+RuntimeAutoBootstrap.cs.txt
+__csharp_staging/
+
+# 临时目录/缓存
+temp_fbx_export/
+tools/__pycache__/
+addons/
+external/
+textures/
 
 # 临时/调试文件
-nul
+/nul
 *.tmp
+
+# 临时脚本与输出
+batch_glb_to_fbx.py
+generate_clean_v2.ps1
+syntax_fix_v3.ps1
+translate_all.ps1
+test_output.txt
+blender_render_preview.png
+
+# 临时文档/备忘录
+3D建模命令备忘录.txt
+3D建模工具使用说明.txt
+迁移方案.md
+
+# 工作日志（本地交接记录，不入库）
+工作日志/
 
 # 本地工具目录
 .trae/

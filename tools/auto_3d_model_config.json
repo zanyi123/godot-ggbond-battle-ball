@@ -1,0 +1,7 @@
+{
+	"hunyuan_api_key": "sk-0tBc6oEhgO0tWcbKTzz5gRevPo5NoEi5HK3MGIwVpnK5RFcm",
+	"blender_path": "G:\\Blender\\blender.exe",
+	"hunyuan_template": "footballboy",
+	"poll_interval_seconds": 5,
+	"max_poll_attempts": 120
+}

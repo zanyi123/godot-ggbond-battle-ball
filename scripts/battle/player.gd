@@ -6,6 +6,11 @@ extends CharacterBody2D
 @export var team: String = "a"  # "a" 或 "b"
 @export var is_player_controlled: bool = false
 
+# 场地边界常量(与 player_3d_test.gd 保持一致)
+const FIELD_WIDTH: float = 1300.0
+const FIELD_HEIGHT: float = 780.0
+const BOUNDARY_MARGIN: float = 30.0
+
 # 球员数据(从DataManager加载)
 var char_data: Dictionary = {}
 
@@ -230,7 +235,7 @@ const GLB_CATCH_PATH := "res://assets/characters/avatars/Goalkeeper_Catch.glb"
 ## 未配置的角色自动回落使用上方 GLB_*_PATH 默认路径
 const CHAR_3D_MODEL_PATHS := {
 	"char_001": {  # 猪猪侠 (player1)
-		"body": "res://建模素材库/3D模型素材/2cff3ad734686d14c0118d195a809dbc.glb",
+		"body": "res://建模素材库/3D模型素材/player1_base.glb",
 		"idle": "res://建模素材库/3D模型素材/player1动作/Idle.fbx",
 		"run": "res://建模素材库/3D模型素材/player1动作/Jog Forward.fbx",
 		"throw": "res://建模素材库/3D模型素材/player1动作/Goalie Throw.fbx",
@@ -273,6 +278,11 @@ const VIEW_MODE_FOLLOW: int = 2     # 平视跟随(等高正面看动作)
 
 
 func _ready() -> void:
+	# 初始化手动动画锁定 meta(供 player_3d_test.gd 的 F1/F2/F3 使用)
+	if not has_meta("manual_locked"):
+		set_meta("manual_locked", false)
+	if not has_meta("manual_anim"):
+		set_meta("manual_anim", "idle")
 	_setup_visuals()
 
 
@@ -528,6 +538,20 @@ func _load_main_glb() -> void:
 	_model_slot.add_child(glb_instance)
 	# 隐藏 Mixamo 残留的 Icosphere 参考球(真模型叫 node_0)
 	_hide_mixamo_helpers(glb_instance)
+	# FBX mesh 比 GLB 小约 65 倍，需额外补偿
+	# 通过检查 mesh AABB 判断是否需要补偿(FBX AABB < 0.1, GLB AABB > 0.5)
+	if glb_instance is Node3D:
+		var need_scale: bool = false
+		for child in glb_instance.find_children("*", "MeshInstance3D", true, false):
+			if child is MeshInstance3D:
+				var mi: MeshInstance3D = child
+				if mi.mesh:
+					var aabb: AABB = mi.mesh.get_aabb()
+					if aabb.size.y < 0.1:
+						need_scale = true
+						break
+		if need_scale:
+			glb_instance.scale = Vector3(65.0, 65.0, 65.0)
 	# 在 GLB 实例里找 AnimationPlayer(GLB 通常根或子级)
 	_animation_player = _find_animation_player(glb_instance)
 	# 兜底: 如果主模型是纯静态(无AnimationPlayer), 尝试用角色专属 idle 动画源替换
@@ -544,6 +568,9 @@ func _load_main_glb() -> void:
 				glb_instance = idle_scene_copy.instantiate()
 				if glb_instance:
 					_model_slot.add_child(glb_instance)
+					# FBX mesh 比 GLB 小约 65 倍，需额外补偿
+					if glb_instance is Node3D:
+						glb_instance.scale = Vector3(65.0, 65.0, 65.0)
 					_hide_mixamo_helpers(glb_instance)
 					_animation_player = _find_animation_player(glb_instance)
 	if _animation_player == null:
@@ -676,7 +703,10 @@ func _merge_animation_libraries() -> void:
 
 
 func _update_3d_animation() -> void:
-	"""根据当前 velocity 自动切换 idle/run 动画(在 _physics_process 末尾调)"""
+	"""根据当前 velocity 自动切换 idle/run 动画(在 _physics_process 末尾调)
+	如果 manual_locked=true (F1/F2 触发了 throw/catch),则不自动切换,
+	待 throw/catch 播完后自动解锁恢复自动切换
+	"""
 	if _animation_player == null or not is_instance_valid(_animation_player):
 		return
 	# 强制保证:只要 current_animation 为空,就强制 play idle(每帧检查,暴力兜底)
@@ -689,6 +719,11 @@ func _update_3d_animation() -> void:
 			_animation_player.play(idle_name)
 			_current_anim_name = idle_name
 			_is_3d_moving = false
+		return
+	# 检查手动锁定状态(由 player_3d_test.gd 的 F1/F2 设置)
+	var manual_locked: bool = get_meta("manual_locked", false)
+	if manual_locked:
+		# 跳过自动切换 —— 解锁由 player_3d_test.gd 在 proxy 动画结束时负责
 		return
 	# 用 velocity 长度判断移动状态(>10 视为在动)
 	var moving: bool = velocity.length() > 10.0
@@ -833,6 +868,18 @@ func _get_display_number() -> String:
 	return str(char_data["name"] if char_data.has("name") else "#").substr(0, 1)
 
 
+func _clamp_to_field() -> void:
+	"""将球员位置限制在场地边界内，碰到边界时停止移动"""
+	var pos := global_position
+	var half_w: float = FIELD_WIDTH / 2.0 - BOUNDARY_MARGIN
+	var half_h: float = FIELD_HEIGHT / 2.0 - BOUNDARY_MARGIN
+	var clamped_x: float = clampf(pos.x, -half_w, half_w)
+	var clamped_y: float = clampf(pos.y, -half_h, half_h)
+	if clamped_x != pos.x or clamped_y != pos.y:
+		global_position = Vector2(clamped_x, clamped_y)
+		velocity = Vector2.ZERO
+
+
 func _physics_process(delta: float) -> void:
 	# 3D 模式:基于上一帧 velocity 更新动画和朝向(放在函数最前,避开多个 return 出口)
 	if USE_3D_MODEL:
@@ -868,6 +915,7 @@ func _physics_process(delta: float) -> void:
 			velocity = Vector2.ZERO
 		
 		move_and_slide()
+		_clamp_to_field()
 		
 		# 击退结束
 		if _knockback_timer <= 0.0:
@@ -885,6 +933,7 @@ func _physics_process(delta: float) -> void:
 		_tick_all_timers(delta)
 		velocity = Vector2.ZERO
 		move_and_slide()
+		_clamp_to_field()
 		return
 
 	# 所有球员（包括AI和非玩家控制）都要更新持续效果
@@ -892,6 +941,7 @@ func _physics_process(delta: float) -> void:
 
 	if not is_player_controlled:
 		move_and_slide()
+		_clamp_to_field()
 		return  # AI控制由AI管理器处理
 
 	# 计算实际移动速度（含冲刺加成）
@@ -917,6 +967,7 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector2.ZERO
 
 	move_and_slide()
+	_clamp_to_field()
 
 
 func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
@@ -1626,8 +1677,8 @@ func turn_off_light(status_name: String) -> void:
 
 func turn_off_lights_by_type(light_names: PackedStringArray) -> void:
 	"""关掉指定类型的所有灯"""
-	for name in light_names:
-		_status_lights.erase(name)
+	for light_name in light_names:
+		_status_lights.erase(light_name)
 
 
 func _tick_status_lights(delta: float) -> void:

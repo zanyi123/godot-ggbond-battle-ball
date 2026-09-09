@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bujlbtfj0fi2b"]
+
+[ext_resource type="Script" path="res://scripts/test/test_3d_arena_selfcheck.gd" id="1_selftest"]
+
+[node name="SelfCheck" type="Node"]
+script = ExtResource("1_selftest")

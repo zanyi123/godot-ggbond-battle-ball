@@ -5,8 +5,8 @@
 			"element": "金刚",
 			"icon_color": "#FFD700",
 			"id": "spirit_jingang",
-			"level": 1,
-			"max_level": 10,
+			"level": 1.0,
+			"max_level": 10.0,
 			"name": "阿五",
 			"skills": [
 				"skill_金刚_1"
@@ -17,8 +17,8 @@
 			"element": "大地",
 			"icon_color": "#8B4513",
 			"id": "spirit_dadi",
-			"level": 1,
-			"max_level": 10,
+			"level": 1.0,
+			"max_level": 10.0,
 			"name": "岩灵",
 			"skills": [
 				"skill_大地_1"
@@ -29,8 +29,8 @@
 			"element": "雷火",
 			"icon_color": "#FF4500",
 			"id": "spirit_leihuo",
-			"level": 1,
-			"max_level": 10,
+			"level": 1.0,
+			"max_level": 10.0,
 			"name": "炎雷",
 			"skills": [
 				"skill_雷火_1"
@@ -41,8 +41,8 @@
 			"element": "冰雪",
 			"icon_color": "#87CEEB",
 			"id": "spirit_bingxue",
-			"level": 1,
-			"max_level": 10,
+			"level": 1.0,
+			"max_level": 10.0,
 			"name": "霜灵",
 			"skills": [
 				"skill_冰雪_1"
@@ -53,11 +53,12 @@
 			"element": "草木",
 			"icon_color": "#32CD32",
 			"id": "spirit_caomu",
-			"level": 1,
-			"max_level": 10,
+			"level": 1.0,
+			"max_level": 10.0,
 			"name": "藤灵",
 			"skills": [
-				"skill_草木_1"
+				"skill_草木_1",
+				"skill_草木_2"
 			]
 		},
 		{
@@ -65,8 +66,8 @@
 			"element": "梦幻",
 			"icon_color": "#DA70D6",
 			"id": "spirit_menghuan",
-			"level": 1,
-			"max_level": 10,
+			"level": 1.0,
+			"max_level": 10.0,
 			"name": "幻灵",
 			"skills": [
 				"skill_梦幻_1"

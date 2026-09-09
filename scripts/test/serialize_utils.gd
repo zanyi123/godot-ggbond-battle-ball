@@ -27,4 +27,4 @@ func _serialize_bonus_uses(uses: Dictionary) -> String:
 		var val: int = uses[key]
 		pairs.append("%s:%d" % [key, val])
 	pairs.sort()
-	return ","..join(pairs)
+	return ",".join(pairs)

@@ -1,0 +1,31 @@
+[gd_scene format=3 uid="uid://b61k1lq2ypklx"]
+
+[ext_resource type="PackedScene" uid="uid://chsubk6v3va5l" path="res://scenes/blender/battle_field_3d_v2.glb" id="1_uqjei"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_r3cto"]
+sky_top_color = Color(0.38, 0.45, 0.55, 1)
+sky_horizon_color = Color(0.65, 0.67, 0.7, 1)
+ground_bottom_color = Color(0.2, 0.17, 0.13, 1)
+ground_horizon_color = Color(0.65, 0.67, 0.7, 1)
+
+[sub_resource type="Sky" id="Sky_u8m1h"]
+sky_material = SubResource("ProceduralSkyMaterial_r3cto")
+
+[sub_resource type="Environment" id="Environment_4ll0o"]
+background_mode = 2
+sky = SubResource("Sky_u8m1h")
+ambient_light_source = 3
+
+[node name="BattleField3DTest" type="Node3D" unique_id=1795919276]
+
+[node name="BattleFieldModel" parent="." unique_id=2146741283 instance=ExtResource("1_uqjei")]
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1731911205]
+transform = Transform3D(1, 0, 0, 0, 0.70710677, 0.70710677, 0, -0.70710677, 0.70710677, 0, 500, 500)
+current = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1528316876]
+environment = SubResource("Environment_4ll0o")
+
+[node name="SunLight" type="DirectionalLight3D" parent="." unique_id=1965563780]
+transform = Transform3D(0.8660254, -0.35355338, 0.35355338, 0, 0.70710677, 0.70710677, -0.5, -0.6123724, 0.6123724, 0, 0, 0)

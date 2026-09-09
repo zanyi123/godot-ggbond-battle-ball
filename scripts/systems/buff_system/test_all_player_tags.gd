@@ -102,56 +102,56 @@ func _test_tag(index: int, tag_id: String) -> void:
 	params["_tag_id"] = tag_id
 	params["_skill_mult"] = 1.0
 
-	var result := _apply_tag(tag_id, params)
+	var success: bool = _apply_tag(tag_id, params)
 
-	if result:
+	if success:
 		_pass_count += 1
-		print("  ✅ %02d %s" % [index, tag_id])
+		print("  PASS %02d %s" % [index, tag_id])
 	else:
 		_fail_count += 1
-		print("  ❌ %02d %s — 未匹配" % [index, tag_id])
+		print("  FAIL %02d %s — unmatched" % [index, tag_id])
 
 
 ## 模拟 handler 的 match 分支路由
 func _apply_tag(tag_id: String, params: Dictionary) -> bool:
 	var success: bool = false
 	match tag_id:
-		"player_atk_up_pct", "player_atk_down_pct", "player_atk_up_flat", "player_atk_down_flat",
-		"player_def_up_pct", "player_def_down_pct", "player_def_up_flat", "player_def_down_flat",
-		"player_spd_up_pct", "player_spd_down_pct", "player_spd_up_flat", "player_spd_down_flat",
-		"player_res_up_pct", "player_res_down_pct", "player_res_up_flat", "player_res_down_flat",
-		"player_energy_max_up_pct", "player_energy_max_down_pct", "player_energy_max_up_flat", "player_energy_max_down_flat",
+		"player_atk_up_pct", "player_atk_down_pct", "player_atk_up_flat", "player_atk_down_flat", \
+		"player_def_up_pct", "player_def_down_pct", "player_def_up_flat", "player_def_down_flat", \
+		"player_spd_up_pct", "player_spd_down_pct", "player_spd_up_flat", "player_spd_down_flat", \
+		"player_res_up_pct", "player_res_down_pct", "player_res_up_flat", "player_res_down_flat", \
+		"player_energy_max_up_pct", "player_energy_max_down_pct", "player_energy_max_up_flat", "player_energy_max_down_flat", \
 		"player_move_slow", "player_move_boost":
-			success = true  # ①属性类 → _apply_player_stat_buff
-		"player_invincible", "player_stealth", "player_root",
+			success = true
+		"player_invincible", "player_stealth", "player_root", \
 		"player_stun", "player_cc_immune", "player_silence", "player_disarm":
-			success = true  # ②状态类 → _apply_player_status
+			success = true
 		"player_vulnerable":
-			success = true  # ②状态类(易伤) → _apply_player_vulnerable
+			success = true
 		"player_reveal":
-			success = true  # ⑤动作(显形)
+			success = true
 		"player_hp_heal_pct", "player_hp_damage_pct":
-			success = true  # ⑤动作(体力%)
+			success = true
 		"player_hp_heal_flat", "player_hp_damage_flat":
-			success = true  # ⑤动作(体力固定)
+			success = true
 		"player_hp_regen", "player_hp_dot":
-			success = true  # ③持续类
+			success = true
 		"player_unroot":
-			success = true  # ⑤动作(解控)
+			success = true
 		"player_energy_gain_pct", "player_energy_cost_pct":
-			success = true  # ⑤动作(能量%)
+			success = true
 		"player_energy_gain_flat", "player_energy_cost_flat":
-			success = true  # ⑤动作(能量固定)
+			success = true
 		"player_spirit_cost_down", "player_spirit_cost_up":
-			success = true  # ④折扣(消耗)
+			success = true
 		"player_spirit_cd_down", "player_spirit_cd_up":
-			success = true  # ④折扣(CD)
+			success = true
 		"player_spirit_uses_up":
-			success = true  # ⑤动作(次数)
+			success = true
 		"player_spirit_double", "player_spirit_half":
-			success = true  # ④折扣(效果倍率)
+			success = true
 		"player_teleport", "player_return":
-			success = true  # ⑤动作(交互)
+			success = true
 		_:
 			success = false
 	return success
@@ -159,9 +159,9 @@ func _apply_tag(tag_id: String, params: Dictionary) -> bool:
 
 func _total() -> void:
 	var total: int = _pass_count + _fail_count
-	print("\n========== 结果: %d/%d PASS ==========" % [_pass_count, total])
+	print("\n========== RESULT: %d/%d PASS ==========" % [_pass_count, total])
 	if _fail_count > 0:
-		print("⚠️  %d 个标签未匹配！" % _fail_count)
+		print("WARNING: %d tags unmatched!" % _fail_count)
 	else:
-		print("🎉 全部51个标签 match 路由正确！")
+		print("ALL 51 tags matched correctly!")
 	print()

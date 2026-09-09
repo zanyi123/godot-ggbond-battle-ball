@@ -40,8 +40,8 @@ func _diagnose() -> void:
 		"_proxy_a", "_proxy_b", "_camera_mode", "_manual_anim_locked", "_current_control_index"]
 	for v in vars:
 		var val = _test_scene.get(v)
-		var type_s = "null" if val == null else typeof(val)
-		print("  " + v + " = " + str(val) + " (" + type_s + ")")
+		var type_s = "null" if val == null else str(typeof(val))
+		print("  %s = %s (%s)" % [v, str(val), type_s])
 
 	print("\n--- 诊断: 子节点列表 ---")
 	for c in _test_scene.get_children():

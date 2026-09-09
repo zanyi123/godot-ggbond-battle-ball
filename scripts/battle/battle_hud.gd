@@ -38,7 +38,7 @@ var enemy_players: Array[CharacterBody2D] = []  # 对方3个球员
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	size = Vector2(1440, 900)
+	set_deferred("size", Vector2(1440, 900))
 
 	_create_score_panel()
 	_create_enemy_stamina_panel()

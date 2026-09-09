@@ -44,6 +44,7 @@ var _field_bg: ColorRect       # 2D场地背景引用(切大相机时隐藏)
 var _field_lines: Array = []   # 2D场地线条引用
 var ball_2d: Area2D = null     # 2D ball.gd 节点（直接搬用 battle 系统）
 var _ball_proxy_3d: Node3D = null  # 3D 球代理
+var input_manager: Node = null  # 输入管理器（处理鼠标发球等）
 
 ## 球员快捷面板（体力+元灵能量条）
 var _panel_a: Panel = null
@@ -149,10 +150,6 @@ var _prev_f4 := false
 var _prev_f5 := false
 var _prev_f6 := false
 
-## 手动动画锁：F键按下时置 true，防止 _physics_process 同帧覆盖
-## throw/catch 播完后自动清零（在 _physics_process 里检测 is_playing()）
-var _manual_anim_locked: bool = false
-
 
 ## ==================== 初始化 ====================
 
@@ -170,7 +167,9 @@ func _ready() -> void:
 	_apply_big_camera_mode(_camera_mode)
 	# 球默认给 A 队（开局 A 持球）
 	_give_ball_to(player_a)
-	print("[Player3DTest] 加载完成 | WASD移动 Tab切换 F1=throw F2=catch F3=idle F4=切相机 F5=重置 F6=切大相机显示")
+	# ========== 初始化 InputManager（鼠标发球等）==========
+	_init_input_manager()
+	print("[Player3DTest] 加载完成 | WASD移动 Tab切换 F1=throw F2=catch F3=idle F4=切相机 F5=重置 F6=切大相机显示 | 鼠标左键=发球")
 
 
 ## ==================== 创建 2D 决竞球 (直接搬用 battle/ball.gd) ====================
@@ -598,20 +597,28 @@ func _make_3d_player_proxy(player: CharacterBody2D, team_color: Color) -> Node3D
 		if default_lib == null:
 			default_lib = AnimationLibrary.new()
 			first_fbx_anim_player.add_animation_library("", default_lib)
-		# 遍历所有 AnimationPlayer（不只是第一个），把它们的动画深拷贝到默认库
+		# 遍历所有 AnimationPlayer，把每个库的第一个动画映射到语义名
+		var merged_names: Array[String] = []
 		for src_ap in all_anim_players:
 			for lib_name in src_ap.get_animation_library_list():
 				var lib: AnimationLibrary = src_ap.get_animation_library(lib_name)
 				if lib == null:
 					continue
-				for anim_name in lib.get_animation_list():
-					var src_anim: Animation = lib.get_animation(anim_name)
-					if src_anim:
-						# 深拷贝 animation（防止共享引用冲突）
-						var cloned: Animation = src_anim.duplicate(true)
-						# 用 lib_name 作为最终动画名（lib_name 就是 idle/run/throw/catch）
+				var anim_list = lib.get_animation_list()
+				if anim_list.is_empty():
+					continue
+				# 只取第一个动画（每个 FBX 通常只有一个动画）
+				var first_anim_name: String = anim_list[0]
+				var src_anim: Animation = lib.get_animation(first_anim_name)
+				if src_anim:
+					var cloned: Animation = src_anim.duplicate(true)
+					# 用 lib_name 作为最终动画名（lib_name 就是 idle/run/throw/catch）
+					if not default_lib.has_animation(lib_name):
 						default_lib.add_animation(lib_name, cloned)
-						print("[Player3DTest] ✅ 合并动画 %s -> %s" % [anim_name, lib_name])
+						merged_names.append(lib_name)
+						print("[Player3DTest] ✅ 合并动画: FBX动画'%s' → 语义名'%s' (length=%.2f, loop=%d)" % [
+							first_anim_name, lib_name, src_anim.length, src_anim.loop_mode
+						])
 				# 删除源库
 				if lib_name != "":
 					src_ap.remove_animation_library(lib_name)
@@ -619,17 +626,27 @@ func _make_3d_player_proxy(player: CharacterBody2D, team_color: Color) -> Node3D
 	if first_fbx_anim_player:
 		root.set_meta("anim_player", first_fbx_anim_player)
 		root.set_meta("current_anim", "idle")
-		# 列出实际动画名
+		# 列出实际动画名并详细诊断
 		var final_list: PackedStringArray = first_fbx_anim_player.get_animation_list()
 		print("[Player3DTest] 合并后动画列表: %s (共 %d 个)" % [str(final_list), final_list.size()])
-		# 让 idle 循环，其它不循环
+		print("[Player3DTest] ===== 动画详细信息 =====")
 		for anim_name in final_list:
 			var anim: Animation = first_fbx_anim_player.get_animation(anim_name)
 			if anim:
-				if anim_name == "idle":
+				# 关键修复: 对每个动画彻底剥离 Root Motion
+				_strip_root_motion(anim)
+				
+				# 设置循环模式 (idle 和 run 循环, throw/catch 单次)
+				if anim_name in ["idle", "run"]:
 					anim.loop_mode = Animation.LOOP_LINEAR
 				else:
 					anim.loop_mode = Animation.LOOP_NONE
+					
+				print("[Player3DTest]   '%s': length=%.2fs, loop=%s, tracks=%d" % [
+					anim_name, anim.length, 
+					"LINEAR" if anim.loop_mode == Animation.LOOP_LINEAR else "NONE", 
+					anim.get_track_count()
+				])
 		# 默认播放 idle
 		if first_fbx_anim_player.has_animation("idle"):
 			first_fbx_anim_player.play("idle")
@@ -657,13 +674,20 @@ func _make_3d_player_proxy(player: CharacterBody2D, team_color: Color) -> Node3D
 
 	# ========== HandProxy 节点（投球手挂接点，世界坐标）==========
 	# 球员在 ground (y=0)，模型高度 50 单位 → 头顶约 y=50
-	# 投球手位置在右肩上方（world 坐标系下）
-	# 球飞行/持球跟随此点
+	# 手部位置：胸部高度，稍微偏右（像右手持球）
 	var hand_proxy := Node3D.new()
 	hand_proxy.name = "HandProxy"
-	# 世界坐标：球员右肩上方 (8, 42, 0)
-	hand_proxy.position = Vector3(8.0, 42.0, 0.0)
+	# 世界坐标：球员手部位置 (8, 30, 0)
+	hand_proxy.position = Vector3(8.0, 30.0, 0.0)
 	root.add_child(hand_proxy)
+	
+	# ========== 查找并保存根骨骼节点，用于运行时强制重置位置 ==========
+	var root_bone_node: Node3D = _find_root_bone_node(slot)
+	if root_bone_node:
+		root.set_meta("root_bone_node", root_bone_node)
+		print("[Player3DTest] ✅ 找到根骨骼节点: %s (将在运行时强制重置位置)" % root_bone_node.name)
+	else:
+		print("[Player3DTest] ⚠️ 未找到根骨骼节点，可能无法完全剥离 Root Motion")
 
 	return root
 
@@ -711,6 +735,68 @@ func _find_animation_player_in(node: Node) -> AnimationPlayer:
 	return null
 
 
+## 递归查找根骨骼节点 (Node3D)
+## 通过遍历骨骼层级(parent_index==-1)或名字查找根骨骼
+static func _find_root_bone_node(root_node: Node) -> Node3D:
+	if root_node == null:
+		return null
+	
+	# 策略1: 尝试找到 Skeleton3D，返回它本身（作为根骨骼的父节点）
+	# 在 Godot 4.x 中，Skeleton3D 本身就是骨骼的容器
+	var skeleton: Skeleton3D = _find_skeleton_static(root_node)
+	if skeleton:
+		print("[Player3DTest] 找到 Skeleton3D: %s (将重置其 position)" % skeleton.name)
+		return skeleton as Node3D
+	
+	# 策略2: 递归查找名为 "root" 或 "Root" 的 Node3D 节点
+	var found: Node3D = _find_node_by_name_static(root_node, ["root", "Root", "RootBone", "root_bone", "RootMotion", "root_motion"])
+	if found:
+		print("[Player3DTest] 通过名字找到根骨骼: %s" % found.name)
+		return found
+		
+	# 策略3: 返回第一个 Node3D 子节点
+	var first_node: Node3D = _find_first_node3d_static(root_node)
+	if first_node:
+		print("[Player3DTest] 返回第一个 Node3D: %s" % first_node.name)
+		return first_node
+		
+	return null
+
+
+## 静态辅助: 递归查找 Skeleton3D
+static func _find_skeleton_static(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node as Skeleton3D
+	for child in node.get_children():
+		var found: Skeleton3D = _find_skeleton_static(child)
+		if found:
+			return found
+	return null
+
+
+## 静态辅助: 递归查找指定名字的 Node3D
+static func _find_node_by_name_static(node: Node, names: Array[String]) -> Node3D:
+	if node is Node3D:
+		if node.name in names:
+			return node as Node3D
+	for child in node.get_children():
+		var found: Node3D = _find_node_by_name_static(child, names)
+		if found:
+			return found
+	return null
+
+
+## 静态辅助: 递归查找第一个 Node3D
+static func _find_first_node3d_static(node: Node) -> Node3D:
+	if node is Node3D:
+		return node as Node3D
+	for child in node.get_children():
+		var found: Node3D = _find_first_node3d_static(child)
+		if found:
+			return found
+	return null
+
+
 ## ==================== 创建 2D 球员 (走 player.gd 2D 模式) ====================
 
 
@@ -743,14 +829,14 @@ func _create_ball_proxy_3d() -> void:
 
 
 func _make_3d_player(team_color: Color) -> Node3D:
-	"""加载 player1 3D 模型
+	"""加载 player1 3D 模型（FBX 有骨骼动画 + 手动加载 PBR 贴图）
 
-	流程（关键：GLB贴图 + FBX骨骼动画）:
-	  1. 加载 GLB 做基础模型（有正确 UV+PBR 贴图）
-	  2. 加载 idle FBX 获取 Skeleton3D 和 AnimationPlayer
-	  3. 将 FBX 的骨骼和动画移到 GLB 上
+	流程:
+	  1. 创建 ModelSlot (scale=70)
+	  2. 加载 idle FBX 做基础模型（有骨骼+AnimationPlayer）
+	  3. 手动加载 PBR 贴图文件，创建材质应用到 FBX mesh
 	  4. 配置 AnimationPlayer + 合并 run/throw/catch 动画
-	  5. 确保 GLB scale = 1.0（由 ModelSlot 的 scale=70 控制大小）
+	  5. 确保 FBX scale = 1.0（由 ModelSlot 的 scale=70 控制大小）
 
 	返回 root Node3D, 内含 ModelSlot(含模型+动画) + 色环标记
 	"""
@@ -764,93 +850,53 @@ func _make_3d_player(team_color: Color) -> Node3D:
 	slot.scale = Vector3(70.0, 70.0, 70.0)
 	root.add_child(slot)
 
-	# ========== 1. 加载 GLB 做基础模型（有正确贴图） ==========
+	# ========== 1. 加载 idle FBX 做基础模型（有骨骼+动画） ==========
 	var anim_player: AnimationPlayer = null
 	var body_loaded := false
 	var body_inst: Node = null
 
-	var glb_scene: PackedScene = load(PLAYER1_BODY_PATH)
-	if glb_scene != null:
-		body_inst = glb_scene.instantiate()
+	var idle_scene: PackedScene = load(PLAYER1_IDLE_PATH)
+	if idle_scene != null:
+		body_inst = idle_scene.instantiate()
 		if body_inst and body_inst is Node:
 			slot.add_child(body_inst)
-			# GLB 缩放强制为 1.0
+			# FBX 缩放强制为 1.0，由 ModelSlot 的 scale=70 控制大小
 			if body_inst is Node3D:
 				(body_inst as Node3D).scale = Vector3(1.0, 1.0, 1.0)
 			body_loaded = true
 			_hide_mixamo_helpers(body_inst)
 			
-			# 诊断: 检查 GLB mesh 和材质
-			print("[Player3DTest] ===== GLB 模型诊断 =====")
-			for child in body_inst.find_children("*", "MeshInstance3D", true, false):
-				if child is MeshInstance3D:
-					var mi: MeshInstance3D = child
-					if mi.mesh:
-						var aabb: AABB = mi.mesh.get_aabb()
-						var surf_count: int = mi.mesh.get_surface_count()
-						var mat_info: String = ""
-						for s in range(surf_count):
-							var mat = mi.mesh.surface_get_material(s)
-							if mat and mat is StandardMaterial3D:
-								var sm: StandardMaterial3D = mat
-								if sm.albedo_texture:
-									mat_info += " surf%d=%s" % [s, sm.albedo_texture.resource_path.get_file()]
-						print("[Player3DTest] GLB mesh '%s': AABB=%s, surfaces=%d%s" % [mi.name, str(aabb.size), surf_count, mat_info])
+			# 手动加载 PBR 贴图并应用到 FBX mesh
+			_apply_pbr_materials_to_fbx(body_inst)
 			
-			# 检查 GLB 是否有 Skeleton3D
-			var glb_skel = _find_node_of_type_static(body_inst, "Skeleton3D")
-			print("[Player3DTest] GLB has Skeleton3D: %s" % (glb_skel != null))
+			anim_player = _find_animation_player_static(body_inst)
+			print("[Player3DTest] ✅ FBX 加载成功，ap=%s" % (anim_player.name if anim_player else "null"))
 		else:
-			push_warning("[Player3DTest] GLB 实例化失败")
+			push_warning("[Player3DTest] idle FBX 实例化失败")
 	else:
-		push_warning("[Player3DTest] 无法加载 GLB: %s" % PLAYER1_BODY_PATH)
+		push_warning("[Player3DTest] 无法加载 idle FBX: %s" % PLAYER1_IDLE_PATH)
 		return root
 
-	# ========== 2. 从 idle FBX 获取 Skeleton3D 和 AnimationPlayer ==========
-	var fbx_skel: Skeleton3D = null
-	if body_loaded:
-		var idle_scene: PackedScene = load(PLAYER1_IDLE_PATH)
-		if idle_scene != null:
-			var fbx_inst: Node = idle_scene.instantiate()
-			if fbx_inst:
-				# 获取 AnimationPlayer
-				var fbx_ap = _find_animation_player_static(fbx_inst)
-				if fbx_ap:
-					# 把 AnimationPlayer 移到 GLB 上
-					fbx_inst.remove_child(fbx_ap)
-					body_inst.add_child(fbx_ap)
-					anim_player = fbx_ap
-					print("[Player3DTest] AnimationPlayer 从 FBX 移到 GLB")
-				
-				# 获取 Skeleton3D
-				fbx_skel = _find_node_of_type_static(fbx_inst, "Skeleton3D")
-				if fbx_skel:
-					# 把 Skeleton3D 移到 GLB 上
-					fbx_inst.remove_child(fbx_skel)
-					body_inst.add_child(fbx_skel)
-					print("[Player3DTest] Skeleton3D 从 FBX 移到 GLB: %s" % fbx_skel.name)
-				
-				fbx_inst.queue_free()
-		else:
-			push_warning("[Player3DTest] 无法加载 idle FBX: %s" % PLAYER1_IDLE_PATH)
-
-	# ========== 3. 配置 AnimationPlayer ==========
+	# ========== 2. 配置 AnimationPlayer ==========
 	if anim_player != null:
 		anim_player.set("process_callback", AnimationPlayer.ANIMATION_PROCESS_PHYSICS)
 		_rename_default_anim_to(anim_player, "idle")
 		if anim_player.has_animation("idle"):
 			var idle_anim: Animation = anim_player.get_animation("idle")
 			if idle_anim:
+				# idle 动画也剥离 root motion
+				_strip_root_motion(idle_anim)
 				idle_anim.loop_mode = Animation.LOOP_LINEAR
-				print("[Player3DTest] idle loop_mode 设为 LOOP_LINEAR")
+				print("[Player3DTest] idle loop_mode 设为 LOOP_LINEAR, root_motion_stripped=true")
 
-	# ========== 4. 合并 run/throw/catch 动画 ==========
+	# ========== 3. 合并 run/throw/catch 动画 ==========
 	if anim_player != null:
 		_merge_proxy_animations(anim_player, slot)
 
 	# ========== 把 AnimationPlayer 存到 root meta ==========
 	root.set_meta("anim_player", anim_player)
 	root.set_meta("current_anim", "idle")
+	root.set_meta("manual_locked", false)  # 每球员独立的动画锁
 
 	# ========== 队伍色脚下环 ==========
 	var ring := MeshInstance3D.new()
@@ -870,10 +916,11 @@ func _make_3d_player(team_color: Color) -> Node3D:
 	ring.position = Vector3(0.0, 2.0, 0.0)
 	root.add_child(ring)
 
-	# ========== 投球手挂接点 HandProxy ==========
+	# ========== 投球手挂接点 HandProxy（手部位置） ==========
 	var hand_proxy := Node3D.new()
 	hand_proxy.name = "HandProxy"
-	hand_proxy.position = Vector3(8.0, 50.0, 0.0)
+	# 手部位置：胸部高度，稍微偏右（像右手持球）
+	hand_proxy.position = Vector3(8.0, 30.0, 0.0)
 	root.add_child(hand_proxy)
 
 	var hand_marker := MeshInstance3D.new()
@@ -892,34 +939,69 @@ func _make_3d_player(team_color: Color) -> Node3D:
 	hand_proxy.add_child(hand_marker)
 
 	# 诊断输出
-	if not body_loaded:
+	if body_inst == null:
 		push_error("[Player3DTest] 玩家 3D 模型完全加载失败, 仅剩色环标记")
-	elif anim_player != null:
-		var lib = anim_player.get_animation_library("")
-		if lib:
-			var anim_list = lib.get_animation_list()
-			print("[Player3DTest] ✅ 动画库内容: %s" % str(anim_list))
-			for a_name in anim_list:
-				var a: Animation = lib.get_animation(a_name)
-				print("[Player3DTest]   动画 '%s': length=%.2f, loop=%d, tracks=%d" % [
-					a_name, a.length, a.loop_mode, a.get_track_count()
-				])
 	else:
-		push_error("[Player3DTest] ❌❌❌ anim_player 为 null！模型不会有任何动画！")
+		print("[Player3DTest] FBX 模型加载成功（带动画）")
 
 	# 延迟播放 idle（等节点加入场景树后）
 	if anim_player != null and anim_player.has_animation("idle"):
+		# _play_idle_deferred 是 player_3d_test.gd 的方法
+		# self 是当前脚本所在节点，在 _setup_player_proxies 调用时已在场景树
 		call_deferred("_play_idle_deferred", anim_player)
+	else:
+		push_warning("[Player3DTest] ❌ 没有 idle 动画！anim_player=%s, has_animation('idle')=%s" % [anim_player, anim_player != null and anim_player.has_animation("idle")])
+
+	# ========== 查找并保存根骨骼节点，用于运行时强制重置位置 ==========
+	var root_bone_node: Node3D = _find_root_bone_node(slot)
+	if root_bone_node:
+		root.set_meta("root_bone_node", root_bone_node)
+		print("[Player3DTest] ✅ 找到根骨骼节点: %s (将在运行时强制重置位置)" % root_bone_node.name)
+	else:
+		print("[Player3DTest] ⚠️ 未找到根骨骼节点，可能无法完全剥离 Root Motion")
 
 	return root
 
 
 func _play_idle_deferred(ap: AnimationPlayer) -> void:
 	if ap and is_instance_valid(ap):
-		ap.play("idle")
-		_manual_anim_locked = true
-		call_deferred("_unlock_animation_after_init")
-		print("[Player3DTest] ✅ 延迟播放 idle, current=%s" % ap.current_animation)
+		# 诊断：输出可用的动画列表
+		var lib_keys = ap.get_animation_library_list()
+		print("[Player3DTest] ===== 动画库内容 =====")
+		for lib_key in lib_keys:
+			var lib = ap.get_animation_library(lib_key)
+			if lib:
+				var anim_list = lib.get_animation_list()
+				print("[Player3DTest] 库 '%s': %d 个动画" % [lib_key, anim_list.size()])
+				for anim_name in anim_list:
+					var anim = lib.get_animation(anim_name)
+					if anim:
+						print("[Player3DTest]   - '%s': length=%.2f, loop=%d" % [anim_name, anim.length, anim.loop_mode])
+		
+		# 确保播放 idle 动画
+		if ap.has_animation("idle"):
+			ap.play("idle")
+			print("[Player3DTest] ✅ 初始播放 idle 成功")
+		else:
+			push_warning("[Player3DTest] ❌ 没有 idle 动画！尝试播放第一个可用动画")
+			for lib_key in lib_keys:
+				var lib = ap.get_animation_library(lib_key)
+				if lib and lib.get_animation_list().size() > 0:
+					var first_anim = lib.get_animation_list()[0]
+					ap.play(first_anim)
+					print("[Player3DTest] ⚠️ 播放第一个动画: '%s'" % first_anim)
+					break
+		
+		# 设置初始状态为 idle（找到代理根节点）
+		var root = ap.get_parent()
+		while root and root.get_parent() and root.get_parent().get_parent():
+			root = root.get_parent()
+		if root:
+			root.set_meta("current_anim", "idle")
+			root.set_meta("manual_locked", false)  # 每球员独立解锁
+		print("[Player3DTest] 当前动画: %s" % ap.current_animation)
+	else:
+		push_warning("[Player3DTest] _play_idle_deferred: ap 无效")
 
 
 ## ==================== 3D 模型辅助函数(对齐 battle/player.gd) ====================
@@ -1013,6 +1095,71 @@ static func _copy_textures_from_glb_to_fbx(glb_root: Node, fbx_root: Node) -> vo
 	# 如果 GLB mesh 数量 > FBX，警告
 	if glb_surface_materials.size() > fbx_meshes.size():
 		print("[Player3DTest] ⚠️ GLB有%d个mesh但FBX只有%d个，多余材质未应用" % [glb_surface_materials.size(), fbx_meshes.size()])
+
+
+## 手动加载 PBR 贴图并应用到 FBX mesh
+## 解决：GLB 有贴图无骨骼，FBX 有骨骼无贴图
+## 策略：加载 PBR 贴图文件，创建 StandardMaterial3D 应用到 FBX mesh
+static func _apply_pbr_materials_to_fbx(fbx_root: Node) -> void:
+	if fbx_root == null:
+		return
+	
+	# ========== 加载 PBR 贴图文件 ==========
+	var base_dir: String = "res://建模素材库/3D模型素材/"
+	var albedo_path: String = base_dir + "player1_base_texture_pbr_20250901.png"
+	var normal_path: String = base_dir + "player1_base_texture_pbr_20250901_normal.png"
+	var mr_path: String = base_dir + "player1_base_texture_pbr_20250901_metallic-texture_pbr_20250901_roughness.png"
+	
+	var albedo_tex: Texture2D = load(albedo_path)
+	var normal_tex: Texture2D = load(normal_path)
+	var mr_tex: Texture2D = load(mr_path)
+	
+	print("[Player3DTest] ===== PBR 贴图加载 =====")
+	print("[Player3DTest] Albedo: %s (loaded=%s)" % [albedo_path, albedo_tex != null])
+	print("[Player3DTest] Normal: %s (loaded=%s)" % [normal_path, normal_tex != null])
+	print("[Player3DTest] Metallic/Roughness: %s (loaded=%s)" % [mr_path, mr_tex != null])
+	
+	# 收集 FBX 所有 mesh
+	var fbx_meshes: Array = []
+	for mi in fbx_root.find_children("*", "MeshInstance3D", true, false):
+		if mi is MeshInstance3D and mi.mesh != null:
+			fbx_meshes.append(mi)
+	
+	print("[Player3DTest] FBX mesh count: %d" % fbx_meshes.size())
+	
+	# 为每个 mesh 创建材质并应用
+	for fbx_mi in fbx_meshes:
+		var mesh: MeshInstance3D = fbx_mi
+		var surf_count: int = mesh.mesh.get_surface_count()
+		
+		for surf_idx in range(surf_count):
+			# 创建新的 StandardMaterial3D
+			var mat: StandardMaterial3D = StandardMaterial3D.new()
+			
+			# 设置 Albedo 贴图（颜色贴图）
+			if albedo_tex:
+				mat.albedo_texture = albedo_tex
+			
+			# 设置 Normal 贴图
+			if normal_tex:
+				mat.set("normal_map", normal_tex)
+			
+			# 设置 Metallic/Roughness 贴图
+			if mr_tex:
+				mat.metallic_texture = mr_tex
+				mat.roughness_texture = mr_tex
+			
+			# 设置 PBR 参数（Q版角色：非金属，适中粗糙度）
+			mat.metallic = 0.0
+			mat.roughness = 0.6
+			
+			# 设置纹理过滤
+			mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			
+			# 应用材质到 surface
+			mesh.set_surface_override_material(surf_idx, mat)
+		
+		print("[Player3DTest] ✅ FBX mesh '%s': %d surfaces 已应用 PBR 材质" % [mesh.name, surf_count])
 
 
 ## 修复 PBR 材质的纹理过滤，确保贴图清晰
@@ -1120,6 +1267,8 @@ static func _merge_proxy_animations(ap: AnimationPlayer, slot: Node3D) -> void:
 					var anim_copy: Animation = anim.duplicate(true) if anim else null
 					if anim_copy == null:
 						anim_copy = anim
+					# 剥离 Root Motion: 移除骨骼位置轨道，保留旋转轨道
+					_strip_root_motion(anim_copy)
 					default_lib.add_animation(semantic_name, anim_copy)
 					var merged_anim: Animation = default_lib.get_animation(semantic_name)
 					if merged_anim:
@@ -1127,13 +1276,70 @@ static func _merge_proxy_animations(ap: AnimationPlayer, slot: Node3D) -> void:
 							merged_anim.loop_mode = Animation.LOOP_NONE
 						else:
 							merged_anim.loop_mode = Animation.LOOP_LINEAR
-					print("[Player3DTest] 合并动画 '%s' (原名 '%s', loop=%s)" % [
+					print("[Player3DTest] 合并动画 '%s' (原名 '%s', loop=%s, root_motion_stripped=true)" % [
 						semantic_name, src_anim_name,
 						"NONE" if semantic_name in ["throw","catch"] else "LINEAR"
 					])
 					break
 				break
 		fbx_inst.queue_free()
+
+
+## 彻底剥离动画中的 Root Motion
+## 精准定位并移除根骨骼(root/Root)的位置轨道，保留所有旋转轨道
+## 注意: Godot 4 中没有 TYPE_TRANSFORM_3D，只有 TYPE_POSITION_3D(0), TYPE_ROTATION_3D(1), TYPE_SCALE_3D(2)
+static func _strip_root_motion(anim: Animation) -> void:
+	if anim == null:
+		return
+	
+	var track_count: int = anim.get_track_count()
+	var removed_tracks: Array[int] = []
+	
+	# 1. 第一次扫描: 识别所有与 root 骨骼相关的位置轨道
+	var root_position_tracks: Array[int] = []
+	var debug_paths: String = ""  # 调试用: 记录所有轨道路径
+	
+	for i in range(track_count):
+		var path_str: String = str(anim.track_get_path(i))
+		var path_lower: String = path_str.to_lower()
+		var track_type: int = anim.track_get_type(i)
+		
+		# 记录前15个轨道用于调试
+		if i < 15:
+			debug_paths += "    [%d] type=%d path='%s'\n" % [i, track_type, path_str]
+		
+		# 检查路径是否指向根骨骼(名为 "root", "Root", "RootBone" 等)
+		# 路径格式可能是: ":pose:root:position" 或 ":pose:Root:position" 或其他
+		var is_root_track: bool = false
+		if ":root:" in path_lower or path_lower.ends_with(":root"):
+			is_root_track = true
+		elif "rootbone" in path_lower:
+			is_root_track = true
+		# 额外检查: 路径中包含 "root" 作为骨骼名（不一定是完整匹配）
+		elif ":root_" in path_lower or "_root:" in path_lower:
+			is_root_track = true
+		# 检查是否只有单个骨骼（没有骨骼层级路径）
+		elif path_lower.begins_with(":root") or path_lower.begins_with("root"):
+			is_root_track = true
+		
+		if is_root_track and track_type == 0:  # Animation.TYPE_POSITION_3D
+			root_position_tracks.append(i)
+			
+	if root_position_tracks.is_empty():
+		# 未找到 root 轨道，打印调试信息帮助分析
+		print("[Player3DTest] _strip_root_motion: 未找到 root 位置轨道 (轨道数=%d)\n轨道列表:\n%s" % [track_count, debug_paths])
+		return
+		
+	# 2. 标记需要移除的轨道
+	removed_tracks = root_position_tracks
+	
+	# 3. 从后往前移除标记的轨道(避免索引变化)
+	removed_tracks.sort()
+	removed_tracks.reverse()
+	for idx in removed_tracks:
+		anim.remove_track(idx)
+		
+	print("[Player3DTest] _strip_root_motion: 移除 %d 个 root 位置轨道 (原轨道数=%d)" % [removed_tracks.size(), track_count])
 
 
 ## 静态递归查找指定类型的节点
@@ -1458,24 +1664,52 @@ func _physics_process(_delta: float) -> void:
 	_process_catch_assist(_delta)  # 接球助手检查
 	_check_auto_screenshot()  # 自动截图检查
 
+	# ========== 关键修复: 每帧强制重置所有代理的根骨骼位置，彻底消除 Root Motion ==========
+	_force_reset_root_bones()
+
 	if not controlled_player or not is_instance_valid(controlled_player):
 		return
 
-	# WASD 移动
-	var move_speed: float = controlled_player._get_effective_value("speed", controlled_player.speed)
-	var input_dir := Vector2.ZERO
-	input_dir.x = Input.get_axis("move_left", "move_right")
-	input_dir.y = Input.get_axis("move_up", "move_down")
-	if input_dir != Vector2.ZERO:
-		controlled_player.velocity = input_dir.normalized() * move_speed
-	else:
-		controlled_player.velocity = Vector2.ZERO
+	# ========== 检查 F-key 手动动画是否播放完毕，完毕则解锁 ==========
+	if controlled_player.get_meta("manual_locked", false):
+		var manual_anim: String = controlled_player.get_meta("manual_anim", "")
+		if manual_anim in ["throw", "catch"]:
+			var px = _proxy_a if controlled_player == player_a else _proxy_b
+			if px and is_instance_valid(px):
+				var ap: AnimationPlayer = _get_proxy_anim_player(px)
+				if ap and not ap.is_playing():
+					# 动画播完，解锁并切回 idle
+					controlled_player.set_meta("manual_locked", false)
+					controlled_player.set_meta("manual_anim", "idle")
+					px.set_meta("manual_locked", false)
+					_set_proxy_current_anim(px, "idle")
+					var idle_ap: AnimationPlayer = _get_proxy_anim_player(px)
+					if idle_ap and idle_ap.has_animation("idle"):
+						idle_ap.play("idle")
+						var a_idle: Animation = idle_ap.get_animation("idle")
+						if a_idle: a_idle.loop_mode = Animation.LOOP_LINEAR
+					print("[Player3DTest] 手动动画 %s 播放完毕，解锁" % manual_anim)
 
-	# 边界 clamp
-	var pos := controlled_player.global_position
-	pos.x = clampf(pos.x, -FIELD_WIDTH / 2.0 + 30.0, FIELD_WIDTH / 2.0 - 30.0)
-	pos.y = clampf(pos.y, -FIELD_HEIGHT / 2.0 + 30.0, FIELD_HEIGHT / 2.0 - 30.0)
-	controlled_player.global_position = pos
+	# ========== 根据 velocity 自动切换 idle/run 动画 ==========
+	# 如果没有手动锁定，根据移动状态自动切换动画
+	if not controlled_player.get_meta("manual_locked", false):
+		var px = _proxy_a if controlled_player == player_a else _proxy_b
+		if px and is_instance_valid(px):
+			var ap: AnimationPlayer = _get_proxy_anim_player(px)
+			var cur_anim: String = _get_proxy_current_anim(px)
+			if ap and is_instance_valid(ap):
+				var moving: bool = controlled_player.velocity.length() > 10.0
+				var target: String = "idle" if not moving else "run"
+				if target != cur_anim and ap.has_animation(target):
+					ap.play(target)
+					_set_proxy_current_anim(px, target)
+					var anim_res: Animation = ap.get_animation(target)
+					if anim_res:
+						anim_res.loop_mode = Animation.LOOP_LINEAR
+					if target == "run":
+						print("[Player3DTest] ▶️ 切换到 run 动画")
+					elif target == "idle":
+						print("[Player3DTest] ▶️ 切换到 idle 动画")
 
 	# 2D 平视跟随模式: Camera2D 跟随球员
 	if _camera_mode == CAMERA_MODE_FOLLOW and camera_2d:
@@ -1493,38 +1727,36 @@ func _physics_process(_delta: float) -> void:
 				Vector3(BIG_CAM_SIDE_X, BIG_CAM_SIDE_Y, fz)
 			)
 
-	# ========== 3D 模型动画: 根据 velocity 自动切换 idle/run ==========
-	var current_proxy: Node3D = null
-	if controlled_player == player_a and _proxy_a:
-		current_proxy = _proxy_a
-	elif controlled_player == player_b and _proxy_b:
-		current_proxy = _proxy_b
-	if current_proxy and is_instance_valid(current_proxy):
-		var ap: AnimationPlayer = current_proxy.get_meta("anim_player", null)
-		var cur_anim: String = current_proxy.get_meta("current_anim", "idle")
-		if ap != null and is_instance_valid(ap):
-			# _manual_anim_locked=true 说明 F 键刚触发了 throw/catch，不要自动覆盖
-			if _manual_anim_locked:
-				# throw/catch 是单次动画，播完后自动解锁恢复自动切换
-				var is_one_shot: bool = cur_anim in ["throw", "catch"]
-				if is_one_shot and not ap.is_playing():
-					_manual_anim_locked = false
-					current_proxy.set_meta("current_anim", "idle")
-				# 锁定中：不做任何自动切换
-			else:
-				# 自动 idle ↔ run 切换
-				var moving: bool = controlled_player.velocity.length() > 10.0
-				var target: String = "idle" if not moving else "run"
-				if target != cur_anim and ap.has_animation(target):
-					ap.play(target)
-					current_proxy.set_meta("current_anim", target)
-					var anim_res: Animation = ap.get_animation(target)
-					if anim_res:
-						anim_res.loop_mode = Animation.LOOP_LINEAR
-
 	_update_debug_label()
 	_update_player_panels()  # 同步快捷面板数据
-	_poll_hotkeys()  # 轮询快捷键（替代 _input，更可靠）
+
+
+## 强制重置所有代理的骨骼位置为 Vector3.ZERO
+## 这是彻底消除 Root Motion 的终极手段：
+## 无论动画中是否包含位置轨道，每帧都强制将骨骼的位置归零
+## 这样动画就只会原地播放姿态，而不会移动
+func _force_reset_root_bones() -> void:
+	for proxy in [_proxy_a, _proxy_b]:
+		if proxy and is_instance_valid(proxy):
+			# 1. 重置 Skeleton3D 的 position (如果存在)
+			if proxy.has_meta("root_bone_node"):
+				var bone_node: Node3D = proxy.get_meta("root_bone_node", null)
+				if bone_node and is_instance_valid(bone_node):
+					bone_node.position = Vector3.ZERO
+			
+			# 2. 递归重置所有骨骼节点的 position
+			_reset_all_positions(proxy)
+
+
+## 递归重置所有 Node3D 的 position 为 Vector3.ZERO
+## 但保留 proxy 本身的 position (由 _set_proxy_pos 控制)
+func _reset_all_positions(node: Node) -> void:
+	if node is Node3D and node.name != "PlayerProxy3D":
+		var n3d: Node3D = node as Node3D
+		if n3d.position != Vector3.ZERO:
+			n3d.position = Vector3.ZERO
+	for child in node.get_children():
+		_reset_all_positions(child)
 
 
 ## ==================== 自动截图测试 ====================
@@ -1621,6 +1853,9 @@ func _poll_hotkeys() -> void:
 func _hk_tab() -> void:
 	_current_control_index = 1 - _current_control_index
 	controlled_player = player_a if _current_control_index == 0 else player_b
+	# 同步 InputManager 的主控球员
+	if input_manager and input_manager.has_method("set_controlled_player"):
+		input_manager.set_controlled_player(controlled_player)
 	print("[Player3DTest] 切换到球员 %s" % ("A" if _current_control_index == 0 else "B"))
 
 
@@ -1631,7 +1866,11 @@ func _hk_throw() -> void:
 		if ap1 and ap1.has_animation("throw"):
 			ap1.play("throw")
 			_set_proxy_current_anim(px, "throw")
-			_manual_anim_locked = true
+			px.set_meta("manual_locked", true)
+			# 同时在 player 上设置，供 player.gd 检查
+			if controlled_player:
+				controlled_player.set_meta("manual_locked", true)
+				controlled_player.set_meta("manual_anim", "throw")
 			var a1 := ap1.get_animation("throw")
 			if a1: a1.loop_mode = Animation.LOOP_NONE
 			print("[Player3DTest] ✅ 切 throw 动作")
@@ -1725,7 +1964,11 @@ func _hk_catch() -> void:
 		if ap2 and ap2.has_animation("catch"):
 			ap2.play("catch")
 			_set_proxy_current_anim(px, "catch")
-			_manual_anim_locked = true
+			px.set_meta("manual_locked", true)
+			# 同时在 player 上设置，供 player.gd 检查
+			if controlled_player:
+				controlled_player.set_meta("manual_locked", true)
+				controlled_player.set_meta("manual_anim", "catch")
 			var a2 := ap2.get_animation("catch")
 			if a2: a2.loop_mode = Animation.LOOP_NONE
 			print("[Player3DTest] ✅ 切 catch 动作")
@@ -1798,7 +2041,11 @@ func _hk_idle() -> void:
 		if ap3 and ap3.has_animation("idle"):
 			ap3.play("idle")
 			_set_proxy_current_anim(px, "idle")
-			_manual_anim_locked = false
+			px.set_meta("manual_locked", false)
+			# 同时在 player 上解锁
+			if controlled_player:
+				controlled_player.set_meta("manual_locked", false)
+				controlled_player.set_meta("manual_anim", "idle")
 			var a3 := ap3.get_animation("idle")
 			if a3: a3.loop_mode = Animation.LOOP_LINEAR
 			# 切 idle 时回正朝向
@@ -1832,9 +2079,86 @@ func _hk_bigcam() -> void:
 	print("[Player3DTest] 大相机视图: %s" % ("ON" if _big_cam_active else "OFF(2D模式)"))
 
 
-func _unlock_animation_after_init() -> void:
-	_manual_anim_locked = false
-	print("[Player3DTest] 动画锁定已解锁")
+## ==================== InputManager 初始化（鼠标发球支持）====================
+
+func _init_input_manager() -> void:
+	"""初始化输入管理器，支持鼠标左键发球"""
+	var input_script := load("res://scripts/battle/input_manager.gd")
+	if input_script == null:
+		push_error("[Player3DTest] 无法加载 input_manager.gd 脚本")
+		return
+	input_manager = Node.new()
+	input_manager.set_script(input_script)
+	input_manager.name = "InputManager"
+	add_child(input_manager)
+	# 设置主控球员
+	input_manager.set_controlled_player(controlled_player)
+	# 启用比赛状态（允许输入）
+	input_manager.match_started = true
+	# 连接发球信号
+	input_manager.throw_requested.connect(_on_throw_requested)
+	input_manager.throw_cancelled.connect(_on_throw_cancelled)
+	input_manager.catch_state_entered.connect(_on_catch_entered)
+	input_manager.catch_state_exited.connect(_on_catch_exited)
+	print("[Player3DTest] ✅ InputManager 初始化完成（支持鼠标左键发球）")
+
+
+func _on_throw_requested(direction: Vector2, power: float) -> void:
+	"""鼠标左键发球回调：让球从 controlled_player 飞向指定方向"""
+	if ball_2d == null or not is_instance_valid(ball_2d):
+		return
+	if controlled_player == null or not is_instance_valid(controlled_player):
+		return
+	if not controlled_player.is_carrying_ball:
+		push_warning("[Player3DTest] 发球失败：球员未持球")
+		return
+	# 计算最大飞行距离（根据力度）
+	var max_dist: float = 300.0 + power * 500.0
+	# 调用球的 launch 方法
+	var skills_arg: Array[Dictionary] = []
+	var damage: float = 30.0
+	ball_2d.launch(
+		controlled_player.global_position + Vector2(0, -40),
+		direction,
+		damage,
+		max_dist,
+		controlled_player,
+		skills_arg
+	)
+	# 播放 throw 动画
+	var px = _proxy_a if controlled_player == player_a else _proxy_b
+	if px and is_instance_valid(px):
+		var ap = _get_proxy_anim_player(px)
+		if ap and ap.has_animation("throw"):
+			ap.play("throw")
+			_set_proxy_current_anim(px, "throw")
+			px.set_meta("manual_locked", true)
+			var a = ap.get_animation("throw")
+			if a: a.loop_mode = Animation.LOOP_NONE
+	# 朝投球方向旋转
+	_face_throw_direction(controlled_player, direction)
+	# controlled_player 不再持球
+	controlled_player.set_carrying_ball(false)
+	print("[Player3DTest] 🎯 鼠标发球: 方向=%s 力度=%.2f 距离=%.0f" % [str(direction), power, max_dist])
+
+
+func _on_throw_cancelled() -> void:
+	"""发球取消"""
+	print("[Player3DTest] 发球取消")
+
+
+func _on_catch_entered() -> void:
+	"""进入待接球状态"""
+	if controlled_player:
+		controlled_player.enter_catch_state()
+	print("[Player3DTest] 进入待接球状态")
+
+
+func _on_catch_exited() -> void:
+	"""退出待接球状态"""
+	if controlled_player:
+		controlled_player.exit_catch_state()
+	print("[Player3DTest] 退出待接球状态")
 
 
 ## ==================== 调试 UI ====================

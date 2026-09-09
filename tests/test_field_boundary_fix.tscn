@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bvoc4bpf85eoe"]
+
+[ext_resource type="Script" uid="uid://cjkww1w4q7kyf" path="res://tests/test_field_boundary_fix.gd" id="1_8cpe8"]
+
+[node name="TestFieldBoundaryFix" type="Node3D" unique_id=840621097]
+script = ExtResource("1_8cpe8")

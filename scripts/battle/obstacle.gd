@@ -249,7 +249,7 @@ func consume_frame(delta: float) -> void:
 	  → 1s后墙破, 球以(50攻, 280速)继续飞
 	"""
 	var atk_consumed: float = attack_consume_rate * delta
-	var spd_consumed: float = speed_consume_rate * delta
+	var _spd_consumed: float = speed_consume_rate * delta
 
 	# 消耗障碍物HP（等于球攻击力的消耗量）
 	obstacle_hp -= atk_consumed
