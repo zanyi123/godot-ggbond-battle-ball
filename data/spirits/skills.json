@@ -167,7 +167,7 @@
 			"description": "防御障碍\n该技能鼠标放置障碍物阻挡球，球卡住逐帧消耗攻击和球速，击穿后继续飞",
 			"detail": "手动释放，在释放处产生障碍",
 			"element": "草木",
-			"energy_cost": 25,
+			"energy_cost": 25.0,
 			"icon_color": "#FFFFFF",
 			"icon_path": "",
 			"id": "skill_草木_2",
@@ -179,6 +179,30 @@
 				"field_obs_add"
 			],
 			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"base_description": "岩灵注入元灵能量到球员身体，形成抗性",
+			"cooldown": 10.0,
+			"description": "岩灵注入元灵能量到球员身体，形成抗性\n该技能防御+固定值（持续3秒）",
+			"detail": "技能详细说明",
+			"element": "大地",
+			"energy_cost": 10,
+			"icon_color": "#FFFFFF",
+			"icon_path": "",
+			"id": "skill_大地_2",
+			"name": "坚韧不拔",
+			"tag_params": {
+				"player_def_up_flat": {
+					"duration": 3.0,
+					"value": 30.0
+				}
+			},
+			"tags": [
+				"player_def_up_flat"
+			],
+			"type": "passive",
 			"unlock_cost": 0,
 			"unlock_level": 1
 		}

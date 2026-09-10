@@ -1,21 +1,20 @@
 ---
-name: project-context
-description: 决竞球项目记忆中枢。新会话接手、开工、跨工具交接、理解项目上下文时必读。包含项目定位、开发铁律、验证纪律、架构速查、当前进度、记忆资产索引、跨工具交接协议。用于任何需要了解"这个项目是什么、怎么干、干到哪了"的场景，建议每次开工先触发本技能。
+name: "project-context"
+description: "决竞球项目记忆中枢。新会话接手、开工、跨工具交接、理解项目上下文时必读。包含项目定位、开发铁律、验证纪律、架构速查、当前进度、记忆资产索引。建议每次开工先触发。"
 ---
 
-# 决竞球项目记忆中枢（zcode 专属）
+# 决竞球项目记忆中枢
 
-> 本文件是 zcode 工作时的项目记忆。pi 有它自己的一套（`.pi/skills/`），互不干扰。
-> **zcode 新会话开工第一动作：读本技能 + 读最近一份工作日志。**
-> ⚠ **不要主动读全部代码**，按「代码按需读取清单」（第五-补节）按任务读相关文件。
+> 新会话开工第一动作：读本技能 + 读最近一份工作日志。
+> ⚠ **不要主动读全部代码**，按「代码按需读取清单」按任务读相关文件。
 
 ## 一、项目定位
 
 - **名称**：决竞球 Battle Ball（《猪猪侠之决竞球》同人 Godot 复刻）
-- **类型**：6v6 球类对战游戏，核心玩法是 AI 球员战术对抗
+- **类型**：3v3 球类对战游戏，核心玩法是 AI 球员战术对抗
 - **引擎**：Godot 4.6 / GDScript
 - **入口场景**：`res://scenes/main/main_menu.tscn`
-- **当前重心**：AI 系统调优（决策/移动/感知/平衡）
+- **当前重心**：AI 系统调优 + 3D 渲染进化 + UI 系统
 
 ## 二、开发铁律（必读必守）
 
@@ -50,6 +49,8 @@ description: 决竞球项目记忆中枢。新会话接手、开工、跨工具�
 - 对比基线：`sim_results/baseline.json` 的 `known_observations` 区分"正常但可疑"与真 bug
 - **豁免**：纯注释/格式/只改 print/不影响 AI 行为的数值，可只查语法
 
+> ⚠ 注意：verify.sh / run_tests.sh / run_sim.sh 的 Godot 路径指向旧项目（不存在），当前机器无 Godot 控制台版时模拟无法直接运行。此时需明确告知主人需手动验证。
+
 ## 四、Bug 维修纪律
 
 - 每轮**只修一个根因**，最多改 1-3 个文件，不重构无关代码
@@ -68,24 +69,26 @@ scripts/
 ├── core/      data_manager / game_manager（单例）
 ├── battle/    player / ball / battle_manager / battle_hud / input_manager
 │              ai_manager / ai_profile / match_stats   ← AI 子系统
-├── ai/        （待建）
-└── ui/        main_menu
+│              field_zone / field_physics_manager / obstacle_manager
+│              illusion_manager / knockback_physics
+├── systems/   buff_system / spirit_system
+├── ui/        main_menu / character_selection / preparation_ui / character_system
+└── test/      player_3d_test / field_tag_test 等
 ```
 
 **物理层**（`project.godot`）：players / ball / field_bounds / skills / penalty_walls
 
-**数据**（`data/*.json`，开发者可热改）：6 球员 / 6 技能 / 6 元灵 / 元素克制
+**数据**（`data/*.json`，开发者可热改）：7 球员 / 21 技能 / 6 元灵 / 元素克制
 
 ## 五-补、代码按需读取清单（⚠ 重要：不要全读）
 
-全项目 49 个脚本 / 约 25000 行，**禁止启动时全读**（挤占上下文、注意力分散）。
-按任务只读相关文件。`use` 用 `read` 工具或 `rg` 定位。
+全项目 49+ 个脚本 / 约 25000+ 行，**禁止启动时全读**。
 
 **AI 子系统（最常读，共 ~8000 行）——改 AI 行为前必读这几个：**
 | 文件 | 行数 | 作用 |
 |---|---|---|
 | `scripts/battle/ai_manager.gd` | 2260 | AI 决策状态机 + Steering + 工具函数 |
-| `scripts/battle/player.gd` | 1138 | 球员逻辑（移动/体力/技能/韧性） |
+| `scripts/battle/player.gd` | 1138 | 球员逻辑（移动/体力/技能/韧性/3D模型挂载） |
 | `scripts/battle/ball.gd` | 891 | 球物理 + 信号（影响接投球） |
 | `scripts/battle/battle_manager.gd` | 1296 | 比赛主控 + auto_simulate |
 | `scripts/battle/match_stats.gd` | 187 | 指标采集 |
@@ -98,68 +101,70 @@ scripts/
 - 改球员/球手感 → 先读 `player.gd` / `ball.gd`
 - 元灵技能/buff → `scripts/systems/spirit_system/` 下
 - UI → `scripts/ui/` 下
-- 找某函数/字符串 → 先 `rg "关键词" scripts/`，别逐个读
-
-**原则：**
-1. 先按任务导航确定读哪 1-3 个文件，别撒网式读
-2. 大文件（>800 行）用 `read` 的 `offset/limit` 分段读相关部分，别整文件吞
-3. 拿不准位置先 `rg`，定位到行号再 `read`
+- 3D 渲染 → `scripts/test/player_3d_test.gd`（独立测试场）
 
 ## 六、当前进度（指针，详见工作日志）
 
-> **最近一份：`工作日志/2026-06-17.md`** —— 接手前必读
+> **最近工作日志**：`工作日志/` 目录下最新文件 + `.workbuddy/memory/` 下最新记忆
 
-- **AI P0（避障+防抖）**：✅ 完成，卡死清零，持续有效
-- **AI P1（效用曲线+系数 profile 化）**：✅ 完成，8 权重 + 4 曲线字段
-- **方案A（自动模拟比赛+指标）**：✅ 可用，`run_sim.sh` + `match_stats.gd`
-- **5 元灵技能绑定**：✅ 完成（雷火/冰雪/草木/梦幻 + 原大地/金刚）
-- **种子确定性**：✅ 同种子核心指标可复现
-- **AI P2（影响力地图）**：⚠️ 函数已写未接入，需先做**位置缓存机制**防目标漂移卡死
-- **待主人验证**：P0/P1 手感、5 元灵技能效果、能量/冷却 UI 表现
-
-**下一阶段方向**（见 `docs/项目结构说明.md`）：第二阶段 AI 系统完善 / 备战场景 / 韧性公式 / 发球辅助线 UI
+- **AI P0（避障+防抖）**：✅ 完成，卡死清零
+- **AI P1（效用曲线+系数 profile 化）**：✅ 完成
+- **方案A（自动模拟比赛+指标）**：✅ 可用
+- **6 元灵技能绑定**：✅ 完成（雷火/冰雪/草木/梦幻/大地/金刚）
+- **六层状态系统**：✅ 完成（Buff/控制/持续/倍率/检查/标签）
+- **3D 渲染进化（battle3d 模块，2026-09-10）**：Phase 0~5 ✅ 全部完成。2D 逻辑权威 + 3D 视觉代理（USE_3D_SCENE 默认 true，sim 强制纯 2D）。P1 场景复刻 144FPS；P3 白线双轨 22/22；P4 特效矩阵 18/18；单位制铁律=GD 像素 1:1。详见 docs/3D场景回归Godot融合方案.md
+- **角色系统UI**：✅ 基础完成，鼠标穿透已修复
+^- **3D 与主游戏隔离公约**：`player.gd` 的 `USE_3D_MODEL` 保持 `false`（旧 per-player 路线）；新 3D 走 `scripts/battle3d/`（USE_3D_SCENE 开关）
 
 ## 七、记忆资产索引
 
 | 类型 | 位置 | 用途 |
 |---|---|---|
-| 工作日志 | `工作日志/2026-05-29.md` ~ `2026-06-17.md` | **跨会话交接主载体**，每次收尾写当日 |
-| 设计文档 | `docs/` | 架构/AI 系统/标签/buff 状态机/物理/开发日志 |
-| 方法论 | `docs/Vibecoding学习与实践记录.md`、`docs/AI协作开发效率指南.md` | 「如何与 AI 协作」的演进记录 |
-| 设计问答 | `docs/问题提问日志.md` | 历史决策依据 |
-| 验证基线 | `sim_results/baseline.json` | 模拟健康指标对比基准 |
-| 技能 | `.zcode/skills/` | zcode 专属 6 个 skill（含本记忆中枢） |
+| 工作日志 | `工作日志/*.md` | **跨会话交接主载体** |
+| AI记忆 | `.workbuddy/memory/*.md` | workbuddy 专属记忆 |
+| 设计文档 | `docs/` | 架构/AI/标签/buff/物理 |
+| 验证基线 | `sim_results/baseline.json` | 模拟健康指标基准 |
+| 未完成节点 | `docs/6.23前未完成节点.md` | 遗留问题追踪 |
+| TRAE skills | `.trae/skills/` | TRAE 专属技能（本文件） |
 
-## 八、zcode 专属技能清单（`.zcode/skills/`）
+## 八、TRAE 专属技能清单
 
-- `project-context` — **本文件**，项目记忆中枢（铁律/架构/进度/交接）
-- `battle-ball` — 项目开发流程铁律（消歧义/纲要/精简/总结/自检）
-- `bug_fix` — Bug 维修纪律（1 根因/3 文件/查语法）
-- `verify_before_deliver` — 交付前模拟验证纪律（改 AI 代码必跑 run_sim）
-- `new_project` — 新子项目/新功能模块化开发
-- `write_log` — 工作日志规范化写作
-
-触发：靠 description 自动加载；或 `/skill <名字> <指令>` 强制加载。
+- `project-context` — **本文件**，项目记忆中枢
+- `battle-ball` — 项目开发流程铁律
+- `bug-fix` — Bug 维修纪律
+- `verify-before-deliver` — 交付前模拟验证纪律
+- `write-log` — 工作日志规范化写作
+- `new-project` — 新子项目/新功能模块化开发
 
 ## 九、跨工具交接协议
 
-本项目同时用 pi 和 zcode，**对话历史互不相通**（pi 存 `~/.pi/agent/sessions/*.jsonl`，zcode 存 `~/.zcode/cli/db/db.sqlite`）。交接靠**文件**，不靠聊天记录：
+本项目同时用 pi、zcode、TRAE 等多个 AI 工具，交接靠**文件**：
+1. **收尾时**：把本次成果写进 `工作日志/<日期>.md`
+2. **开工时**：读本技能 + 读最近一份工作日志
+3. 工作日志、docs、代码是所有工具共享的项目资产（git 跟踪）
 
-1. **收尾时**（任何工具）：把本次成果写进 `工作日志/<日期>.md`
-2. **开工时**（zcode）：第一句话——「/skill project-context 然后读最近一份工作日志，接着干 XXX」
-3. **切工具时**：照 `.zcode/交接模板.md` 填一页，新工具读它接手
-
-工作日志、docs、代码是**两个工具共享的项目资产**（git 跟踪）；只有 skill 和对话历史是各自独立的。所以铁律/进度写在共享文件里两边都看得到，但记忆中枢 skill 各自维护。
-
-## 十、关键参数备忘（避免重新踩坑）
+## 十、关键参数备忘
 
 - 分离力：`separation_inner=600` / `separation_outer=1400`（内外场）
 - 队友感知半径：`separation_radius=80`
 - 带球碰撞预测：`avoid_lookahead=0.4s`
 - 决策防抖容差（按角色）：主攻5 / 防御8 / 辅助12
 - 卡死换向滞回：`stuck_redecide_margin=30`
-- 效用曲线：`curve_k` 默认 1.0，拐点 0.5（中点行为与原线性一致）
+- 效用曲线：`curve_k` 默认 1.0，拐点 0.5
+- GDScript 缩进用 **Tab**，不用空格
+- Key 常量兼容：用整数键值最稳（Tab=16777217, F1=16777248...）
+
+## 十一、Godot 4.x 踩坑记录
+
+- `look_at()` 的 up 向量不能与相机到目标方向平行（俯视必须用 up=(0,0,-1)）
+- `ImageTexture.set_flags()` 不存在（Godot 4.x）
+- `create_from_image()` 只接受一个参数
+- `BaseMaterial3D.DETAIL_BLEND_OFF` 不存在
+- 贴图模糊根因：.png 默认 lossy VRAM 压缩，改 .import compress/mode=0 无损
+- SubViewport 必须设 `world_3d=World3D.new()` + `Environment` + `UPDATE_ALWAYS`
+- `player_model_3d.tscn` 的 [node] 块禁止 `#` 注释（导致 load() 失败）
+- Key 常量 `KEY_TAB`/`KEY_F1` 等在不同 Godot 4.x 版本支持不一致
 
 ---
 
-**给接手的 AI**：你现在的身份是决竞球项目的协作开发者。本文件已读，接下来读 `工作日志/2026-06-17.md` 了解最近进度，然后等主人指令。称呼主人「主人」，遵守开发铁律，改 AI 代码记得跑 `run_sim.sh`。
+**给接手的 AI**：你现在的身份是决竞球项目的协作开发者。本文件已读，接下来读最近一份工作日志了解进度，然后等主人指令。称呼主人「主人」，遵守开发铁律，改 AI 代码记得跑 `run_sim.sh`（若环境可用）。

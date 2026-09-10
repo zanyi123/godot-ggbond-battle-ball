@@ -5,6 +5,10 @@ extends Node2D
 const AIProfile = preload("res://scripts/battle/ai_profile.gd")
 const MatchStats = preload("res://scripts/battle/match_stats.gd")
 
+## 3D 场景模式开关：false=2.5D 像素风（默认，run_sim/AI 模拟必须走此路），true=3D 场景视觉
+## 详见 scripts/battle3d/README.md；改完必须跑 run_sim.sh 对比基线
+const USE_3D_SCENE := true
+
 # 场地配置
 const FIELD_WIDTH: float = 1300.0
 const FIELD_HEIGHT: float = 780.0
@@ -130,6 +134,14 @@ func _ready() -> void:
 		# 跳过备战面板，延时自动开始（等 _ready 全完成）
 		call_deferred("_on_prep_match_started")
 		print("[Sim] 自动模拟模式已启动 time_scale=%.1f 半场=%.1f秒" % [sim_time_scale, GameManager.sim_half_duration_override])
+
+	# === 3D 场景桥接层（USE_3D_SCENE=true 时激活；2D 逻辑零改动，bridge 只读同步）===
+	if USE_3D_SCENE and not auto_simulate:  # sim 模拟强制纯 2D（基线可比）
+		var bridge := Node.new()
+		bridge.name = "BattleArena3DBridge"
+		bridge.set_script(load("res://scripts/battle3d/battle_arena_3d_bridge.gd"))
+		add_child(bridge)
+		bridge.setup(self)
 
 
 ## 解析命令行参数（--sim / --speed=N / --seed=N / --half=N / --dev-prep）
@@ -1208,6 +1220,10 @@ func _setup_preparation_ui() -> void:
 	for player: CharacterBody2D in team_a_players + team_b_players:
 		if player and is_instance_valid(player):
 			player.visible = false
+	# 隐藏比赛HUD（备战中不应显示计时/比分/返回按钮，3D 亮背景下尤其冲突）
+	var prep_hud = ui_layer.get_node_or_null("HUD")
+	if prep_hud:
+		prep_hud.visible = false
 
 	# 显示备战界面时暂停比赛处理
 	set_process(false)
@@ -1415,14 +1431,59 @@ func _on_strategy_changed(player_strategy: int, team_strategy: int) -> void:
 
 
 func _on_player_substituted(index: int, new_char_id: String) -> void:
-	"""球员替补"""
-	print("[Match] 球员%d替补为 %s" % [index, new_char_id])
+	"""球员替补（2026-09-10 实现）：重初始化该位置球员 + B队自动补全不重复角色
+	重初始化走 player.initialize（重载 char_data/属性 + _setup_visuals 幂等重建），
+	节点/碰撞/信号引用不变；3D 代理由 bridge 检测 character_id 变化自动重建。"""
+	print("[Match] 球员%d替补请求 → %s" % [index, new_char_id])
+	if new_char_id == "" or index < 0 or index >= team_a_players.size():
+		return
+	var player: CharacterBody2D = team_a_players[index]
+	if player == null or not is_instance_valid(player):
+		return
+	# 注：UI 侧已做同 id 早退，这里不早退——即使 A 队已由 UI 切换，B 队补全也必须执行
+	if str(player.character_id) != new_char_id:
+		# 清旧角色元灵技能残留，再按新角色重初始化
+		if player.has_method("unequip_spirit"):
+			player.unequip_spirit()
+		player.initialize(new_char_id, "a", index == 0)
+	# B队自动补全：角色池中排除 A队当前选择，替换与 A队重复的 B队角色
+	_autofill_team_b()
+	print("[Match] 球员%d替补为 %s 完成（B队已自动补全）" % [index, new_char_id])
 
-	# TODO: 实现替补逻辑
-	# 1. 创建新球员
-	# 2. 替换旧球员
-	# 3. 更新AI管理器
-	# 4. 更新备战界面
+
+func _autofill_team_b() -> void:
+	"""B队（AI）从角色系统已有角色自动补全，保证与 A队不重复"""
+	var taken: Array = []
+	for p in team_a_players:
+		if p and is_instance_valid(p):
+			taken.append(str(p.character_id))
+	for i in range(team_b_players.size()):
+		var bp: CharacterBody2D = team_b_players[i]
+		if bp == null or not is_instance_valid(bp):
+			continue
+		var cur := str(bp.character_id)
+		if not taken.has(cur):
+			continue
+		# 该角色与 A队重复 → 从角色池选一个全场未用的
+		var pick := ""
+		for c in DataManager.characters:
+			var cid := str(c.get("id", ""))
+			if cid == "":
+				continue
+			var used := false
+			for p2 in team_a_players + team_b_players:
+				if p2 and is_instance_valid(p2) and str(p2.character_id) == cid:
+					used = true
+					break
+			if not used:
+				pick = cid
+				break
+		if pick == "":
+			continue  # 角色池耗尽，保留原角色
+		if bp.has_method("unequip_spirit"):
+			bp.unequip_spirit()
+		bp.initialize(pick, "b", false)
+		print("[Match] B队%d 自动补全为 %s" % [i + 1, pick])
 
 
 func _on_spirit_changed(index: int, spirit_id: String) -> void:

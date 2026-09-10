@@ -21,7 +21,8 @@
 			"max_level": 10.0,
 			"name": "岩灵",
 			"skills": [
-				"skill_大地_1"
+				"skill_大地_1",
+				"skill_大地_2"
 			]
 		},
 		{

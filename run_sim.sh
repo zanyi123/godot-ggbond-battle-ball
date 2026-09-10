@@ -24,6 +24,11 @@ HALF="${4:-80}"
 mkdir -p "$RESULT_DIR"
 SUMMARY_FILE="$RESULT_DIR/summary_$(date +%Y%m%d_%H%M%S).csv"
 
+# 前置提示：USE_3D_SCENE=true 时 sim 由代码层强制降级纯 2D（battle_manager spawn 条件含 not auto_simulate），基线可比
+if grep -q "^const USE_3D_SCENE := true" "$PROJECT/scripts/battle/battle_manager.gd"; then
+  echo "⚠ USE_3D_SCENE=true（3D 默认），本次 sim 自动走纯 2D";
+fi
+
 # 健康检查阈值（与 baseline.json 的 hard_rules 对应，写死避免 JSON 解析）
 HARD_STUCK_MAX=0
 HARD_CATCHRATE_MIN=0.8

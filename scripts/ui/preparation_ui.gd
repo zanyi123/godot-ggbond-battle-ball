@@ -92,10 +92,12 @@ func _process(_delta: float) -> void:
 
 func _build_ui() -> void:
 	"""构建整个备战界面"""
-	# 全屏半透明背景
+	# 全屏不透明背景
+	# ⚠ 本 Control 挂在 CanvasLayer 下 size 为 0，FULL_RECT 无效——必须显式设窗口尺寸
 	var bg := ColorRect.new()
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.1, 0.1, 0.15, 0.92)
+	bg.position = Vector2.ZERO
+	bg.size = get_viewport().get_visible_rect().size
+	bg.color = Color(0.1, 0.1, 0.15, 1.0)  # 3D 亮背景下完全不透明
 	add_child(bg)
 	
 	# 标题
@@ -640,6 +642,7 @@ func _update_training_widget(index: int) -> void:
 
 var _train_popup_player_index: int = -1
 var _train_popup: Control = null
+var _player_popup: Control = null  # 换人弹窗（2026-09-10 球员自选）
 
 
 func _on_open_training(index: int) -> void:
@@ -1391,9 +1394,104 @@ func _refresh_role_btn(index: int) -> void:
 
 
 func _on_substitute_player(index: int) -> void:
-	"""替补球员"""
-	print("[备战] 位置%d替补" % (index + 1))
-	player_substituted.emit(index, "")
+	"""替补球员：弹出角色选择列表（角色系统已有角色，排除其他位置已选）"""
+	print("[备战] 位置%d打开换人列表" % (index + 1))
+	_close_player_popup()
+	var popup := Control.new()
+	popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	popup.name = "PlayerSelectPopup"
+	add_child(popup)
+	_player_popup = popup
+
+	var overlay := ColorRect.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.color = Color(0, 0, 0, 0.6)
+	overlay.gui_input.connect(_on_player_popup_bg_input)
+	popup.add_child(overlay)
+
+	var panel := Panel.new()
+	panel.offset_left = 280
+	panel.offset_top = 100
+	panel.offset_right = 920
+	panel.offset_bottom = 720
+	popup.add_child(panel)
+
+	var title := Label.new()
+	title.text = "选择球员 - 位置%d" % (index + 1)
+	title.position = Vector2(300, 115)
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color(1, 0.9, 0.3))
+	popup.add_child(title)
+
+	# 其他位置已占用的角色（不可选）
+	var taken: Array = []
+	for i in range(3):
+		if i != index and i < team_a_players.size() and is_instance_valid(team_a_players[i]):
+			taken.append(str(team_a_players[i].character_id))
+
+	var list_y := 160.0
+	for c in DataManager.characters:
+		var cid := str(c.get("id", ""))
+		if cid == "":
+			continue
+		var occupied: bool = taken.has(cid)
+		var btn := Button.new()
+		if occupied:
+			btn.text = "%s（已被其他位置选用）" % str(c.get("name", cid))
+			btn.disabled = true
+		else:
+			btn.text = "%s  速%.0f/攻%.0f/防%.0f  %s" % [
+				str(c.get("name", cid)), float(c.get("speed", 0)),
+				float(c.get("attack", 0)), float(c.get("defense", 0)),
+				str(c.get("description", "")).left(18)]
+			btn.pressed.connect(_apply_substitute.bind(index, cid))
+		btn.position = Vector2(300, list_y)
+		btn.size = Vector2(600, 44)
+		btn.add_theme_font_size_override("font_size", 15)
+		popup.add_child(btn)
+		list_y += 52.0
+
+	var cancel_btn := Button.new()
+	cancel_btn.text = "取消"
+	cancel_btn.position = Vector2(560, 670)
+	cancel_btn.size = Vector2(120, 36)
+	cancel_btn.pressed.connect(_close_player_popup)
+	popup.add_child(cancel_btn)
+
+
+func _apply_substitute(index: int, char_id: String) -> void:
+	"""选中角色：通知 battle_manager 重初始化球员 + 刷新本面板全部相关卡片"""
+	_close_player_popup()
+	if index < 0 or index >= team_a_players.size():
+		return
+	var player: CharacterBody2D = team_a_players[index]
+	if player == null or not is_instance_valid(player):
+		return
+	if str(player.character_id) == char_id:
+		return
+	# 清旧角色元灵残留 → 新角色重初始化（属性/视觉重建）
+	if player.has_method("unequip_spirit"):
+		player.unequip_spirit()
+	player.initialize(char_id, "a", index == 0)
+	# 刷新本行卡片 + 装备/训练/元灵卡（均按 character_id 绑定）
+	_update_player_widget(index, player)
+	_update_equipment_widget(index)
+	_update_training_widget(index)
+	_reset_spirit_widget(index)
+	# 通知 battle_manager（B队自动补全 + 元灵注册同步）
+	player_substituted.emit(index, char_id)
+	print("[备战] 位置%d 替补为 %s" % [index + 1, str(player.char_data.get("name", char_id))])
+
+
+func _close_player_popup() -> void:
+	if _player_popup != null and is_instance_valid(_player_popup):
+		_player_popup.queue_free()
+	_player_popup = null
+
+
+func _on_player_popup_bg_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		_close_player_popup()
 
 
 func _on_change_spirit(index: int) -> void:
