@@ -609,15 +609,21 @@ func _on_canvas_draw() -> void:
 	# 四方向引导线
 	for d in DIR_VEC:
 		canvas.draw_line(core_s, core_s + DIR_VEC[d] * STEP * 1.2 * zoom, Color(1, 1, 1, 0.12), 2.0)
-	# 四方向大号淡显字（占据一侧、低透明度水印式）
-	var big := 64
-	var dim := Color(1, 1, 1, 0.10)
-	var cx := canvas.size.x / 2.0
-	var cy := canvas.size.y / 2.0
-	canvas.draw_string(ThemeDB.fallback_font, Vector2(cx - 64, 90), "生存", HORIZONTAL_ALIGNMENT_CENTER, -1, big, Color(0.4, 0.85, 0.5, 0.16))
-	canvas.draw_string(ThemeDB.fallback_font, Vector2(cx - 64, canvas.size.y - 60), "增益", HORIZONTAL_ALIGNMENT_CENTER, -1, big, Color(0.85, 0.6, 0.95, 0.16))
-	canvas.draw_string(ThemeDB.fallback_font, Vector2(70, cy + 22), "防御", HORIZONTAL_ALIGNMENT_LEFT, -1, big, Color(0.45, 0.65, 0.95, 0.16))
-	canvas.draw_string(ThemeDB.fallback_font, Vector2(canvas.size.x - 230, cy + 22), "进攻", HORIZONTAL_ALIGNMENT_LEFT, -1, big, Color(0.95, 0.45, 0.35, 0.16))
+	# 四方向大号淡显字（世界层：随平移/缩放整体移动；锚点=该方向根部外侧）
+	var anchors := {
+		"生存": WORLD_CENTER + Vector2(0, -STEP * 2.6),
+		"增益": WORLD_CENTER + Vector2(0, STEP * 3.4),
+		"防御": WORLD_CENTER + Vector2(-STEP * 2.9, 0),
+		"进攻": WORLD_CENTER + Vector2(STEP * 2.9, 0),
+	}
+	for d in anchors:
+		var sp := world_to_screen(anchors[d])
+		var fs := int(64 * zoom)
+		if fs < 8:
+			continue
+		var col: Color = DIR_COLOR.get(d, Color.WHITE)
+		col.a = 0.16
+		canvas.draw_string(ThemeDB.fallback_font, sp - Vector2(fs, -fs * 0.8), d, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 	# 前置连线（线性延伸）
 	for n in _nodes():
 		var child_id := str(n.get("id"))
@@ -891,6 +897,7 @@ func _input(event: InputEvent) -> void:
 			if mb.pressed:
 				var hit := _hit_test_card(pos)
 				if hit != null:
+					# 命中节点 → 拖节点
 					_drag_card = hit
 					_drag_offset = hit.position - pos
 					var id := hit.name.trim_prefix("Card_")
@@ -899,11 +906,25 @@ func _input(event: InputEvent) -> void:
 					get_viewport().set_input_as_handled()
 					canvas.queue_redraw()
 					_update_hud()
+				else:
+					# 空白 → 左键平移画布（业内常规：空白拖动=移动视图）
+					_panning = true
+					_pan_start = pos
+					_view_start = view_pos
 			else:
 				if _drag_card != null:
 					_save_card_pos(_drag_card)
 					_drag_card = null
 					get_viewport().set_input_as_handled()
+				elif _panning and selected_id != "":
+					# 空白拖动结束 → 取消选中（点空白=取消选择），面板同步清空
+					selected_id = ""
+					inp_name.text = ""
+					inp_desc.text = ""
+					_node_id_label.text = "（未选中节点）"
+					_update_hud()
+					canvas.queue_redraw()
+				_panning = false
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
 			_apply_zoom(pos, 1.1)
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:

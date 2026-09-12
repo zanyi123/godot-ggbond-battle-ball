@@ -55,6 +55,20 @@ func _ready() -> void:
 	print("[Edt][%s] 滚轮缩放 (%.2f→%.2f)" % ["PASS" if zoomed else "FAIL", zoom0, editor_ctrl.zoom])
 	all_ok = all_ok and zoomed
 
+	# 左键空白拖动 = 平移（业内常规）
+	var view1: Vector2 = editor_ctrl.view_pos
+	var sel0: String = editor_ctrl.selected_id
+	var corner := Vector2(80, 80)  # 空白处（远离节点）
+	_send_mouse(editor_ctrl, corner, MOUSE_BUTTON_LEFT, true)
+	_send_motion(editor_ctrl, corner + Vector2(90, 50))
+	_send_mouse(editor_ctrl, corner + Vector2(90, 50), MOUSE_BUTTON_LEFT, false)
+	await get_tree().create_timer(0.2).timeout
+	var pan2: bool = editor_ctrl.view_pos != view1
+	var sel_cleared: bool = editor_ctrl.selected_id == "" and sel0 != ""
+	print("[Edt][%s] 左键空白拖=平移" % ["PASS" if pan2 else "FAIL"])
+	print("[Edt][%s] 空白松开取消选中" % ["PASS" if sel_cleared else "FAIL"])
+	all_ok = all_ok and pan2 and sel_cleared
+
 	print("[Edt] RESULT: %s" % ("PASS" if all_ok else "FAIL"))
 	var img := get_viewport().get_texture().get_image()
 	if img:
