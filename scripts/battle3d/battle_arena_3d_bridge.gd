@@ -319,7 +319,7 @@ func _sync_players() -> void:
 				facing = vel.normalized()
 			else:
 				facing = Vector2(1.0, 0.0) if p.team == "a" else Vector2(-1.0, 0.0)
-		proxy.sync_from_2d(p.global_position, p.velocity, facing)
+		proxy.sync_from_2d(p.global_position, p.velocity, facing, p.get("z_height") if p.get("z_height") != null else 0.0)
 		proxy.set_defeated_visual(bool(p.is_defeated))
 
 func _sync_ball() -> void:
@@ -330,7 +330,9 @@ func _sync_ball() -> void:
 		var proxy = _player_proxies[owner_p]
 		_ball_proxy.set_carried(proxy.get_hand_proxy())
 	elif _ball_2d.is_active:
-		_ball_proxy.set_flight(_ball_2d.global_position)
+		# M1 弹道：3D 球高度跟随 2D 层 ball_z（属性缺失时回退常量，由 proxy 内部处理）
+		var flight_z: float = _ball_2d.get("ball_z") if _ball_2d.get("ball_z") != null else -1.0
+		_ball_proxy.set_flight(_ball_2d.global_position, flight_z)
 	else:
 		_ball_proxy.set_idle(_ball_2d.global_position)
 

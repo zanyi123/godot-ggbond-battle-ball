@@ -53,6 +53,7 @@ var z_vel: float = 0.0               # 垂直速度（px/s）
 var is_jumping: bool = false         # 跳跃进行中（技能悬空模式另计，不吃此标志）
 var _jump_cooldown_left: float = 0.0
 var _jump_key_was_pressed: bool = false  # 空格边沿检测
+var _jump_shadow: ColorRect = null       # 跳跃地面影子（2D 表现用）
 
 # 状态灯（第2步：控制状态系统）
 var _status_lights: Dictionary = {}  # { "stunned": { "remaining": 2.0, ... }, ... }
@@ -904,6 +905,8 @@ func _clamp_to_field() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# M3 跳跃 2D 表现：头像随 z 上移、影子留地（无跳跃动画，位移即效果；3D 模式下节点为空自动跳过）
+	_update_jump_visual()
 	# 3D 模式:基于上一帧 velocity 更新动画和朝向(放在函数最前,避开多个 return 出口)
 	if USE_3D_MODEL:
 		_update_3d_animation()
@@ -1064,6 +1067,32 @@ func _interrupt_jump() -> void:
 	z_height = 0.0
 	z_vel = 0.0
 	is_jumping = false
+
+
+## 跳跃 2D 视觉：头像三件套（背景/编号/状态灯）随 z 上移，新增地面影子随高度缩小变淡
+func _update_jump_visual() -> void:
+	var lift: float = z_height
+	if avatar_bg:
+		avatar_bg.position.y = -28.0 - lift
+	if avatar_label:
+		avatar_label.position.y = -28.0 - lift
+	if state_indicator:
+		state_indicator.position.y = -48.0 - lift
+	# 影子惰性创建（首次进入物理帧时）
+	if _jump_shadow == null and is_inside_tree():
+		_jump_shadow = ColorRect.new()
+		_jump_shadow.size = Vector2(44, 14)
+		_jump_shadow.position = Vector2(-22, 18)
+		_jump_shadow.show_behind_parent = true
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0, 0, 0, 0.25)
+		sb.set_corner_radius_all(7)
+		_jump_shadow.add_theme_stylebox_override("normal", sb)
+		add_child(_jump_shadow)
+	if _jump_shadow:
+		var t: float = clampf(z_height / 80.0, 0.0, 1.0)
+		_jump_shadow.modulate.a = 1.0 - 0.6 * t
+		_jump_shadow.scale = Vector2(1.0 - 0.25 * t, 1.0 - 0.25 * t)
 
 
 func take_damage(amount: float, attacker: CharacterBody2D = null, attacker_element: String = "") -> Dictionary:

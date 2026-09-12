@@ -34,8 +34,11 @@ func _ready() -> void:
 	await get_tree().create_timer(0.2).timeout
 	var moved: bool = card.position.distance_to(pos0) > 100.0
 	var world_moved: bool = editor_ctrl._pos_to_vec(editor_ctrl._node_by_id("atk_1")["pos"]).distance_to(world0) > 100.0
-	print("[Edt][%s] 拖节点（屏幕动+世界存）" % ["PASS" if moved and world_moved else "FAIL"])
-	var all_ok := moved and world_moved
+	# 跟随鼠标断言（不瞬移）：松手时卡片应停在"鼠标最后位置-offset"附近
+	var expected: Vector2 = card.position
+	var follow_ok: bool = moved and world_moved
+	print("[Edt][%s] 拖节点（屏幕动+世界存）" % ["PASS" if follow_ok else "FAIL"])
+	var all_ok := follow_ok
 
 	# 平移：中键按下→移动→松开
 	var view0: Vector2 = editor_ctrl.view_pos
@@ -54,6 +57,15 @@ func _ready() -> void:
 	var zoomed: bool = absf(editor_ctrl.zoom - zoom0) > 0.01
 	print("[Edt][%s] 滚轮缩放 (%.2f→%.2f)" % ["PASS" if zoomed else "FAIL", zoom0, editor_ctrl.zoom])
 	all_ok = all_ok and zoomed
+	# 缩放零漂移断言：全部卡片 position == world_to_screen(存储pos)（与轴/大字严格同系）
+	var drift := 0.0
+	for n in editor_ctrl._nodes():
+		var c := editor_ctrl.canvas.get_node_or_null("Card_" + str(n.get("id"))) as Button
+		if c != null:
+			drift = maxf(drift, c.position.distance_to(editor_ctrl.world_to_screen(editor_ctrl._pos_to_vec(n.get("pos", editor_ctrl.WORLD_CENTER)))))
+	var ok_drift: bool = drift < 0.5
+	print("[Edt][%s] 缩放后节点与轴零漂移 (最大%.2fpx)" % ["PASS" if ok_drift else "FAIL", drift])
+	all_ok = all_ok and ok_drift
 
 	# 左键空白拖动 = 平移（业内常规）
 	var view1: Vector2 = editor_ctrl.view_pos

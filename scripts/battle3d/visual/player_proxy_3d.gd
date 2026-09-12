@@ -141,8 +141,11 @@ func _play_initial_idle() -> void:
 ## ==================== 对外 API ====================
 
 ## 2D 数据 → 3D 代理同步（每帧由 bridge/测试驱动；坐标 1:1 零换算）
-func sync_from_2d(pos2d: Vector2, vel2d: Vector2, facing2d: Vector2) -> void:
-	global_position = CFG.game2d_to_3d(pos2d)
+## height_z：M3 跳跃高度（像素，2D 层权威，叠加到模型 y；默认 0 兼容旧调用）
+func sync_from_2d(pos2d: Vector2, vel2d: Vector2, facing2d: Vector2, height_z: float = 0.0) -> void:
+	var p3d: Vector3 = CFG.game2d_to_3d(pos2d)
+	p3d.y += height_z
+	global_position = p3d
 	rotation.y = CFG.facing_to_rotation_y(facing2d)
 	if _action_lock:
 		return

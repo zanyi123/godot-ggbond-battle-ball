@@ -110,6 +110,13 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# M1 弹道 2D 表现：球精灵随 z 上移、影子留地变淡（is_active=false 时复位）
+	var lift: float = ball_z if is_active else 0.0
+	if ball_visual:
+		ball_visual.position.y = -11.0 - lift
+	if ball_shadow:
+		ball_shadow.modulate.a = clampf(1.0 - lift / 150.0, 0.25, 1.0)
+
 	if not is_active:
 		# 持球时跟随球员
 		if not is_active and owner_player != null and is_instance_valid(owner_player):

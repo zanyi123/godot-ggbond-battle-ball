@@ -580,15 +580,14 @@ func _make_card(n: Dictionary) -> void:
 	card.name = "Card_" + id
 	card.text = "%s\n%s (cost %d)" % [str(n.get("name", id)), id, int(n.get("cost", 1))]
 	card.position = world_to_screen(_pos_to_vec(n.get("pos", WORLD_CENTER)))
-	card.size = CARD_SIZE
-	card.scale = Vector2(zoom, zoom)
-	card.pivot_offset = CARD_SIZE / 2.0
+	card.size = CARD_SIZE  # 固定屏幕尺寸（不随 zoom 缩放）——position=视觉位置严格1:1
 	card.add_theme_font_size_override("font_size", 12)
 	var col: Color = DIR_COLOR.get(dir, Color.WHITE)
 	card.add_theme_color_override("font_color", col)
 	card.add_theme_color_override("font_hover_color", col.lightened(0.3))
 	card.tooltip_text = "%s\n%s\ntype=%s" % [str(n.get("name", "")), str(n.get("desc", "")), str(n.get("type", ""))]
-	card.pressed.connect(_on_card_pressed.bind(n, card))
+
+
 	canvas.add_child(card)
 	# 方向色条（顶部小色块）
 	var strip := ColorRect.new()
@@ -618,9 +617,7 @@ func _on_canvas_draw() -> void:
 	}
 	for d in anchors:
 		var sp := world_to_screen(anchors[d])
-		var fs := int(64 * zoom)
-		if fs < 8:
-			continue
+		var fs := 56  # 固定字号（可读性优先）
 		var col: Color = DIR_COLOR.get(d, Color.WHITE)
 		col.a = 0.16
 		canvas.draw_string(ThemeDB.fallback_font, sp - Vector2(fs, -fs * 0.8), d, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
@@ -682,7 +679,6 @@ func _refresh_card_positions() -> void:
 		var card := canvas.get_node_or_null(NodePath("Card_" + str(n.get("id"))))
 		if card != null:
 			card.position = world_to_screen(_pos_to_vec(n.get("pos", WORLD_CENTER)))
-			card.scale = Vector2(zoom, zoom)
 
 func _save_card_pos(card: Button) -> void:
 	var id := card.name.trim_prefix("Card_")
@@ -690,26 +686,6 @@ func _save_card_pos(card: Button) -> void:
 	if not n.is_empty():
 		n["pos"] = screen_to_world(card.position)
 		_dirty = true
-
-func _on_card_pressed(n: Dictionary, card: Button) -> void:
-	if link_mode:
-		# 连接模式：当前选中节点为父，点中的为子 → requires 建立
-		if selected_id != "" and selected_id != str(n.get("id")):
-			var parent_id := selected_id
-			var reqs: Array = n.get("requires", [])
-			if not parent_id in reqs:
-				reqs.append(parent_id)
-				n["requires"] = reqs
-				_dirty = true
-				print("[天赋树编辑器] 前置链: %s → %s" % [parent_id, str(n.get("id"))])
-		link_mode = false
-		link_parent = ""
-		_rebuild_canvas()
-		return
-	selected_id = str(n.get("id"))
-	_fill_prop_panel(n)
-	canvas.queue_redraw()
-	_update_hud()
 
 func _fill_prop_panel(n: Dictionary) -> void:
 	inp_name.text = str(n.get("name", ""))

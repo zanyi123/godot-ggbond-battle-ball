@@ -45,10 +45,12 @@ func setup() -> void:
 ## ==================== 对外 API（Phase 2 bridge 复用） ====================
 
 ## 飞行态：2D 坐标 → 飞行高度 + 自旋
-func set_flight(pos2d: Vector2) -> void:
+## height_z：M1 弹道 z（像素）；未传（<0）时回退常量 BALL_FLIGHT_Y（兼容旧调用）
+func set_flight(pos2d: Vector2, height_z: float = -1.0) -> void:
 	_carried_hand = null
 	_spinning = true
-	global_position = Vector3(pos2d.x, CFG.BALL_FLIGHT_Y, pos2d.y)
+	var y: float = CFG.BALL_FLIGHT_Y if height_z < 0.0 else height_z
+	global_position = Vector3(pos2d.x, y, pos2d.y)
 
 ## 持球态：挂某球员代理手部（每帧跟随）
 func set_carried(hand_proxy: Node3D) -> void:
