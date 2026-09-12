@@ -47,6 +47,13 @@ var _knockback_start_velocity: float = 0.0  # 击退初始速度
 var knockback_dir: Vector2 = Vector2.ZERO  # 击退方向
 var _stagger_timer: float = 0.0  # 僵直持续时间（被击中后无法移动）
 
+# 跳跃状态（M3：z_height 为通用高度状态，未来技能悬空共用；单位=像素）
+var z_height: float = 0.0            # 离地高度（像素，向上为正）
+var z_vel: float = 0.0               # 垂直速度（px/s）
+var is_jumping: bool = false         # 跳跃进行中（技能悬空模式另计，不吃此标志）
+var _jump_cooldown_left: float = 0.0
+var _jump_key_was_pressed: bool = false  # 空格边沿检测
+
 # 状态灯（第2步：控制状态系统）
 var _status_lights: Dictionary = {}  # { "stunned": { "remaining": 2.0, ... }, ... }
 
@@ -194,6 +201,12 @@ var sprint_cooldown: float = 0.0   # 冷却剩余时间
 const SPRINT_SPEED_BONUS: float = 50.0  # 冲刺加速量
 const SPRINT_DURATION: float = 3.0      # 冲刺持续3秒
 const SPRINT_COOLDOWN: float = 2.0      # 冷却2秒
+
+# M3 跳跃物理（2026-09-12）
+const JUMP_GRAVITY_Z: float = 900.0   # 重力 px/s²（与球 M1 一致）
+const JUMP_INITIAL_VZ: float = 380.0  # 起跳初速 → 跳高≈80px（v²/2g）
+const JUMP_STAMINA_COST: float = 8.0  # 跳跃体力消耗
+const JUMP_COOLDOWN: float = 1.5      # 跳跃冷却（s）
 
 # 角色(主攻/防御/辅助)
 var role: String = "attacker"
@@ -911,8 +924,16 @@ func _physics_process(delta: float) -> void:
 		if sprint_cooldown < 0.0:
 			sprint_cooldown = 0.0
 
+	# 跳跃冷却与 z 轴积分（M3；击退/眩晕分支内会强制落地打断）
+	if _jump_cooldown_left > 0.0:
+		_jump_cooldown_left -= delta
+		if _jump_cooldown_left < 0.0:
+			_jump_cooldown_left = 0.0
+	_step_jump_z(delta)
+
 	# 击退中：匀减速到0（不处理输入）
 	if _knockback_timer > 0.0:
+		_interrupt_jump()
 		_knockback_timer -= delta
 		_tick_all_timers(delta)
 
@@ -936,6 +957,7 @@ func _physics_process(delta: float) -> void:
 
 	# 僵直/眩晕/定身：无法移动（站着不动）
 	if _stagger_timer > 0.0 or is_status_active("stunned") or is_status_active("rooted"):
+		_interrupt_jump()
 		if _stagger_timer > 0.0:
 			_stagger_timer -= delta
 			if _stagger_timer <= 0.0:
@@ -949,6 +971,13 @@ func _physics_process(delta: float) -> void:
 	# 所有球员（包括AI和非玩家控制）都要更新持续效果
 	_tick_all_timers(delta)
 
+	# 空中（M3 跳跃）：不可移动，仅下落积分（M0 技能悬空将在此加例外）
+	if is_airborne():
+		velocity = Vector2.ZERO
+		move_and_slide()
+		_clamp_to_field()
+		return
+
 	if not is_player_controlled:
 		move_and_slide()
 		_clamp_to_field()
@@ -958,6 +987,12 @@ func _physics_process(delta: float) -> void:
 	var move_speed: float = _get_effective_value("speed", speed)
 	if is_sprinting:
 		move_speed += SPRINT_SPEED_BONUS
+
+	# 跳跃输入（M3：空格边沿触发；AI/技能走 try_jump() 接口，M5 接入）
+	var jump_pressed: bool = Input.is_key_pressed(KEY_SPACE)
+	if jump_pressed and not _jump_key_was_pressed:
+		try_jump()
+	_jump_key_was_pressed = jump_pressed
 
 	# 移动（包括外场球员，由隔离墙限制范围即可）
 	var input_dir := Vector2.ZERO
@@ -978,6 +1013,57 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 	_clamp_to_field()
+
+
+## ==================== M3 跳跃物理 ====================
+
+## 跳跃入口（M3）。玩家空格触发；AI/技能系统后续调用同一接口。返回是否成功起跳
+func try_jump() -> bool:
+	if not can_jump():
+		return false
+	z_vel = JUMP_INITIAL_VZ
+	z_height = maxf(z_height, 0.01)
+	is_jumping = true
+	_jump_cooldown_left = JUMP_COOLDOWN
+	stamina = maxf(0.0, stamina - JUMP_STAMINA_COST)
+	print("[Player] %s 起跳! 跳高≈%.0fpx 体力-%.0f 剩余%.0f" % [
+		char_data.get("name", "?"), JUMP_INITIAL_VZ * JUMP_INITIAL_VZ / (2.0 * JUMP_GRAVITY_Z),
+		JUMP_STAMINA_COST, stamina])
+	return true
+
+
+## 能否起跳：地面 + 无冷却 + 体力足 + 未被击败/击退/僵直/眩晕/定身
+func can_jump() -> bool:
+	return z_height <= 0.0 and z_vel <= 0.0 and not is_jumping \
+		and _jump_cooldown_left <= 0.0 and stamina >= JUMP_STAMINA_COST \
+		and not is_defeated and _knockback_timer <= 0.0 \
+		and _stagger_timer <= 0.0 \
+		and not is_status_active("stunned") and not is_status_active("rooted")
+
+
+## 是否在空中（跳跃 z 状态；3D 代理与 M4 高度判定读这里）
+func is_airborne() -> bool:
+	return z_height > 0.0 or z_vel != 0.0
+
+
+## z 轴积分：起跳→顶点→落地（欧拉足够：单次跳跃无长程能量累积问题）
+func _step_jump_z(delta: float) -> void:
+	if z_height <= 0.0 and z_vel <= 0.0:
+		return
+	z_vel -= JUMP_GRAVITY_Z * delta
+	z_height += z_vel * delta
+	if z_height <= 0.0:
+		z_height = 0.0
+		z_vel = 0.0
+		if is_jumping:
+			is_jumping = false
+
+
+## 击退/眩晕等打断跳跃：强制落地（z 归零，水平击退照常）
+func _interrupt_jump() -> void:
+	z_height = 0.0
+	z_vel = 0.0
+	is_jumping = false
 
 
 func take_damage(amount: float, attacker: CharacterBody2D = null, attacker_element: String = "") -> Dictionary:

@@ -27,7 +27,21 @@ var stuck_on_obstacle: StaticBody2D = null  # 球卡在障碍物上时引用
 var _hit_player_ids: Dictionary = {}
 
 ## ==================== 物理属性 ====================
-var bounce_coefficient: float = 0.0  # 弹性系数 e（0=无反弹, 1=完全反弹）
+## 球天然弹性（M1 弹道物理基准，默认1.0=完全反弹·碰碰球效果）
+## 0=完全无弹跳（兼容旧"无反弹"语义）, 1=完全反弹
+## 场地弹性系数（FieldPhysicsManager）作为技能加成叠加，见 _get_effective_bounce_e()
+var bounce_coefficient: float = 1.0
+
+## ==================== M1 弹道物理（水平场地弹跳，2026-09-12） ====================
+## z 单位=像素（单位制铁律：与 3D 世界 1:1）。出手高 55 与 3D 持球高一致。
+## 总开关关闭时 z 完全不积分，行为=旧版恒高直飞。
+var use_ballistic_physics: bool = true   # 总开关（测试可切，模拟可关）
+var ball_z: float = 0.0                  # 球离地高度（像素，向上为正）
+var ball_z_vel: float = 0.0              # 垂直速度（px/s）
+var bounce_count: int = 0                # 已落地弹跳次数
+const GRAVITY_Z: float = 900.0           # 重力加速度 px/s²
+const BALL_HEIGHT_CARRY: float = 55.0    # 出手高度（3D铁律：持球55）
+const BOUNCE_SPEED_MIN: float = 80.0     # 反弹速度低于此值→贴地滚动
 
 ## ==================== 视觉节点 ====================
 var ball_visual: ColorRect
@@ -106,6 +120,10 @@ func _physics_process(delta: float) -> void:
 	if stuck_on_obstacle:
 		_process_obstacle_stuck(delta)
 		return
+
+	# === M1 弹道物理：z 轴积分（技能接管球跳过——暂时无视物理，高度由技能定义）===
+	if not _is_skill_controlled():
+		_step_ballistic_z(delta)
 
 	# === 追踪球状态（供后续距离判断使用）===
 	var is_tracking: bool = tag_effect_handler and tag_effect_handler.is_ball_tracking()
@@ -482,6 +500,9 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	trajectory_type = "straight"
 	element_type = ""
 	_hit_player_ids = {}
+	ball_z = BALL_HEIGHT_CARRY
+	ball_z_vel = 0.0
+	bounce_count = 0
 
 	# 获取标签效果处理器
 	if not tag_effect_handler:
@@ -559,6 +580,9 @@ func reset() -> void:
 	ball_damage = 0.0
 	flight_distance = 0.0
 	active_skill_data = {}
+	ball_z = 0.0
+	ball_z_vel = 0.0
+	bounce_count = 0
 	_clear_skill_aura()
 	_set_idle_visual()
 
@@ -746,6 +770,63 @@ func _get_skill_data(skill_id: String) -> Dictionary:
 
 ## ==================== 物理系统 ====================
 
+## 技能接管判定（M0 球侧豁免）：技能定义轨迹的球暂时无视重力/弹跳
+## 接管 = 弧线等非直行轨迹、追踪、回旋；穿透/精准锁定/直行保护仍是普通弹道球
+func _is_skill_controlled() -> bool:
+	if trajectory_type != "straight":
+		return true
+	if tag_effect_handler == null:
+		return false
+	if tag_effect_handler.is_ball_tracking():
+		return true
+	if tag_effect_handler.is_ball_boomerang():
+		return true
+	return false
+
+
+## z 轴重力积分 + 落地弹跳。只动 z，不改变水平规则（max_flight_distance 照旧），
+## 水平飞行与球权流转与旧版完全一致。
+## 解析式积分（非欧拉）：触地时刻与触地速度精确求解，e=1.0 时能量严格守恒（完全反弹不衰减）
+func _step_ballistic_z(delta: float) -> void:
+	if not use_ballistic_physics:
+		return
+	var remaining: float = delta
+	var guard: int = 0
+	while remaining > 0.0 and guard < 8:  # guard: 一帧内最多弹跳8次（极小delta下防死循环）
+		guard += 1
+		var vz0: float = ball_z_vel
+		var z0: float = ball_z
+		# 抛物线 z(t)=z0+vz0·t-½g·t² 触地正根
+		var t_land: float = (vz0 + sqrt(vz0 * vz0 + 2.0 * GRAVITY_Z * z0)) / GRAVITY_Z
+		if t_land <= remaining:
+			var vz_land: float = vz0 - GRAVITY_Z * t_land
+			ball_z = 0.0
+			var e: float = _get_effective_bounce_e()
+			var vz_next: float = -vz_land * e
+			if vz_next >= BOUNCE_SPEED_MIN:
+				ball_z_vel = vz_next
+				bounce_count += 1
+				remaining -= t_land
+			else:
+				ball_z_vel = 0.0  # 弹跳耗尽→贴地滚动
+				remaining = 0.0
+		else:
+			ball_z_vel = vz0 - GRAVITY_Z * remaining
+			ball_z = z0 + vz0 * remaining - 0.5 * GRAVITY_Z * remaining * remaining
+			remaining = 0.0
+
+
+## 有效弹性 e：球天然弹性为基准，场地弹性系数为技能加成（叠加后夹在 0~1）
+func _get_effective_bounce_e() -> float:
+	var e: float = bounce_coefficient
+	var fp: Node = get_parent().get_node_or_null("FieldPhysicsManager") if get_parent() else null
+	if fp and fp.has_method("get_bounciness"):
+		var field_e: float = fp.get_bounciness()
+		if field_e > 0.0:
+			e = clampf(e + field_e, 0.0, 1.0)
+	return e
+
+
 ## 设置弹性系数
 func set_bounce_coefficient(e: float) -> void:
 	"""设置球的弹性系数
@@ -758,7 +839,8 @@ func set_bounce_coefficient(e: float) -> void:
 	  - 0.8: 强反弹（80%速度反弹）
 	  - 1.0: 完全反弹（100%速度反弹）
 	
-	注意：当前只存储值，碰撞系统未实现
+	注意：M1 弹道物理已接入——落地弹跳按本系数与场地弹性加成计算；
+	设为 0 可完全禁弹（保留旧"无反弹"语义）
 	"""
 	bounce_coefficient = clamp(e, 0.0, 1.0)
 	print("[Ball] 弹性系数设置为 %.2f" % bounce_coefficient)

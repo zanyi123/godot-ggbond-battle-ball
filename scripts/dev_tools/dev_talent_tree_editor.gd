@@ -11,7 +11,16 @@ extends Control
 signal closed
 
 const TREE_PATH := "res://data/systems/talent_tree/tree.json"
-const CENTER := Vector2(520, 440)
+## 世界坐标（天赋点坐标空间，可远超屏幕）；view_pos=视口左上角在世界坐标中的位置
+const WORLD_CENTER := Vector2(1400, 1000)
+const ZOOM_MIN := 0.4
+const ZOOM_MAX := 1.6
+var view_pos := Vector2(845, 550)  ## 默认对准世界核心（打开即见四方向主干）
+var zoom := 1.0
+var _panning := false
+var _pan_start := Vector2.ZERO
+var _view_start := Vector2.ZERO
+const CENTER := Vector2(520, 440)  # 兼容旧引用（将由 WORLD_CENTER 取代）
 const STEP := 175.0
 const CARD_SIZE := Vector2(132, 56)
 const DIR_VEC := {
@@ -148,6 +157,14 @@ func save_tree() -> void:
 	_dirty = false
 	print("[天赋树编辑器] 💾 已保存 tree.json（%d 节点）" % _nodes().size())
 
+## 世界 → 屏幕（画布内）
+func world_to_screen(wp: Vector2) -> Vector2:
+	return (wp - view_pos) * zoom
+
+## 屏幕（画布内）→ 世界
+func screen_to_world(sp: Vector2) -> Vector2:
+	return sp / zoom + view_pos
+
 ## JSON pos → Vector2（统一入口）
 ## 三种形态：Vector2（本会话内存）/ Array [x,y] / String "(x, y)"（JSON.stringify 序列化 Vector2 的产物）
 func _pos_to_vec(v) -> Vector2:
@@ -160,7 +177,7 @@ func _pos_to_vec(v) -> Vector2:
 		var parts: PackedStringArray = s.split(",")
 		if parts.size() >= 2:
 			return Vector2(float(parts[0]), float(parts[1]))
-	return CENTER
+	return WORLD_CENTER
 
 ## 首次无 pos 的节点自动布局：沿方向向量链式延伸
 func _auto_layout_missing() -> void:
@@ -180,9 +197,9 @@ func _auto_layout_missing() -> void:
 			var reqs: Array = n.get("requires", [])
 			var parent_pos: Variant = null
 			if reqs.is_empty():
-				parent_pos = CENTER
+				parent_pos = WORLD_CENTER
 			elif placed.has(str(reqs[0])):
-				parent_pos = _pos_to_vec(_node_by_id(str(reqs[0])).get("pos", CENTER))
+				parent_pos = _pos_to_vec(_node_by_id(str(reqs[0])).get("pos", WORLD_CENTER))
 			if parent_pos == null:
 				continue  # 父还没放，下一轮
 			var dir: Vector2 = DIR_VEC.get(str(n.get("direction", "进攻")), Vector2(1, 0))
@@ -206,8 +223,9 @@ func _build_ui() -> void:
 	canvas = Control.new()
 	canvas.name = "Canvas"
 	canvas.position = Vector2.ZERO
-	canvas.size = Vector2(bg.size.x - 330, bg.size.y)
+	canvas.size = bg.size  # 全屏画布（右侧面板浮层）
 	canvas.draw.connect(_on_canvas_draw)
+	canvas.gui_input.connect(_on_canvas_gui_input)
 	add_child(canvas)
 
 	# 顶栏
@@ -218,12 +236,12 @@ func _build_ui() -> void:
 	title.add_theme_color_override("font_color", Color(0.7, 0.9, 0.6))
 	add_child(title)
 
-	_add_top_btn("💾 保存树", Vector2(canvas.size.x - 300, 6), _on_save)
-	_add_top_btn("🔗 连接模式", Vector2(canvas.size.x - 180, 6), _on_toggle_link)
+	_add_top_btn("💾 保存树", Vector2(bg.size.x - 300, 6), _on_save)
+	_add_top_btn("🔗 连接模式", Vector2(bg.size.x - 180, 6), _on_toggle_link)
 
 	# 右侧属性面板
 	prop_scroll = ScrollContainer.new()
-	prop_scroll.position = Vector2(canvas.size.x + 4, 40)
+	prop_scroll.position = Vector2(bg.size.x - 326, 40)
 	prop_scroll.size = Vector2(322, bg.size.y - 50)
 	add_child(prop_scroll)
 	prop_box = VBoxContainer.new()
@@ -559,8 +577,10 @@ func _make_card(n: Dictionary) -> void:
 	var card := Button.new()
 	card.name = "Card_" + id
 	card.text = "%s\n%s (cost %d)" % [str(n.get("name", id)), id, int(n.get("cost", 1))]
-	card.position = _pos_to_vec(n.get("pos", CENTER))
+	card.position = world_to_screen(_pos_to_vec(n.get("pos", WORLD_CENTER)))
 	card.size = CARD_SIZE
+	card.scale = Vector2(zoom, zoom)
+	card.pivot_offset = CARD_SIZE / 2.0
 	card.add_theme_font_size_override("font_size", 12)
 	var col: Color = DIR_COLOR.get(dir, Color.WHITE)
 	card.add_theme_color_override("font_color", col)
@@ -581,12 +601,13 @@ func _card_center(card: Button) -> Vector2:
 	return card.position + CARD_SIZE / 2.0
 
 func _on_canvas_draw() -> void:
-	# 中心核心
-	canvas.draw_circle(CENTER, 12.0, Color(1, 0.95, 0.6))
-	canvas.draw_string(ThemeDB.fallback_font, CENTER + Vector2(-14, 28), "核心", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 0.95, 0.6))
+	# 中心核心（世界→屏幕）
+	var core_s := world_to_screen(WORLD_CENTER)
+	canvas.draw_circle(core_s, 12.0 * zoom, Color(1, 0.95, 0.6))
+	canvas.draw_string(ThemeDB.fallback_font, core_s + Vector2(-14, 28), "核心", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 0.95, 0.6))
 	# 四方向引导线
 	for d in DIR_VEC:
-		canvas.draw_line(CENTER, CENTER + DIR_VEC[d] * STEP * 1.2, Color(1, 1, 1, 0.12), 2.0)
+		canvas.draw_line(core_s, core_s + DIR_VEC[d] * STEP * 1.2 * zoom, Color(1, 1, 1, 0.12), 2.0)
 	# 四方向大号淡显字（占据一侧、低透明度水印式）
 	var big := 64
 	var dim := Color(1, 1, 1, 0.10)
@@ -630,6 +651,39 @@ func _update_hud() -> void:
 
 ## ==================== 交互 ====================
 
+## 画布：中键/右键拖动平移，滚轮缩放（以鼠标为中心）
+func _on_canvas_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_apply_zoom(mb.position, 1.1)
+		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_apply_zoom(mb.position, 1.0 / 1.1)
+		elif mb.button_index in [MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT]:
+			_panning = mb.pressed
+			_pan_start = mb.get_global_position()
+			_view_start = view_pos
+	elif event is InputEventMouseMotion and _panning:
+		var mm := event as InputEventMouseMotion
+		view_pos = _view_start - (mm.get_global_position() - _pan_start) / zoom
+		_refresh_card_positions()
+		canvas.queue_redraw()
+
+func _apply_zoom(at_screen: Vector2, factor: float) -> void:
+	var world_at := screen_to_world(at_screen)
+	zoom = clampf(zoom * factor, ZOOM_MIN, ZOOM_MAX)
+	view_pos = world_at - at_screen / zoom
+	_refresh_card_positions()
+	canvas.queue_redraw()
+
+## 视口变化后重排卡片（世界→屏幕）
+func _refresh_card_positions() -> void:
+	for n in _nodes():
+		var card := canvas.get_node_or_null(NodePath("Card_" + str(n.get("id"))))
+		if card != null:
+			card.position = world_to_screen(_pos_to_vec(n.get("pos", WORLD_CENTER)))
+			card.scale = Vector2(zoom, zoom)
+
 func _on_card_input(event: InputEvent, card: Button) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
@@ -646,7 +700,7 @@ func _save_card_pos(card: Button) -> void:
 	var id := card.name.trim_prefix("Card_")
 	var n := _node_by_id(id)
 	if not n.is_empty():
-		n["pos"] = card.position
+		n["pos"] = screen_to_world(card.position)
 		_dirty = true
 
 func _on_card_pressed(n: Dictionary, card: Button) -> void:
@@ -787,11 +841,11 @@ func _new_node(parent_id: String) -> void:
 			node["skill_id"] = str(inp_skill.get_item_metadata(si))
 	# 位置
 	if parent_id != "" and not parent.is_empty():
-		var ppos: Vector2 = _pos_to_vec(parent.get("pos", CENTER))
+		var ppos: Vector2 = _pos_to_vec(parent.get("pos", WORLD_CENTER))
 		node["pos"] = ppos + DIR_VEC.get(str(node["direction"]), Vector2(1, 0)) * STEP
 	else:
 		var dirv: Vector2 = DIR_VEC.get(dir, Vector2(1, 0))
-		node["pos"] = CENTER + dirv * STEP
+		node["pos"] = WORLD_CENTER + dirv * STEP
 	nodes.append(node)
 	selected_id = id
 	save_tree()
