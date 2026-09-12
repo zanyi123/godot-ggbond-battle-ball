@@ -48,7 +48,8 @@ func _ready() -> void:
 	_update_all_widgets()
 	
 	visible = true
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# CanvasLayer 下 Control 的 FULL_RECT 无效（size=0），必须显式设窗口尺寸
+	size = get_viewport().get_visible_rect().size
 	print("[DevPrep] 界面初始化完成")
 	print("[DevPrep] 界面可见性: %s" % str(visible))
 	print("[DevPrep] 界面大小: %s" % str(size))
@@ -87,8 +88,9 @@ func _init_team_data() -> void:
 
 func _build_ui() -> void:
 	var bg := ColorRect.new()
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.08, 0.08, 0.12, 0.95)
+	bg.position = Vector2.ZERO
+	bg.size = get_viewport().get_visible_rect().size
+	bg.color = Color(0.08, 0.08, 0.12, 1.0)  # 3D 亮背景下完全不透明
 	add_child(bg)
 
 	var title := Label.new()
@@ -402,6 +404,7 @@ func _show_char_popup() -> void:
 
 	_char_popup = Control.new()
 	_char_popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_char_popup.size = get_viewport().get_visible_rect().size
 	add_child(_char_popup)
 
 	var overlay := ColorRect.new()
@@ -530,6 +533,7 @@ func _show_spirit_popup() -> void:
 
 	_spirit_popup = Control.new()
 	_spirit_popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_spirit_popup.size = get_viewport().get_visible_rect().size
 	add_child(_spirit_popup)
 
 	var overlay := ColorRect.new()

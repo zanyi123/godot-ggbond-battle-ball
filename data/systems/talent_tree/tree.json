@@ -1,0 +1,190 @@
+{
+	"directions": [
+		"进攻",
+		"生存",
+		"防御",
+		"增益"
+	],
+	"nodes": [
+		{
+			"cost": 1.0,
+			"direction": "进攻",
+			"id": "atk_1",
+			"name": "弱点洞察",
+			"pos": "(612.0, 415.0)",
+			"requires": [],
+			"stat": "attack_bonus",
+			"type": "stat",
+			"value": 5.0
+		},
+		{
+			"cost": 2.0,
+			"direction": "进攻",
+			"id": "atk_2",
+			"name": "重装弹药",
+			"pos": "(843.0, 514.0)",
+			"requires": [
+				"atk_1"
+			],
+			"stat": "ball_speed_bonus",
+			"type": "stat",
+			"value": 30.0
+		},
+		{
+			"cost": 1.0,
+			"direction": "生存",
+			"id": "sur_1",
+			"name": "坚韧体魄",
+			"pos": "(452.9581, 197.6709)",
+			"requires": [],
+			"stat": "stamina_bonus",
+			"type": "stat",
+			"value": 15.0
+		},
+		{
+			"condition": {
+				"field": "threshold",
+				"op": "eq",
+				"value": 30.0
+			},
+			"cooldown": 20.0,
+			"cost": 2.0,
+			"desc": "体力跌破30%时全队攻+10持续6秒（内冷却20s）",
+			"direction": "生存",
+			"energy_cost": 0.0,
+			"event": "Resource.STAMINA_THRESHOLD",
+			"id": "sur_2",
+			"name": "不屈意志",
+			"pos": "(520.0, 90.0)",
+			"requires": [
+				"sur_1"
+			],
+			"tag_params": {
+				"player_atk_up_flat": {
+					"duration": 6.0,
+					"value": 10.0
+				}
+			},
+			"tags": [
+				"player_atk_up_flat"
+			],
+			"type": "event"
+		},
+		{
+			"cost": 1.0,
+			"direction": "防御",
+			"id": "def_1",
+			"name": "钢铁阵容",
+			"pos": "(235.0, 406.0)",
+			"requires": [],
+			"stat": "defense_bonus",
+			"type": "stat",
+			"value": 5.0
+		},
+		{
+			"condition": {
+				"field": "defender",
+				"op": "eq",
+				"value": "ANY_TEAM"
+			},
+			"cooldown": 12.0,
+			"cost": 2.0,
+			"desc": "任一球员受击后全队防+8持续4秒（内冷却12s）",
+			"direction": "防御",
+			"energy_cost": 0.0,
+			"event": "Hit.HIT_TAKEN",
+			"id": "def_2",
+			"name": "受击反震",
+			"pos": "(27.0, 291.0)",
+			"requires": [
+				"def_1"
+			],
+			"tag_params": {
+				"player_def_up_flat": {
+					"duration": 4.0,
+					"value": 8.0
+				}
+			},
+			"tags": [
+				"player_def_up_flat"
+			],
+			"type": "event"
+		},
+		{
+			"cost": 1.0,
+			"direction": "增益",
+			"id": "buf_1",
+			"name": "能量核心",
+			"pos": "(464.0, 651.0)",
+			"requires": [],
+			"stat": "max_energy_bonus",
+			"type": "stat",
+			"value": 10.0
+		},
+		{
+			"cost": 2.0,
+			"desc": "队伍解锁主动技能：坚韧不拔（主控球员可释放）",
+			"direction": "增益",
+			"id": "buf_2",
+			"name": "战术大师",
+			"pos": "(274.0, 778.0)",
+			"requires": [
+				"buf_1"
+			],
+			"skill_id": "skill_大地_2",
+			"type": "manual"
+		},
+		{
+			"condition": {
+
+			},
+			"cooldown": 10.0,
+			"cost": 2.0,
+			"desc": "克制命中后全队攻+8持续5秒（联动元素克制系统）",
+			"direction": "增益",
+			"energy_cost": 0.0,
+			"event": "Hit.HIT_COUNTER",
+			"id": "buf_3",
+			"name": "克制专家",
+			"pos": "(685.0, 723.0)",
+			"requires": [
+				"buf_1"
+			],
+			"tag_params": {
+				"player_atk_up_flat": {
+					"duration": 5.0,
+					"value": 8.0
+				}
+			},
+			"tags": [
+				"player_atk_up_flat"
+			],
+			"type": "event"
+		},
+		{
+			"cost": 1.0,
+			"desc": "",
+			"direction": "进攻",
+			"id": "进_10",
+			"name": "弱点洞察",
+			"pos": "(719.0, 258.0)",
+			"requires": [
+				"atk_1"
+			],
+			"type": "stat"
+		},
+		{
+			"cost": 1,
+			"desc": "",
+			"direction": "生存",
+			"id": "生_11",
+			"name": "坚韧体魄",
+			"pos": "(452.9581, 22.6709)",
+			"requires": [
+				"sur_1"
+			],
+			"type": "stat"
+		}
+	],
+	"points_total": 6.0
+}

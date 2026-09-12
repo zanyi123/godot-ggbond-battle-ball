@@ -61,6 +61,74 @@ func _ready() -> void:
 		_report("3D代理已重建", ok_proxy, "proxy.char_id=%s" % (proxies[p0].char_id if proxies.has(p0) else "无"))
 
 	var all_ok := after_a0 == "char_005" and no_dup and b_valid
+
+	# ===== 迟到球员补建（dev 模式场景：球员晚于 bridge 创建）=====
+	if bridge != null and mgr.team_a_players.size() >= 3:
+		var late_player = mgr._create_player("char_007", "a", false, Vector2(-100, 0))
+		mgr.team_a_players.append(late_player)
+		await get_tree().create_timer(0.5).timeout  # 等 _check_roster_rebuild 补建
+		var proxies: Dictionary = bridge._player_proxies
+		var ok_late: bool = proxies.has(late_player) and is_instance_valid(proxies[late_player]) 			and proxies[late_player].char_id == "char_007"
+		_report("迟到球员3D代理补建(dev场景)", ok_late, str(ok_late))
+		all_ok = all_ok and ok_late
+
+	# ===== 韧性弹飞球权归属（弹飞球停止→回攻击者，不按半场白送）=====
+	if mgr.ball_node != null:
+		var ball = mgr.ball_node
+		var atk = mgr.team_a_players[0]
+		var def = mgr.team_b_players[0]
+		var empty_skills: Array[Dictionary] = []
+		ball.launch(atk.global_position, Vector2.RIGHT, 30.0, 500.0, atk, empty_skills)
+		ball.bounced_by_resilience = true  # 模拟已被韧性弹飞
+		ball.global_position = Vector2(200, 100)  # 落在B半场（旧逻辑会白送B队）
+		ball._hit_player_ids.clear()
+		ball._on_ball_stopped()
+		await get_tree().create_timer(0.1).timeout
+		var owner_after = ball.owner_player
+		var ok_owner: bool = owner_after == atk
+		_report("弹飞球停止球权回攻击者", ok_owner, "owner=%s" % ("A0" if owner_after == atk else str(owner_after)))
+		all_ok = all_ok and ok_owner
+		# 出界路径：弹飞球出界同样回攻击者
+		ball.launch(def.global_position, Vector2.RIGHT, 30.0, 500.0, def, empty_skills)
+		ball.bounced_by_resilience = true
+		ball.global_position = Vector2(560, 0)  # 出界点（x>510）
+		ball._hit_player_ids.clear()
+		ball._on_ball_out_of_field()
+		await get_tree().create_timer(0.1).timeout
+		var owner_ob = ball.owner_player
+		var ok_ob: bool = owner_ob == def
+		_report("弹飞球出界球权回攻击者", ok_ob, "owner=%s" % ("B0" if ok_ob else str(owner_ob)))
+		all_ok = all_ok and ok_ob
+		# 待接球接球机制：命中后韧性 roll——knockback1=接住拿球权 / knockback2=脱手 / 弹飞=球飞走
+		# 统计只认"真实命中后"的球权（排除半场分配假阳性）
+		var caught := 0
+		var returned := 0
+		var trials := 25
+		for t in range(trials):
+			var defender = mgr.team_b_players[0]
+			defender.is_ready_to_catch = true
+			defender.stamina = 200  # 防止连打致死干扰统计
+			defender.global_position = Vector2(260, -130)  # 复位（击退会推走）
+			var empty_skills2: Array[Dictionary] = []
+			ball.launch(atk.global_position, (defender.global_position - atk.global_position).normalized(), 30.0, 500.0, atk, empty_skills2)
+			# 等球命中/停止（球速460px/s，520px 距离约1.2s，上限3s）
+			var waited := 0.0
+			while waited < 3.0 and ball.is_active and ball.owner_player == null:
+				await get_tree().physics_frame
+				waited += get_process_delta_time()
+			await get_tree().create_timer(0.1).timeout
+			# 只有命中过 defender 后拿球才算真接住（否则可能是半场分配）
+			var hit_defender: bool = ball._hit_player_ids.has(defender.get_instance_id())
+			if hit_defender and ball.owner_player == defender:
+				caught += 1
+			elif hit_defender and ball.owner_player == atk:
+				returned += 1
+			defender.is_ready_to_catch = false
+			ball.reset()
+		_report("接球机制-命中后接住拿球权", caught > 0, "%d/%d 次接住" % [caught, trials])
+		_report("接球机制-命中后未接住回攻击者", returned > 0, "%d/%d 次" % [returned, trials])
+		all_ok = all_ok and caught > 0 and returned > 0
+
 	# 弹窗构建验证（问题2自查：点"替补"按钮必须真的弹出选人列表）
 	if prep != null:
 		prep._on_substitute_player(1)

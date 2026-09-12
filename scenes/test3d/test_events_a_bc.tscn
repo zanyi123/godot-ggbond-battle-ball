@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/test3d/regression/test_events_a_bc.gd" id="1_e2"]
+
+[node name="EventsABCTest" type="Node3D"]
+script = ExtResource("1_e2")

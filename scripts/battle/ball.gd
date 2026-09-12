@@ -19,6 +19,7 @@ var max_flight_distance: float = 500.0
 var injected_skills: Array[Dictionary] = []
 var element_type: String = ""
 var trajectory_type: String = "straight"
+var bounced_by_resilience: bool = false  # 韧性弹飞球：落地球权回攻击者（防半场白送，2026-09-11）
 
 var stuck_on_obstacle: StaticBody2D = null  # 球卡在障碍物上时引用
 
@@ -175,6 +176,14 @@ func _on_ball_out_of_field() -> void:
 	_set_idle_visual()
 	ball_out_of_bounds.emit()
 
+	# === 韧性弹飞球出界：球权回攻击者（弹飞朝防守方深处飞，按半场给=必白送防守方——攻防对称） ===
+	if bounced_by_resilience:
+		bounced_by_resilience = false
+		if attacker_player and is_instance_valid(attacker_player):
+			print("[Ball] 弹飞球出界,球权回攻击者 %s" % _pname(attacker_player))
+			return_to_player(attacker_player)
+		return
+
 	var ball_x: float = global_position.x
 
 	# 球在左半场(x < 0)→ 回到队A(玩家队)最近球员
@@ -262,14 +271,14 @@ func _on_body_entered(body: Node2D) -> void:
 
 	# === 幻象：击中只扣幻象体力，球继续飞（不当作击中真身）===
 	if player.has_method("get") and player.get("is_illusion") == true:
-		player.take_damage(ball_damage, attacker_player)
+		player.take_damage(ball_damage, attacker_player, _attacker_element())
 		ball_hit_player.emit(player, ball_damage)
 		# 穿透模式下继续飞；非穿透也继续飞（幻象是虚假目标，不挡球权流转）
 		print("[Ball] 击中幻象 %s, 扣体力, 球继续飞行" % (player.illusion_id if player.get("illusion_id") else "?"))
 		return
 
 	# === 对方球员 → 击中造成伤害 ===
-	var result: Dictionary = player.take_damage(ball_damage, attacker_player)
+	var result: Dictionary = player.take_damage(ball_damage, attacker_player, _attacker_element())
 	var actual_damage: int = result.get("damage", 0)
 	var effect: String = result.get("effect", "none")
 	ball_hit_player.emit(player, actual_damage)
@@ -305,9 +314,22 @@ func _on_body_entered(body: Node2D) -> void:
 					continue
 				var dist: float = player.global_position.distance_to(p.global_position)
 				if dist <= aoe_radius:
-					p.take_damage(aoe_damage, attacker_player)
+					p.take_damage(aoe_damage, attacker_player, _attacker_element())
 					hit_count += 1
 		print("[Ball] AOE范围伤害: 半径=%.0f 范围伤害=%.1f 命中%d人" % [aoe_radius, aoe_damage, hit_count])
+
+	# E2 事件：HIT_TAKEN（含接球姿态命中，effect 供订阅者区分结果）
+	var _bus = _event_bus()
+	if _bus:
+		_bus.emit_event(BattleEventBus.GameEvent.HIT_TAKEN, {"attacker": attacker_player, "defender": player, "damage": actual_damage, "effect": effect, "was_ready_to_catch": player.is_ready_to_catch})
+
+	# === 待接球姿态：韧性判定决定接球成败（2026-09-11 补回 GD 缺失的接球机制）===
+	# roll 结果映射：knockback1(一段轻击退)=接住球拿球权 / knockback2(二段)=脱手 / 弹飞=球飞走
+	# 韧性越高 p_knockback 越高且二段概率越低 → 接住率随韧性提升（roll 概率表零改动）
+	if player.is_ready_to_catch and effect == "knockback1" and not player.is_defeated:
+		_catch_ball(player)
+		print("[Ball] %s 待接球接住来球! 球权转换→队%s" % [_pname(player), player.team.to_upper()])
+		return
 
 	# === 状态标记 ===
 	var is_penetrating: bool = tag_effect_handler and tag_effect_handler.is_ball_penetrating()
@@ -330,9 +352,19 @@ func _on_body_entered(body: Node2D) -> void:
 
 	# === 韧性效果响应 ===
 	if effect == "ball_fly" or effect == "knockback_and_fly":
-		var random_angle: float = randf_range(-90.0, 90.0)
-		ball_direction = ball_direction.rotated(deg_to_rad(random_angle))
+		# 弹飞方向以"远离攻击者"为基准（球沿来路继续向前弹），±60° 小偏转
+		# 旧版沿当前方向 ±90° 随机会横向扫进受击者人群/弹回攻击者脸
+		var away_dir: Vector2 = ball_direction
+		if attacker_player and is_instance_valid(attacker_player):
+			var to_hit: Vector2 = global_position - attacker_player.global_position
+			if to_hit.length_squared() > 1.0:
+				away_dir = to_hit.normalized()
+		var random_angle: float = randf_range(-60.0, 60.0)
+		ball_direction = away_dir.rotated(deg_to_rad(random_angle))
+		bounced_by_resilience = true
 		flight_distance = 0.0
+		if _bus:
+			_bus.emit_event(BattleEventBus.GameEvent.DEFEND_BOUNCED, {"defender": player, "direction": ball_direction})
 		if is_tracking:
 			# 追踪球：弹飞后继续追踪，不受距离限制
 			print("[Ball] 追踪球-韧性弹飞! 方向偏转%.0f度,继续追踪" % random_angle)
@@ -410,6 +442,14 @@ func _on_ball_stopped() -> void:
 		_on_body_entered(nearest_player)
 		return
 
+	# === 韧性弹飞球：落地球权回攻击者（防守方收益=韧性减伤，球权需真接住——攻防对称） ===
+	if bounced_by_resilience:
+		bounced_by_resilience = false
+		if attacker_player and is_instance_valid(attacker_player):
+			print("[Ball] 弹飞球落地(%.1fpx),球权回攻击者 %s" % [flight_distance, _pname(attacker_player)])
+			return_to_player(attacker_player)
+		return
+
 	# === 落地无人在附近 → 按半场分配球权 ===
 	print("[Ball] 球落地,飞行距离: %.1f" % flight_distance)
 	if global_position.x < 0:
@@ -438,6 +478,7 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	is_active = true
 	flight_distance = 0.0
 	owner_player = null
+	bounced_by_resilience = false
 	trajectory_type = "straight"
 	element_type = ""
 	_hit_player_ids = {}
@@ -458,6 +499,11 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 		var tag: String = skill.get("tag") if skill.has("tag") else ""
 		if tag == "on_ball":
 			_apply_ball_skill(skill)
+
+	# E2 事件：ATTACK_LAUNCHED
+	var _bus = _event_bus()
+	if _bus:
+		_bus.emit_event(BattleEventBus.GameEvent.ATTACK_LAUNCHED, {"attacker": attacker, "direction": ball_direction, "damage": ball_damage, "max_dist": max_flight_distance, "skills": injected_skills})
 
 	# 标签修饰符应用到球属性
 	if tag_effect_handler:
@@ -918,3 +964,21 @@ func _get_match_stats() -> Node:
 	if bm and bm.has_node("MatchPlayerStats"):
 		return bm.get_node("MatchPlayerStats")
 	return null
+
+
+## E4 攻击方元素（装备元灵 element）
+func _attacker_element() -> String:
+	if attacker_player and is_instance_valid(attacker_player):
+		var sid = attacker_player.get("spirit_id")
+		if sid == null:
+			sid = ""
+		if sid != "":
+			var sd: Dictionary = DataManager.get_spirit_by_id(sid)
+			return str(sd.get("element", ""))
+	return ""
+
+## E2 事件总线获取（group 免注入）
+func _event_bus() -> Node:
+	if not is_inside_tree():
+		return null
+	return get_tree().get_first_node_in_group("battle_event_bus")

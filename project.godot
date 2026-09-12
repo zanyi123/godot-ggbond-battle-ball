@@ -28,6 +28,7 @@ InventoryManager="*res://scripts/systems/inventory/inventory_manager.gd"
 TrainingManager="*res://scripts/systems/training/training_manager.gd"
 NutritionManager="*res://scripts/systems/nutrition/nutrition_manager.gd"
 RewardSystem="*res://scripts/systems/reward_system.gd"
+TalentSystem="*res://scripts/systems/talent/talent_system.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]

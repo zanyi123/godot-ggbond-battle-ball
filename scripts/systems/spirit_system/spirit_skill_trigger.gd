@@ -17,6 +17,9 @@ var _effect_handler: SpiritTagEffectHandler
 # 玩家技能映射（玩家ID -> 上场技能列表）
 var _player_skills: Dictionary = {}  # {player_id: [skill_ids]}
 
+# E3：被动注册表 {"p":player_id,"s":skill_id} -> {ev, trigger}
+var _passive_registry: Dictionary = {}
+
 # 技能冷却状态
 var _skill_cooldowns: Dictionary = {}  # {player_id: {skill_id: remaining_time}}
 
@@ -78,6 +81,94 @@ func set_player_skills(player_id: int, skill_ids: Array[String]) -> void:
 	for skill_id in skill_ids:
 		if not _skill_cooldowns[player_id].has(skill_id):
 			_skill_cooldowns[player_id][skill_id] = 0.0
+	# E3：被动技能按 trigger.event 向事件总线订阅
+	_subscribe_passives(player_id, skill_ids)
+
+## 被动注册：trigger.event → 响应器（事件到达→条件→CD→能量→_fire_skill）
+func _subscribe_passives(player_id: int, skill_ids: Array[String]) -> void:
+	var bus = get_tree().get_first_node_in_group("battle_event_bus") if is_inside_tree() else null
+	if bus == null:
+		return
+	for skill_id in skill_ids:
+		var sd := _get_skill_data(skill_id)
+		if sd.is_empty() or sd.get("type", "active") != "passive":
+			continue
+		var trigger: Dictionary = sd.get("trigger", {})
+		if trigger.is_empty() or trigger.get("event", "") == "":
+			push_warning("[SpiritSkillTrigger] 被动缺少 trigger 配置，不自动触发: %s" % skill_id)
+			continue
+		var ev := _event_name_to_enum(str(trigger.get("event")))
+		if ev < 0:
+			push_warning("[SpiritSkillTrigger] 未知触发事件: %s (%s)" % [str(trigger.get("event")), skill_id])
+			continue
+		_passive_registry[{"p": player_id, "s": skill_id}] = {"ev": ev, "trigger": trigger}
+		bus.subscribe(ev, _on_passive_event.bind({"p": player_id, "s": skill_id, "trigger": trigger}))
+		print("[SpiritSkillTrigger] 被动注册: %s ← %s" % [skill_id, str(trigger.get("event"))])
+
+## 事件名（字符串）→ GameEvent 枚举
+func _event_name_to_enum(name: String) -> int:
+	# 格式 "Defend.BOUNCED" / "Hit.HIT_TAKEN"
+	var parts := name.split(".")
+	if parts.size() != 2:
+		return -1
+	var prefix := parts[0].to_lower()
+	for ev in BattleEventBus.GameEvent.values():
+		var key: String = BattleEventBus.GameEvent.keys()[ev]
+		if key.to_lower().begins_with(prefix) and key.to_lower().ends_with(parts[1].to_lower()):
+			return ev
+	return -1
+
+## 被动事件响应：condition → CD → 能量 → _fire_skill
+func _on_passive_event(_payload: Dictionary, ctx: Dictionary) -> void:
+	var player_id: int = ctx["p"]
+	var skill_id: String = ctx["s"]
+	var trigger: Dictionary = ctx["trigger"]
+	# 条件检查（首期：{field, op, value} 简单比较）
+	var cond: Dictionary = trigger.get("condition", {})
+	if not cond.is_empty() and not _check_condition(cond, _payload, player_id):
+		return
+	# 冷却
+	if get_skill_cooldown(player_id, skill_id) > 0.0:
+		return
+	# 触发
+	var sd := _get_skill_data(skill_id)
+	if sd.is_empty():
+		return
+	print("[SpiritSkillTrigger] 被动触发: %s (%s)" % [skill_id, str(trigger.get("event"))])
+	_fire_skill(sd, player_id, skill_id, {"trigger_payload": _payload})
+
+## 首期条件检查：field/op/value（op: eq/ne/gt/lt/gte/lte）
+func _check_condition(cond: Dictionary, payload: Dictionary, player_id: int) -> bool:
+	var field := str(cond.get("field", ""))
+	var op := str(cond.get("op", "eq"))
+	var value = cond.get("value")
+	# field 解析：payload 直接字段；或 "self.<属性>" 取本球员属性
+	var actual = null
+	if payload.has(field):
+		actual = payload[field]
+	elif field.begins_with("self."):
+		var p := _get_player_by_id(player_id)
+		if p != null:
+			actual = p.get(field.substr(5))
+	if actual == null:
+		return false
+	match op:
+		"eq": return actual == value
+		"ne": return actual != value
+		"gt", "lt", "gte", "lte":
+			# 数值比较：非数值（对象/字典）一律不满足，防 float(对象) 崩溃
+			if not (actual is float or actual is int):
+				return false
+			if not (value is float or value is int):
+				return false
+			var av := float(actual)
+			var vv := float(value)
+			match op:
+				"gt": return av > vv
+				"lt": return av < vv
+				"gte": return av >= vv
+				_: return av <= vv
+	return false
 
 ## 主入口：触发技能
 ## @param player_id 玩家ID
@@ -108,6 +199,16 @@ func trigger_skill(player_id: int, skill_id: String, target_data: Dictionary = {
 		printerr("[SpiritSkillTrigger] 技能数据不存在: ", skill_id)
 		return false
 
+	# E3：被动技能禁止主动释放（只能由 trigger 事件自动触发）
+	if skill_data.get("type", "active") == "passive":
+		print("[SpiritSkillTrigger] 被动技能不可主动释放: ", skill_id)
+		return false
+
+	return _fire_skill(skill_data, player_id, skill_id, target_data)
+
+
+## 实际触发路径（主动与被动自动触发共用；调用方已完成资格校验）
+func _fire_skill(skill_data: Dictionary, player_id: int, skill_id: String, target_data: Dictionary) -> bool:
 	# 检查能量消耗
 	var energy_cost = skill_data.get("energy_cost", 0)
 	if not _consume_energy(player_id, energy_cost):
@@ -148,12 +249,32 @@ func _load_skills_data() -> void:
 		file.close()
 	_skills_loaded = true
 
-## 获取技能数据
+## 获取技能数据（E3：passive 同步锁——tag duration 不得超过 cooldown）
 func _get_skill_data(skill_id: String) -> Dictionary:
 	_load_skills_data()
 	if _skills_cache.has(skill_id):
-		return _skills_cache[skill_id]
+		var sd: Dictionary = _skills_cache[skill_id]
+		_apply_passive_sync_lock(skill_id, sd)
+		return sd
 	return {}
+
+## 被动生效时长同步锁：任何 tag duration > cooldown 时 clamp 到 cooldown
+func _apply_passive_sync_lock(skill_id: String, sd: Dictionary) -> void:
+	if sd.get("_lock_checked", false):
+		return
+	sd["_lock_checked"] = true
+	if sd.get("type", "active") != "passive":
+		return
+	var cd := float(sd.get("cooldown", 0.0))
+	if cd <= 0.0:
+		return
+	var params: Dictionary = sd.get("tag_params", {})
+	for tag_id in params:
+		if params[tag_id] is Dictionary:
+			var dur := float(params[tag_id].get("duration", 0.0))
+			if dur > cd:
+				params[tag_id]["duration"] = cd
+				push_warning("[同步锁] %s.%s duration %.1f > cooldown %.1f，已 clamp" % [skill_id, tag_id, dur, cd])
 
 ## 执行技能标签效果
 func _execute_skill_tags(skill_id: String, player_id: int, target_data: Dictionary) -> void:
@@ -199,11 +320,25 @@ func _build_tag_params(tag_data: Dictionary, skill_data: Dictionary, player_id: 
 
 	return params
 
-## 消耗能量
+## 消耗能量（E3 接真：扣 player.spirit_energy）
 func _consume_energy(player_id: int, amount: int) -> bool:
-	# TODO: 从玩家获取当前能量并扣除
-	# 目前先返回true
+	var p := _get_player_by_id(player_id)
+	if p == null:
+		return true  # 找不到球员时兼容旧路径（如 UI 预览调用）
+	if amount <= 0:
+		return true
+	if p.spirit_energy < amount:
+		return false
+	p.spirit_energy -= amount
+	print("[SpiritSkillTrigger] 扣能量 %d → 剩余 %.0f" % [amount, p.spirit_energy])
 	return true
+
+## 按 instance_id 找球员节点
+func _get_player_by_id(player_id: int) -> Node:
+	for p in players:
+		if p != null and is_instance_valid(p) and p.get_instance_id() == player_id:
+			return p
+	return null
 
 ## 设置技能冷却
 func _set_skill_cooldown(player_id: int, skill_id: String, cooldown: float) -> void:
@@ -213,11 +348,15 @@ func _set_skill_cooldown(player_id: int, skill_id: String, cooldown: float) -> v
 
 ## 更新冷却时间（每帧调用）
 func _process(delta: float) -> void:
+	var bus = get_tree().get_first_node_in_group("battle_event_bus") if is_inside_tree() else null
 	for player_id in _skill_cooldowns.keys():
 		for skill_id in _skill_cooldowns[player_id].keys():
 			var remaining = _skill_cooldowns[player_id][skill_id]
 			if remaining > 0:
 				_skill_cooldowns[player_id][skill_id] = max(0, remaining - delta)
+				# E2/G 类事件：冷却结束
+				if _skill_cooldowns[player_id][skill_id] == 0.0 and bus:
+					bus.emit_event(BattleEventBus.GameEvent.RESOURCE_COOLDOWN_READY, {"player_id": player_id, "skill_id": skill_id})
 
 ## 获取技能剩余冷却时间
 func get_skill_cooldown(player_id: int, skill_id: String) -> float:

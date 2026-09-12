@@ -338,6 +338,16 @@ func _recalculate_all_bonuses() -> void:
 	attack_power += float(train.get("attack_bonus", 0))
 	resilience += float(train.get("resilience_bonus", 0))
 
+	# 2.5 E5 叠加队伍天赋加成（全队同值；TalentSystem autoload 存在时）
+	if has_node("/root/TalentSystem"):
+		var talent_bonuses: Dictionary = get_node("/root/TalentSystem").get_team_bonuses()
+		max_stamina += float(talent_bonuses.get("stamina_bonus", 0))
+		defense += float(talent_bonuses.get("defense_bonus", 0))
+		raw_speed += float(talent_bonuses.get("speed_bonus", 0))
+		attack_power += float(talent_bonuses.get("attack_bonus", 0))
+		resilience += float(talent_bonuses.get("resilience_bonus", 0))
+		max_spirit_energy += float(talent_bonuses.get("max_energy_bonus", 0))
+
 	# 3. 叠加装备加成（固定值，和训练同级，加在底层）
 	var equip_bonuses: Dictionary = PlayerSaveManager.get_equipment_bonuses(character_id)
 	max_stamina += float(equip_bonuses.get("stamina_bonus", 0))
@@ -970,8 +980,9 @@ func _physics_process(delta: float) -> void:
 	_clamp_to_field()
 
 
-func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
+func take_damage(amount: float, attacker: CharacterBody2D = null, attacker_element: String = "") -> Dictionary:
 	"""受到伤害,返回 {damage: int, effect: String}
+	attacker_element: 攻击方元素（E4 元素克制；空=无克制）
 	effect: "none" / "knockback1" / "knockback2" / "ball_fly" / "knockback_and_fly"
 
 	非待接球: 新体力 = 当前体力 + 防御抗力 - 攻击（无韧性）
@@ -992,7 +1003,19 @@ func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
 	var dmg_mult: float = 1.0
 	if is_status_active("vulnerable"):
 		dmg_mult = _status_lights["vulnerable"].get("multiplier", 1.5)
-	var effective_amount: float = amount * dmg_mult
+	# E4 元素克制：防守方元素=装备元灵 element；克制→×1.3
+	var counter_mult: float = 1.0
+	var defender_element := ""
+	if attacker_element != "" and spirit_id != "":
+		var spirit_data := DataManager.get_spirit_by_id(spirit_id)
+		defender_element = str(spirit_data.get("element", ""))
+		if defender_element != "":
+			counter_mult = DataManager.get_counter_multiplier(attacker_element, defender_element)
+	var effective_amount: float = amount * dmg_mult * counter_mult
+	if counter_mult > 1.0:
+		var _bus = get_tree().get_first_node_in_group("battle_event_bus") if is_inside_tree() else null
+		if _bus:
+			_bus.emit_event(BattleEventBus.GameEvent.HIT_COUNTER, {"attacker": attacker, "defender": self, "multiplier": counter_mult, "attacker_element": attacker_element, "defender_element": defender_element})
 
 	var defense_resist: float = _get_effective_value("defense", defense) * defense_factor
 	var actual_damage: int = 0
@@ -1014,6 +1037,10 @@ func take_damage(amount: float, attacker: CharacterBody2D = null) -> Dictionary:
 
 		# 4. 韧性效果判定（与衰减同时发生，三选一）
 		effect = _roll_resilience_effect(_get_effective_value("resilience", resilience))
+		# E2 事件：HIT_RESILIENCE_ROLLED
+		var _bus = get_tree().get_first_node_in_group("battle_event_bus") if is_inside_tree() else null
+		if _bus:
+			_bus.emit_event(BattleEventBus.GameEvent.HIT_RESILIENCE_ROLLED, {"defender": self, "effect": effect, "decay_rate": decay_rate})
 		if effect == "knockback1":
 			_apply_knockback(attacker, 100.0)
 			_stagger_timer = max(base_stagger, _knockback_timer)
@@ -1303,6 +1330,7 @@ func set_penalized(penalized: bool) -> void:
 func enter_catch_state() -> void:
 	"""进入待接球状态"""
 	is_ready_to_catch = true
+	_emit_catch_stance(true)
 	_base_indicator_color = Color.YELLOW
 	_update_state_indicator()
 
@@ -1310,6 +1338,7 @@ func enter_catch_state() -> void:
 func exit_catch_state() -> void:
 	"""退出待接球状态"""
 	is_ready_to_catch = false
+	_emit_catch_stance(false)
 	_base_indicator_color = Color.TRANSPARENT
 	_update_state_indicator()
 
@@ -1972,3 +2001,12 @@ func _get_match_stats() -> Node:
 	if bm and bm.has_node("MatchPlayerStats"):
 		return bm.get_node("MatchPlayerStats")
 	return null
+
+
+## E2 事件发射（C 类姿态）
+func _emit_catch_stance(entering: bool) -> void:
+	if not is_inside_tree():
+		return
+	var bus = get_tree().get_first_node_in_group("battle_event_bus")
+	if bus:
+		bus.emit_event(BattleEventBus.GameEvent.DEFEND_CATCH_STANCE, {"player": self, "entering": entering})

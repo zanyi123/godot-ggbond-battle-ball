@@ -228,18 +228,29 @@ func _build_main_menu(is_admin: bool) -> void:
 		var btn_dev := Button.new()
 		btn_dev.name = "BtnDev"
 		btn_dev.text = "快捷设置（开发者）"
-		btn_dev.position = Vector2(545, 700)
-		btn_dev.size = Vector2(350, 55)
+		btn_dev.position = Vector2(545, 600)
+		btn_dev.size = Vector2(350, 50)
 		btn_dev.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
 		btn_dev.pressed.connect(_on_open_dev_settings)
 		add_child(btn_dev)
 		_menu_interactive_nodes.append(btn_dev)
 
+		# 管理员专属：天赋树编辑器（E5 天赋树可视化配置）
+		var btn_talent := Button.new()
+		btn_talent.name = "BtnTalentEditor"
+		btn_talent.text = "天赋树编辑器（开发者）"
+		btn_talent.position = Vector2(545, 662)
+		btn_talent.size = Vector2(350, 50)
+		btn_talent.add_theme_color_override("font_color", Color(0.5, 0.8, 1.0))
+		btn_talent.pressed.connect(_on_open_talent_editor)
+		add_child(btn_talent)
+		_menu_interactive_nodes.append(btn_talent)
+
 		# 管理员模式下返回按钮再往下挪一点
 		var btn_back_mode := Button.new()
 		btn_back_mode.name = "BtnBackMode"
 		btn_back_mode.text = "← 返回模式选择"
-		btn_back_mode.position = Vector2(545, 775)
+		btn_back_mode.position = Vector2(545, 830)
 		btn_back_mode.size = Vector2(350, 45)
 		btn_back_mode.add_theme_font_size_override("font_size", 16)
 		btn_back_mode.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8))
@@ -362,6 +373,15 @@ func _on_open_base() -> void:
 			_show_menu_interactive_nodes()
 			base_ui = null
 		)
+
+
+func _on_open_talent_editor() -> void:
+	var EditorClass = load("res://scripts/dev_tools/dev_talent_tree_editor.gd")
+	var editor: Control = EditorClass.new()
+	editor.set_anchors_preset(Control.PRESET_FULL_RECT)
+	editor.closed.connect(editor.queue_free)
+	add_child(editor)
+	print("[Main] 天赋树编辑器已打开")
 
 
 func _on_open_dev_settings() -> void:

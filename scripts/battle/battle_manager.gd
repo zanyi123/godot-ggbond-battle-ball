@@ -135,6 +135,14 @@ func _ready() -> void:
 		call_deferred("_on_prep_match_started")
 		print("[Sim] 自动模拟模式已启动 time_scale=%.1f 半场=%.1f秒" % [sim_time_scale, GameManager.sim_half_duration_override])
 
+	# === 事件总线（副系统·E1）：玩法事件六大类，判定点 emit / 响应器订阅 ===
+	var event_bus := Node.new()
+	event_bus.name = "BattleEventBus"
+	event_bus.set_script(load("res://scripts/systems/event_bus/event_bus.gd"))
+	add_child(event_bus)
+	event_bus.add_to_group("battle_event_bus")
+	event_bus.wire_sources(ball_node, team_a_players + team_b_players)
+
 	# === 3D 场景桥接层（USE_3D_SCENE=true 时激活；2D 逻辑零改动，bridge 只读同步）===
 	if USE_3D_SCENE and not auto_simulate:  # sim 模拟强制纯 2D（基线可比）
 		var bridge := Node.new()
@@ -1558,6 +1566,12 @@ func _on_prep_match_started() -> void:
 		if input_mgr.has_method("refresh_controlled_skills"):
 			input_mgr.refresh_controlled_skills()
 
+	# E5 队伍天赋：event 型订阅 + manual 型技能注入主控
+	if has_node("/root/TalentSystem"):
+		var talent = get_node("/root/TalentSystem")
+		talent.setup_battle()
+		talent.apply_manual_skills(input_mgr.controlled_player if input_mgr else null)
+
 	if _is_half_time_prep:
 		# ===== 中场休息后恢复下半场 =====
 		_is_half_time_prep = false
@@ -1605,6 +1619,11 @@ func _on_prep_match_started() -> void:
 func _on_dev_prep_match_started(team_a_data: Array[Dictionary], team_b_data: Array[Dictionary], control_index: int, control_team: String) -> void:
 	"""开发者测试备战模式：根据选择的数据创建球员并开始比赛"""
 	print("[Match] 开发者测试模式开始比赛")
+
+	# dev 模式球员此时才创建 → 事件总线补接线（内部防重复）
+	var dev_bus := get_tree().get_first_node_in_group("battle_event_bus")
+	if dev_bus:
+		dev_bus.wire_sources(ball_node, team_a_players + team_b_players)
 
 	var team_a_positions := [
 		Vector2(-260, -130),

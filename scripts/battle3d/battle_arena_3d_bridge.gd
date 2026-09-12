@@ -137,6 +137,7 @@ func _spawn_player_proxies() -> void:
 		_world.add_child(proxy)
 		var team_color := TEAM_COLOR_A if p.team == "a" else TEAM_COLOR_B
 		proxy.setup(str(p.character_id), team_color)
+		_attach_name_label(proxy, p)
 		proxy.sync_from_2d(p.global_position, Vector2.ZERO, Vector2(1.0 if p.team == "a" else -1.0, 0.0))
 		_player_proxies[p] = proxy
 
@@ -224,8 +225,33 @@ func _process(delta: float) -> void:
 	if PARITY_CHECK:
 		_parity_tick()
 
-## 换人重建：2D 球员 character_id 与 3D 代理不一致时重建代理（同 key 覆盖，遍历安全）
+## 名单同步：迟到球员补建（dev 模式球员在开赛回调才创建，晚于 bridge）
+## + 已销毁球员清理 + character_id 变化重建（同 key 覆盖，遍历安全）
 func _check_roster_rebuild() -> void:
+	# 补建：battle_mgr 中存在但代理表缺失的球员
+	var all: Array = battle_mgr.team_a_players + battle_mgr.team_b_players
+	for p in all:
+		if p == null or not is_instance_valid(p):
+			continue
+		if _player_proxies.has(p):
+			continue
+		var team_color := TEAM_COLOR_A if p.team == "a" else TEAM_COLOR_B
+		var proxy := PlayerProxy3D.new()
+		_world.add_child(proxy)
+		proxy.setup(str(p.character_id), team_color)
+		_attach_name_label(proxy, p)
+		_player_proxies[p] = proxy
+		print("[Bridge3D] ➕ 球员 3D 代理补建 → %s" % str(p.character_id))
+	# 清理：代理表中已销毁的 2D 球员
+	var dead: Array = []
+	for p in _player_proxies:
+		if p == null or not is_instance_valid(p):
+			dead.append(p)
+	for p in dead:
+		if _player_proxies[p] != null and is_instance_valid(_player_proxies[p]):
+			_player_proxies[p].queue_free()
+		_player_proxies.erase(p)
+	# 换人重建：2D 球员 character_id 与 3D 代理不一致时重建代理
 	for p in _player_proxies:
 		if p == null or not is_instance_valid(p):
 			continue
@@ -237,6 +263,7 @@ func _check_roster_rebuild() -> void:
 		var rebuilt := PlayerProxy3D.new()
 		_world.add_child(rebuilt)
 		rebuilt.setup(str(p.character_id), team_color)
+		_attach_name_label(rebuilt, p)
 		_player_proxies[p] = rebuilt
 		print("[Bridge3D] 🔄 换人重建 3D 代理 → %s" % str(p.character_id))
 
@@ -253,6 +280,23 @@ func _parity_tick() -> void:
 			_parity_error_count += 1
 			push_error("[P3][FAIL] 双轨不一致 %s pos=%s → 2D=%d 3D=%d (累计%d)" % [
 				p.name, str(p.global_position), r2d, r3d, _parity_error_count])
+
+## 球员头顶名字标签（3D 下消除"谁是谁"歧义；玩家位金色，其余白色）
+func _attach_name_label(proxy: Node3D, p: Node2D) -> void:
+	var label := Label3D.new()
+	label.name = "NameLabel"
+	label.text = str(p.char_data.get("name", p.character_id)) if p.get("char_data") != null else str(p.character_id)
+	label.position = Vector3(0.0, 62.0, 0.0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.pixel_size = 0.35
+	label.font_size = 40
+	label.outline_size = 10
+	label.modulate = Color(1.0, 0.85, 0.3) if input_mgr_is_controlled(p) else Color.WHITE
+	proxy.add_child(label)
+
+func input_mgr_is_controlled(p: Node2D) -> bool:
+	return battle_mgr != null and battle_mgr.input_mgr != null and battle_mgr.input_mgr.controlled_player == p
 
 func _sync_players() -> void:
 	var input_mgr = battle_mgr.input_mgr

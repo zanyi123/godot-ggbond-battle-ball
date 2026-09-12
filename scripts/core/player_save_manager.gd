@@ -102,6 +102,16 @@ func load_slot(slot: int) -> void:
 	print("[PlayerSaveManager] 存档%d加载完成，版本%d" % [slot, save_data.get("version", 0)])
 
 
+## E5 队伍天赋树存档（save_data 内嵌，随 save_slot 落盘）
+func get_team_talent_tree() -> Array:
+	return save_data.get("team_talent_tree", [])
+
+func save_team_talent_tree(unlocked_ids: Array) -> void:
+	# duplicate 断引用：调用方后续 clear/assign 不应影响已存数据
+	save_data["team_talent_tree"] = unlocked_ids.duplicate()
+	save_slot()
+
+
 func save_slot() -> void:
 	_save_to_file()
 	save_saved.emit(current_slot)

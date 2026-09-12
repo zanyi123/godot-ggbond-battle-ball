@@ -130,6 +130,7 @@ scripts/
 ## 八、TRAE 专属技能清单
 
 - `project-context` — **本文件**，项目记忆中枢
+- `subsystem_dev` — 副系统（离散系统）开发规范：UI 外不可见但参与主逻辑判定的玩法系统（韧性/接球/耐久/训练等），开发此类系统时必读
 - `battle-ball` — 项目开发流程铁律
 - `bug-fix` — Bug 维修纪律
 - `verify-before-deliver` — 交付前模拟验证纪律
