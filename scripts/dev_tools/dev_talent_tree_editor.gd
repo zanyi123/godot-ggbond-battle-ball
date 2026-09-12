@@ -93,6 +93,7 @@ func _ready() -> void:
 	_build_ui()
 	_auto_layout_missing()
 	_rebuild_canvas()
+	_on_fit_view()
 	print("[天赋树编辑器] 已打开，节点 %d 个（拖拽摆位 / 新增 / 连接模式 / 保存）" % _nodes().size())
 
 ## ==================== 数据 ====================
@@ -236,8 +237,10 @@ func _build_ui() -> void:
 	title.add_theme_color_override("font_color", Color(0.7, 0.9, 0.6))
 	add_child(title)
 
-	_add_top_btn("💾 保存树", Vector2(bg.size.x - 300, 6), _on_save)
-	_add_top_btn("🔗 连接模式", Vector2(bg.size.x - 180, 6), _on_toggle_link)
+	_add_top_btn("💾 保存树", Vector2(bg.size.x - 820, 6), _on_save)
+	_add_top_btn("🔗 连接模式", Vector2(bg.size.x - 700, 6), _on_toggle_link)
+	_add_top_btn("🔁 重排布局", Vector2(bg.size.x - 580, 6), _on_relayout)
+	_add_top_btn("⛶ 适应视图", Vector2(bg.size.x - 460, 6), _on_fit_view)
 
 	# 右侧属性面板
 	prop_scroll = ScrollContainer.new()
@@ -586,7 +589,6 @@ func _make_card(n: Dictionary) -> void:
 	card.add_theme_color_override("font_color", col)
 	card.add_theme_color_override("font_hover_color", col.lightened(0.3))
 	card.tooltip_text = "%s\n%s\ntype=%s" % [str(n.get("name", "")), str(n.get("desc", "")), str(n.get("type", ""))]
-	card.gui_input.connect(_on_card_input.bind(card))
 	card.pressed.connect(_on_card_pressed.bind(n, card))
 	canvas.add_child(card)
 	# 方向色条（顶部小色块）
@@ -651,23 +653,53 @@ func _update_hud() -> void:
 
 ## ==================== 交互 ====================
 
-## 画布：中键/右键拖动平移，滚轮缩放（以鼠标为中心）
+## 画布统一输入：左键=命中测试拖节点；中/右键=平移；滚轮=缩放
 func _on_canvas_gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		if mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				var hit := _hit_test_card(mb.position)
+				if hit != null:
+					_drag_card = hit
+					_drag_offset = hit.position - mb.position  # 屏幕系 offset
+					# 选中
+					var id := hit.name.trim_prefix("Card_")
+					selected_id = id
+					_fill_prop_panel(_node_by_id(id))
+					canvas.queue_redraw()
+			else:
+				if _drag_card != null:
+					_save_card_pos(_drag_card)
+				_drag_card = null
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
 			_apply_zoom(mb.position, 1.1)
-		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
 			_apply_zoom(mb.position, 1.0 / 1.1)
 		elif mb.button_index in [MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT]:
 			_panning = mb.pressed
 			_pan_start = mb.get_global_position()
 			_view_start = view_pos
-	elif event is InputEventMouseMotion and _panning:
+	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
-		view_pos = _view_start - (mm.get_global_position() - _pan_start) / zoom
-		_refresh_card_positions()
-		canvas.queue_redraw()
+		if _drag_card != null:
+			_drag_card.position = mm.get_global_position() - _drag_offset
+			_save_card_pos(_drag_card)
+			canvas.queue_redraw()
+		elif _panning:
+			view_pos = _view_start - (mm.get_global_position() - _pan_start) / zoom
+			_refresh_card_positions()
+			canvas.queue_redraw()
+
+## 屏幕点 → 最上层命中卡片
+func _hit_test_card(screen_pos: Vector2) -> Button:
+	var found: Button = null
+	for c in canvas.get_children():
+		if c is Button and c.visible:
+			var b := c as Button
+			if screen_pos >= b.position and screen_pos <= b.position + b.size * zoom:
+				found = b  # 不 break：取最后（最上层）
+	return found
 
 func _apply_zoom(at_screen: Vector2, factor: float) -> void:
 	var world_at := screen_to_world(at_screen)
@@ -683,18 +715,6 @@ func _refresh_card_positions() -> void:
 		if card != null:
 			card.position = world_to_screen(_pos_to_vec(n.get("pos", WORLD_CENTER)))
 			card.scale = Vector2(zoom, zoom)
-
-func _on_card_input(event: InputEvent, card: Button) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed:
-			_drag_card = card
-			_drag_offset = card.get_global_mouse_position() - card.position
-		elif _drag_card == card:
-			_drag_card = null
-			_save_card_pos(card)
-	elif event is InputEventMouseMotion and _drag_card == card:
-		card.position = card.get_global_mouse_position() - _drag_offset
-		canvas.queue_redraw()
 
 func _save_card_pos(card: Button) -> void:
 	var id := card.name.trim_prefix("Card_")
@@ -851,6 +871,38 @@ func _new_node(parent_id: String) -> void:
 	save_tree()
 	_rebuild_canvas()
 	print("[天赋树编辑器] ➕ 新增 %s（%s / %s）已保存" % [id, str(node["name"]), str(node["direction"])])
+
+
+## 一键重排：按方向链式重算所有节点位置（丢弃旧拖拽位置，结构=requires 树）
+func _on_relayout() -> void:
+	for n in _nodes():
+		n.erase("pos")
+	_auto_layout_missing()
+	_dirty = true
+	save_tree()
+	_on_fit_view()
+	_rebuild_canvas()
+	print("[天赋树编辑器] 🔁 已按结构重排布局")
+
+## 一键适应视图：包围盒全部节点+核心
+func _on_fit_view() -> void:
+	var min_p := WORLD_CENTER
+	var max_p := WORLD_CENTER
+	for n in _nodes():
+		var wp := _pos_to_vec(n.get("pos", WORLD_CENTER))
+		min_p = min_p.min(wp)
+		max_p = max_p.max(wp)
+	var center := (min_p + max_p) / 2.0
+	var span := (max_p - min_p).length() + 400.0
+	# 视口约 1110x900（画布区），取适配缩放
+	var vs := get_viewport().get_visible_rect().size - Vector2(340, 60)
+	zoom = clampf(min(vs.x, vs.y) / max(span, 300.0), ZOOM_MIN, ZOOM_MAX)
+	view_pos = center - Vector2(vs.x, vs.y) / 2.0 / zoom + Vector2(0, 0)
+	# 居中修正：视口中心对准包围盒中心
+	view_pos = center - (Vector2(min(vs.x, 1110.0), min(vs.y, 900.0)) / 2.0) / zoom
+	_refresh_card_positions()
+	canvas.queue_redraw()
+	print("[天赋树编辑器] ⛶ 适应视图 zoom=%.2f center=%s" % [zoom, str(center)])
 
 
 func _on_save() -> void:
