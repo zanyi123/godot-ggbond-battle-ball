@@ -228,8 +228,8 @@ func _build_main_menu(is_admin: bool) -> void:
 		var btn_dev := Button.new()
 		btn_dev.name = "BtnDev"
 		btn_dev.text = "快捷设置（开发者）"
-		btn_dev.position = Vector2(545, 600)
-		btn_dev.size = Vector2(350, 50)
+		btn_dev.position = Vector2(545, 695)
+		btn_dev.size = Vector2(350, 40)
 		btn_dev.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
 		btn_dev.pressed.connect(_on_open_dev_settings)
 		add_child(btn_dev)
@@ -239,19 +239,30 @@ func _build_main_menu(is_admin: bool) -> void:
 		var btn_talent := Button.new()
 		btn_talent.name = "BtnTalentEditor"
 		btn_talent.text = "天赋树编辑器（开发者）"
-		btn_talent.position = Vector2(545, 662)
-		btn_talent.size = Vector2(350, 50)
+		btn_talent.position = Vector2(545, 743)
+		btn_talent.size = Vector2(350, 40)
 		btn_talent.add_theme_color_override("font_color", Color(0.5, 0.8, 1.0))
 		btn_talent.pressed.connect(_on_open_talent_editor)
 		add_child(btn_talent)
 		_menu_interactive_nodes.append(btn_talent)
 
+		# 管理员专属：元素克制编辑器（事件-响应·元素克制可视化）
+		var btn_element := Button.new()
+		btn_element.name = "BtnElementEditor"
+		btn_element.text = "元素克制编辑器（开发者）"
+		btn_element.position = Vector2(545, 791)
+		btn_element.size = Vector2(350, 40)
+		btn_element.add_theme_color_override("font_color", Color(1.0, 0.75, 0.4))
+		btn_element.pressed.connect(_on_open_element_editor)
+		add_child(btn_element)
+		_menu_interactive_nodes.append(btn_element)
+
 		# 管理员模式下返回按钮再往下挪一点
 		var btn_back_mode := Button.new()
 		btn_back_mode.name = "BtnBackMode"
 		btn_back_mode.text = "← 返回模式选择"
-		btn_back_mode.position = Vector2(545, 830)
-		btn_back_mode.size = Vector2(350, 45)
+		btn_back_mode.position = Vector2(545, 845)
+		btn_back_mode.size = Vector2(350, 40)
 		btn_back_mode.add_theme_font_size_override("font_size", 16)
 		btn_back_mode.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8))
 		btn_back_mode.pressed.connect(_on_back_to_mode_selection)
@@ -373,6 +384,15 @@ func _on_open_base() -> void:
 			_show_menu_interactive_nodes()
 			base_ui = null
 		)
+
+
+func _on_open_element_editor() -> void:
+	var EditorClass = load("res://scripts/dev_tools/dev_element_counter_editor.gd")
+	var editor: Control = EditorClass.new()
+	editor.set_anchors_preset(Control.PRESET_FULL_RECT)
+	editor.closed.connect(editor.queue_free)
+	add_child(editor)
+	print("[Main] 元素克制编辑器已打开")
 
 
 func _on_open_talent_editor() -> void:
