@@ -1,6 +1,7 @@
-## M1 验收测试：球的弹道物理（headless 可跑）
-## ① 开关默认开 ② 重力下落 ③ 落地弹跳计数 ④ 弹跳耗尽贴地 ⑤ 弧线=技能接管
-## ⑥ 直行+无标签=弹道 ⑦ 关开关=零积分（旧行为）⑧ 弹性 e 语义（天然基准+场地加成）
+## M1+M2 验收测试：球的弹道物理 + 蓝墙反弹（headless 可跑）
+## ① 弹道默认关（球暂不落地=旧观感，框架保留） ② 开启后重力下落 ③ 落地弹跳
+## ④ e=0.5 衰减贴地 / ④b e=1.0 完全反弹 ⑤ 弧线=技能接管 ⑥ 直行=弹道
+## ⑦ 关开关=零积分 ⑧ 弹性 e 语义 ⑨ 蓝墙反弹（默认开/四向反射/切向保持/开关）
 ## 运行：Godot_console.exe --headless res://scenes/test3d/test_ballistic_ball.tscn
 extends Node3D
 
@@ -16,17 +17,22 @@ func _ready() -> void:
 	var ball = arena.ball_node
 	_report("球存在", ball != null, "")
 	if ball == null:
-		print("[M1] RESULT: FAIL")
+		print("[M2] RESULT: FAIL")
 		get_tree().quit(1)
 		return
 
-	# 摘出对局干扰：本测试全部单帧同步驱动 _step，不等物理帧
+	# 摘出对局干扰：本测试全部单帧同步驱动，不等物理帧
 	ball.is_active = false
 	ball.owner_player = null
 	ball.trajectory_type = "straight"
 
-	# ① 开关默认开启
-	_report("开关默认开启", ball.use_ballistic_physics == true, str(ball.use_ballistic_physics))
+	# ① 弹道默认关闭（飞行球暂不落地）
+	_report("弹道默认关闭", ball.use_ballistic_physics == false, str(ball.use_ballistic_physics))
+	# ⑨a 蓝墙反弹默认开启
+	_report("墙反弹默认开启", ball.use_wall_bounce == true, str(ball.use_wall_bounce))
+
+	# === 显式开启弹道，驱动积分函数 ===
+	ball.use_ballistic_physics = true
 
 	# ② 重力下落：静止释放后 z 下降、vz 为负
 	ball.ball_z = 55.0
@@ -91,7 +97,6 @@ func _ready() -> void:
 	ball._step_ballistic_z(0.1)
 	_report("关开关=零z积分", ball.ball_z == 55.0 and ball.ball_z_vel == 0.0,
 		"z=%.1f vz=%.1f" % [ball.ball_z, ball.ball_z_vel])
-	ball.use_ballistic_physics = true
 
 	# ⑧ 弹性 e 语义
 	ball.bounce_coefficient = 1.0
@@ -105,24 +110,61 @@ func _ready() -> void:
 	var fp = arena.get_node_or_null("FieldPhysicsManager")
 	if fp:
 		ball.bounce_coefficient = 1.0
-		fp.set_bounciness(0.3, "test_m1")
+		fp.set_bounciness(0.3, "test_m2")
 		var e_field: float = ball._get_effective_bounce_e()
 		_report("场地弹性加成封顶(1.0+0.3=1.0)", absf(e_field - 1.0) < 0.001, "e=%.2f" % e_field)
 		fp.restore_bounciness()
 	else:
 		_report("场地弹性加成封顶(1.0+0.3=1.0)", false, "FieldPhysicsManager 未找到")
 
+	# ⑨ 蓝墙反弹（帧间越界检测：球心越过界线才夹回反射）
+	ball.ball_direction = Vector2(-1, 0)
+	ball.global_position = Vector2(-512, 0)
+	ball._bounce_off_walls()
+	_report("撞左墙夹回+反射", ball.global_position.x == -510.0 and ball.ball_direction.x > 0.0,
+		"x=%.0f dx=%.2f" % [ball.global_position.x, ball.ball_direction.x])
+
+	ball.ball_direction = Vector2(1, 0)
+	ball.global_position = Vector2(512, 0)
+	ball._bounce_off_walls()
+	_report("撞右墙夹回+反射", ball.global_position.x == 510.0 and ball.ball_direction.x < 0.0,
+		"x=%.0f dx=%.2f" % [ball.global_position.x, ball.ball_direction.x])
+
+	ball.ball_direction = Vector2(0, -1)
+	ball.global_position = Vector2(0, -327)
+	ball._bounce_off_walls()
+	_report("撞上墙夹回+反射", ball.global_position.y == -325.0 and ball.ball_direction.y > 0.0,
+		"y=%.0f dy=%.2f" % [ball.global_position.y, ball.ball_direction.y])
+
+	ball.ball_direction = Vector2(-0.70710678, 0.70710678).normalized()
+	ball.global_position = Vector2(-512, 0)
+	ball._bounce_off_walls()
+	_report("斜撞墙切向保持", ball.ball_direction.x > 0.6 and ball.ball_direction.y > 0.6,
+		"d=%s" % str(ball.ball_direction))
+
+	ball.ball_direction = Vector2(1, 0)
+	ball.global_position = Vector2(0, 0)
+	ball._bounce_off_walls()
+	_report("场内不受影响", ball.ball_direction == Vector2(1, 0) and ball.global_position == Vector2(0, 0), "")
+
+	ball.use_wall_bounce = false
+	ball.ball_direction = Vector2(-1, 0)
+	ball.global_position = Vector2(-512, 0)
+	ball._bounce_off_walls()
+	_report("关墙反弹开关=不动", ball.global_position.x == -512.0 and ball.ball_direction.x < 0.0, "")
+	ball.use_wall_bounce = true
+
 	if _fails == 0:
-		print("[M1] RESULT: PASS")
+		print("[M2] RESULT: PASS")
 		get_tree().quit(0)
 	else:
-		print("[M1] RESULT: FAIL (fails=%d)" % _fails)
+		print("[M2] RESULT: FAIL (fails=%d)" % _fails)
 		get_tree().quit(1)
 
 
 func _report(test_name: String, ok: bool, detail: String) -> void:
 	if ok:
-		print("[M1] ✓ %s %s" % [test_name, detail])
+		print("[M2] ✓ %s %s" % [test_name, detail])
 	else:
 		_fails += 1
-		print("[M1] ✗ %s %s" % [test_name, detail])
+		print("[M2] ✗ %s %s" % [test_name, detail])

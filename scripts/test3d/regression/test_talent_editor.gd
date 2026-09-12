@@ -25,12 +25,27 @@ func _ready() -> void:
 	var card := editor_ctrl.canvas.get_node_or_null("Card_atk_1") as Button
 	var pos0: Vector2 = card.position
 	var world0: Vector2 = editor_ctrl._pos_to_vec(editor_ctrl._node_by_id("atk_1")["pos"])
-	# 拖节点：左键按下→移动→松开
-	_send_mouse(editor_ctrl, card.get_global_position() + Vector2(30, 20), MOUSE_BUTTON_LEFT, true)
-	for i in range(5):
-		_send_motion(editor_ctrl, card.get_global_position() + Vector2(30, 20) + Vector2(40, 25) * (i + 1))
+	# 拖节点：左键按下→快速右拖（20步每步等1帧，逐步采样防瞬移检测）
+	var start_mouse: Vector2 = card.get_global_position() + Vector2(30, 20)
+	var last_card_pos: Vector2 = card.position
+	var max_jump: float = 0.0
+	var jump_trace: Array = []
+	_send_mouse(editor_ctrl, start_mouse, MOUSE_BUTTON_LEFT, true)
+	await get_tree().process_frame
+	for i in range(20):
+		var target_mouse: Vector2 = start_mouse + Vector2(18, 6) * (i + 1)  # 快速右拖，总位移360
+		_send_motion(editor_ctrl, target_mouse)
 		await get_tree().process_frame
-	_send_mouse(editor_ctrl, card.get_global_position() + Vector2(30, 20) + Vector2(200, 125), MOUSE_BUTTON_LEFT, false)
+		var jump: float = card.position.distance_to(last_card_pos)
+		if jump > 40.0:  # 每步应只移动18px（zoom1），>40=瞬移
+			jump_trace.append("第%d步跳%.0fpx→%s" % [i + 1, jump, str(card.position)])
+		max_jump = maxf(max_jump, jump)
+		last_card_pos = card.position
+	_send_mouse(editor_ctrl, start_mouse + Vector2(360, 120), MOUSE_BUTTON_LEFT, false)
+	if jump_trace.size() > 0:
+		for t in jump_trace:
+			print("[Edt][TRACE] ", t)
+	print("[Edt] 最大单步跳变=%.0fpx" % max_jump)
 	await get_tree().create_timer(0.2).timeout
 	var moved: bool = card.position.distance_to(pos0) > 100.0
 	var world_moved: bool = editor_ctrl._pos_to_vec(editor_ctrl._node_by_id("atk_1")["pos"]).distance_to(world0) > 100.0

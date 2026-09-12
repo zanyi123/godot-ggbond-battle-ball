@@ -98,11 +98,22 @@ func setup(p_char_id: String, p_team_color: Color) -> void:
 	add_child(hand)
 	_hand_proxy = hand
 
+	# ========== 6. 剔除模型内嵌光源（部分 Idle.fbx 带制作残留灯节点）==========
+	_strip_embedded_lights(self)
+
 	# 延迟播放 idle（等进树）
 	if _anim_player != null and _anim_player.has_animation("idle"):
 		call_deferred("_play_initial_idle")
 
 	print("[PlayerProxy3D] ✅ %s 构建 mesh=%s anims=%s" % [char_id, _mesh_ok, get_anim_names()])
+
+
+## 剔除模型 FBX 内嵌光源（部分 Idle.fbx 带制作残留灯节点，球员跳跃升空后灯跟着升空，
+## 在地面打出大片异常光斑——2026-09-12 主人实测"持球跳跃变光源"根因）
+func _strip_embedded_lights(root: Node) -> void:
+	for light in root.find_children("*", "Light3D", true, false):
+		(light as Light3D).visible = false
+		(light as Node).queue_free()
 
 
 func _build_ring_only() -> void:

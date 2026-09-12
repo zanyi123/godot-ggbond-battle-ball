@@ -619,7 +619,7 @@ func _on_canvas_draw() -> void:
 		var sp := world_to_screen(anchors[d])
 		var fs := 56  # 固定字号（可读性优先）
 		var col: Color = DIR_COLOR.get(d, Color.WHITE)
-		col.a = 0.16
+		col.a = 0.08  # 水印淡化：靠近节点时不误认为节点内容
 		canvas.draw_string(ThemeDB.fallback_font, sp - Vector2(fs, -fs * 0.8), d, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 	# 前置连线（线性延伸）
 	for n in _nodes():
@@ -869,11 +869,10 @@ func _input(event: InputEvent) -> void:
 	# ---- 鼠标 ----
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		var pos := get_global_mouse_position()  # 画布坐标系（自带 stretch 变换，真实鼠标必备）
+		var pos: Vector2 = mb.position  # 事件自身坐标（_input 阶段已是内容系，合成/真实鼠标统一）
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
 				var hit := _hit_test_card(pos)
-				print("[Diag] 左键按下 pos=%s global_mouse=%s hit=%s" % [str(mb.position), str(get_global_mouse_position()), hit.name if hit != null else "无"])
 				if hit != null:
 					# 命中节点 → 拖节点
 					_drag_card = hit
@@ -904,20 +903,20 @@ func _input(event: InputEvent) -> void:
 					canvas.queue_redraw()
 				_panning = false
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
-			_apply_zoom(get_global_mouse_position(), 1.1)
+			_apply_zoom(mb.position, 1.1)
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
-			_apply_zoom(get_global_mouse_position(), 1.0 / 1.1)
+			_apply_zoom(mb.position, 1.0 / 1.1)
 		elif mb.button_index in [MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT]:
 			_panning = mb.pressed
-			_pan_start = get_global_mouse_position()
+			_pan_start = mb.position
 			_view_start = view_pos
 			if mb.pressed:
 				get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion:
-		# 拖拽/平移一律用画布系鼠标位置（event.position 在 stretch 下会偏移）
-		var mouse := get_global_mouse_position()
+		var mouse: Vector2 = (event as InputEventMouseMotion).position
 		if _drag_card != null:
-			_drag_card.position = mouse - _drag_offset
+			# offset = 按下时"卡片位置-鼠标位置"（抓取点偏移），跟随=鼠标+offset
+			_drag_card.position = mouse + _drag_offset
 			_save_card_pos(_drag_card)
 			canvas.queue_redraw()
 		elif _panning:

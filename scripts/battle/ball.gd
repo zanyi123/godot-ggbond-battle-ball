@@ -32,13 +32,50 @@ var _hit_player_ids: Dictionary = {}
 ## 场地弹性系数（FieldPhysicsManager）作为技能加成叠加，见 _get_effective_bounce_e()
 var bounce_coefficient: float = 1.0
 
+## ==================== M2 蓝墙反弹 ====================
+const WALL_BOUNCE_E: float = 1.0  # 墙反弹恢复系数（1=完全反弹，与球天然弹性口径一致）
+
+## 撞竖直蓝墙：越界即夹回边界并反射方向（v_n' = -e×v_n，切向保持）
+## 水平反射与 z 弹道/技能豁免无关——追踪/回旋球同样受墙约束
+## 反弹后球恒在场内，"出界归还球权"仅作兜底不再触发（蓝墙内不出界）
+func _bounce_off_walls() -> void:
+	if not use_wall_bounce:
+		return
+	var pos := global_position
+	var d := ball_direction
+	var hit_normal := Vector2.ZERO
+	if pos.x < FIELD_X_MIN and d.x < 0.0:
+		pos.x = FIELD_X_MIN
+		d.x = -d.x
+		hit_normal = Vector2.RIGHT
+	elif pos.x > FIELD_X_MAX and d.x > 0.0:
+		pos.x = FIELD_X_MAX
+		d.x = -d.x
+		hit_normal = Vector2.LEFT
+	if pos.y < FIELD_Y_MIN and d.y < 0.0:
+		pos.y = FIELD_Y_MIN
+		d.y = -d.y
+		hit_normal = Vector2.DOWN
+	elif pos.y > FIELD_Y_MAX and d.y > 0.0:
+		pos.y = FIELD_Y_MAX
+		d.y = -d.y
+		hit_normal = Vector2.UP
+	if hit_normal != Vector2.ZERO:
+		ball_direction = d.normalized()
+		if WALL_BOUNCE_E < 1.0:
+			ball_speed *= WALL_BOUNCE_E  # e<1 时每次撞墙衰减
+		global_position = pos
+		print("[Ball] 撞蓝墙反弹! 法线%s 方向%s" % [hit_normal, ball_direction])
+
+
 ## ==================== M1 弹道物理（水平场地弹跳，2026-09-12） ====================
 ## z 单位=像素（单位制铁律：与 3D 世界 1:1）。出手高 55 与 3D 持球高一致。
 ## 总开关关闭时 z 完全不积分，行为=旧版恒高直飞。
-var use_ballistic_physics: bool = true   # 总开关（测试可切，模拟可关）
+var use_ballistic_physics: bool = false  # 总开关（默认关：飞行球暂不落地恒高飞行=旧观感；弹跳框架保留可随时开）
 var ball_z: float = 0.0                  # 球离地高度（像素，向上为正）
 var ball_z_vel: float = 0.0              # 垂直速度（px/s）
 var bounce_count: int = 0                # 已落地弹跳次数
+var use_wall_bounce: bool = true         # M2 蓝墙反弹开关（水平反射，与 z 弹道无关）
 const GRAVITY_Z: float = 900.0           # 重力加速度 px/s²
 const BALL_HEIGHT_CARRY: float = 55.0    # 出手高度（3D铁律：持球55）
 const BOUNCE_SPEED_MIN: float = 80.0     # 反弹速度低于此值→贴地滚动
@@ -177,6 +214,10 @@ func _physics_process(delta: float) -> void:
 
 	# === 检测障碍物碰撞 ===
 	_check_obstacle_collision()
+
+	# === M2 蓝墙反弹：撞场界夹回反射（墙是场地实体，与 z 弹道/技能豁免无关）===
+	if use_wall_bounce:
+		_bounce_off_walls()
 
 	# === 检测出界 ===
 	if _is_out_of_bounds():
