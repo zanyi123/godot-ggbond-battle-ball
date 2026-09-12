@@ -142,6 +142,9 @@ func _ready() -> void:
 	add_child(event_bus)
 	event_bus.add_to_group("battle_event_bus")
 	event_bus.wire_sources(ball_node, team_a_players + team_b_players)
+	# E6-1：sim 模式开启事件账本（比赛结束落盘 sim_results/eventlog_seedN.json）
+	if auto_simulate:
+		event_bus.log_enabled = true
 
 	# === 3D 场景桥接层（USE_3D_SCENE=true 时激活；2D 逻辑零改动，bridge 只读同步）===
 	if USE_3D_SCENE and not auto_simulate:  # sim 模拟强制纯 2D（基线可比）
@@ -1833,8 +1836,34 @@ func _on_sim_match_ended(score_a: int, score_b: int, _result: String) -> void:
 		match_stats.stop_recording()
 		match_stats.set_final_score(score_a, score_b)
 		match_stats.print_report()
+	# E6-1：事件账本落盘
+	_dump_event_log(score_a, score_b)
 	print("[Sim] 比赛结束，退出")
 	get_tree().quit()
+
+
+func _dump_event_log(score_a: int, score_b: int) -> void:
+	var bus = get_tree().get_first_node_in_group("battle_event_bus")
+	if bus == null or not bus.log_enabled:
+		return
+	var seed_id := 0
+	for arg in OS.get_cmdline_args():
+		if arg.begins_with("--seed="):
+			seed_id = int(arg.substr(7))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://sim_results"))
+	var out := {
+		"seed": seed_id,
+		"score": "%d-%d" % [score_a, score_b],
+		"duration": match_duration,
+		"category_stats": bus.category_stats(),
+		"events": bus.dump_log(),
+	}
+	var path := "res://sim_results/eventlog_seed%d.json" % seed_id
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify(out, "	"))
+		f.close()
+		print("[E6] 📜 事件账本: %s（%d 条事件）" % [path, out["events"].size()])
 
 
 func _auto_equip_spirits_for_sim() -> void:

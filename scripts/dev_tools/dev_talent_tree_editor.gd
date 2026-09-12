@@ -53,6 +53,7 @@ var inp_skill: OptionButton          ## 解锁技能（中文名下拉）
 var _effect_rows: VBoxContainer      ## 效果标签动态行容器
 var _effect_inputs: Array = []       ## [{opt, val, dur}]
 var _tag_catalog: Array = []         ## [{id, name}] 来自 tags_registry
+var _audit_status: Dictionary = {}   ## {tag_id: {name, verdict}} E6 审计结果
 var _skill_catalog: Array = []       ## [{id, name}] 来自 skills.json
 var _node_id_label: Label
 
@@ -88,7 +89,18 @@ func _ready() -> void:
 ## ==================== 数据 ====================
 
 ## 加载标签/技能中文名目录（下拉快速选择，免手打英文 id）
+## 加载 tag 审计状态（E6 报告产物，下拉标注 ✅/⚠/❌ 防静默无效）
+func _load_audit_status() -> void:
+	_audit_status.clear()
+	var f := FileAccess.open("res://docs/tag_audit_status.json", FileAccess.READ)
+	if f:
+		var parsed = JSON.parse_string(f.get_as_text())
+		f.close()
+		if parsed is Dictionary:
+			_audit_status = parsed
+
 func _load_catalogs() -> void:
+	_load_audit_status()
 	_tag_catalog.clear()
 	var f := FileAccess.open("res://data/spirits/tags_registry.json", FileAccess.READ)
 	if f:
@@ -450,8 +462,15 @@ func _add_effect_row(tag_id: String, val: float, dur: float) -> void:
 	var opt := OptionButton.new()
 	opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	opt.custom_minimum_size = Vector2(150, 26)
+	var mark := ""
 	for t in _tag_catalog:
-		opt.add_item(t["name"])
+		var st := str(_audit_status.get(t["id"], {}).get("verdict", ""))
+		match st:
+			"OK": mark = "✅ "
+			"WARN": mark = "⚠ "
+			"FAIL": mark = "❌ "
+			_: mark = ""
+		opt.add_item(mark + t["name"])
 		opt.set_item_metadata(opt.item_count - 1, t["id"])
 	for i in range(opt.item_count):
 		if str(opt.get_item_metadata(i)) == tag_id:

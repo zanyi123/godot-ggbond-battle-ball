@@ -86,6 +86,17 @@ func _on_player_defeated(p: Node2D) -> void:
 func dump_log() -> Array:
 	return _log.duplicate(true)
 
+## E6：按大类聚合统计（事件账本摘要）
+func category_stats() -> Dictionary:
+	var out: Dictionary = {}
+	for entry in _log:
+		var ev_name := str(entry.get("event", "?"))
+		var category := ev_name.split("_")[0]  # HIT/ATTACK/DEFEND/BUFF/STATUS/RESOURCE
+		if not out.has(category):
+			out[category] = {}
+		out[category][ev_name] = int(out[category].get(ev_name, 0)) + 1
+	return out
+
 func clear_log() -> void:
 	_log.clear()
 

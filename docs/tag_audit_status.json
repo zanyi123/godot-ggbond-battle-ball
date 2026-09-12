@@ -1,0 +1,322 @@
+{
+	"ball_avoid": {
+		"name": "避障",
+		"verdict": "FAIL"
+	},
+	"ball_boomerang": {
+		"name": "回旋",
+		"verdict": "OK"
+	},
+	"ball_dmg_down_flat": {
+		"name": "减伤(固定)",
+		"verdict": "OK"
+	},
+	"ball_dmg_down_pct": {
+		"name": "减伤(%)",
+		"verdict": "OK"
+	},
+	"ball_dmg_up_flat": {
+		"name": "增伤(固定)",
+		"verdict": "OK"
+	},
+	"ball_dmg_up_pct": {
+		"name": "增伤(%)",
+		"verdict": "OK"
+	},
+	"ball_lockon": {
+		"name": "精准锁定",
+		"verdict": "OK"
+	},
+	"ball_penetrate": {
+		"name": "穿透",
+		"verdict": "OK"
+	},
+	"ball_range_down": {
+		"name": "范围缩小",
+		"verdict": "OK"
+	},
+	"ball_range_up": {
+		"name": "范围扩大",
+		"verdict": "OK"
+	},
+	"ball_speed_down_flat": {
+		"name": "减速(固定)",
+		"verdict": "OK"
+	},
+	"ball_speed_down_pct": {
+		"name": "减速(%)",
+		"verdict": "OK"
+	},
+	"ball_speed_up_flat": {
+		"name": "加速(固定)",
+		"verdict": "OK"
+	},
+	"ball_speed_up_pct": {
+		"name": "加速(%)",
+		"verdict": "OK"
+	},
+	"ball_spread": {
+		"name": "扩散",
+		"verdict": "FAIL"
+	},
+	"ball_straight": {
+		"name": "直行",
+		"verdict": "OK"
+	},
+	"ball_tracking": {
+		"name": "追踪",
+		"verdict": "OK"
+	},
+	"field_illusion_add": {
+		"name": "幻象生成",
+		"verdict": "WARN"
+	},
+	"field_illusion_clear": {
+		"name": "幻象破除",
+		"verdict": "WARN"
+	},
+	"field_obs_add": {
+		"name": "创造障碍",
+		"verdict": "WARN"
+	},
+	"field_obs_clear": {
+		"name": "清除障碍",
+		"verdict": "WARN"
+	},
+	"field_terra_change": {
+		"name": "地形改变",
+		"verdict": "WARN"
+	},
+	"field_terra_revert": {
+		"name": "地形恢复",
+		"verdict": "WARN"
+	},
+	"field_zone_boost": {
+		"name": "加速区",
+		"verdict": "WARN"
+	},
+	"field_zone_clear": {
+		"name": "区域清除",
+		"verdict": "WARN"
+	},
+	"field_zone_danger": {
+		"name": "危险区",
+		"verdict": "WARN"
+	},
+	"field_zone_mark": {
+		"name": "区域标注",
+		"verdict": "WARN"
+	},
+	"field_zone_safe": {
+		"name": "安全区",
+		"verdict": "WARN"
+	},
+	"field_zone_slow": {
+		"name": "减速区",
+		"verdict": "WARN"
+	},
+	"player_atk_down_flat": {
+		"name": "攻击降低(固定)",
+		"verdict": "OK"
+	},
+	"player_atk_down_pct": {
+		"name": "攻击降低(%)",
+		"verdict": "OK"
+	},
+	"player_atk_up_flat": {
+		"name": "攻击提升(固定)",
+		"verdict": "OK"
+	},
+	"player_atk_up_pct": {
+		"name": "攻击提升(%)",
+		"verdict": "OK"
+	},
+	"player_cc_immune": {
+		"name": "免疫控制",
+		"verdict": "OK"
+	},
+	"player_def_down_flat": {
+		"name": "防御降低(固定)",
+		"verdict": "OK"
+	},
+	"player_def_down_pct": {
+		"name": "防御降低(%)",
+		"verdict": "OK"
+	},
+	"player_def_up_flat": {
+		"name": "防御提升(固定)",
+		"verdict": "OK"
+	},
+	"player_def_up_pct": {
+		"name": "防御提升(%)",
+		"verdict": "OK"
+	},
+	"player_disarm": {
+		"name": "缴械",
+		"verdict": "OK"
+	},
+	"player_energy_cost_flat": {
+		"name": "能量消耗(固定)",
+		"verdict": "OK"
+	},
+	"player_energy_cost_pct": {
+		"name": "能量消耗(%)",
+		"verdict": "OK"
+	},
+	"player_energy_gain_flat": {
+		"name": "能量恢复(固定)",
+		"verdict": "OK"
+	},
+	"player_energy_gain_pct": {
+		"name": "能量恢复(%)",
+		"verdict": "OK"
+	},
+	"player_energy_max_down_flat": {
+		"name": "最大降低(固定)",
+		"verdict": "OK"
+	},
+	"player_energy_max_down_pct": {
+		"name": "最大降低(%)",
+		"verdict": "OK"
+	},
+	"player_energy_max_up_flat": {
+		"name": "最大提升(固定)",
+		"verdict": "OK"
+	},
+	"player_energy_max_up_pct": {
+		"name": "最大提升(%)",
+		"verdict": "OK"
+	},
+	"player_hp_damage_flat": {
+		"name": "掉血(固定)",
+		"verdict": "OK"
+	},
+	"player_hp_damage_pct": {
+		"name": "掉血(%)",
+		"verdict": "OK"
+	},
+	"player_hp_dot": {
+		"name": "持续掉血",
+		"verdict": "OK"
+	},
+	"player_hp_heal_flat": {
+		"name": "恢复(固定)",
+		"verdict": "OK"
+	},
+	"player_hp_heal_pct": {
+		"name": "恢复(%)",
+		"verdict": "OK"
+	},
+	"player_hp_regen": {
+		"name": "持续恢复",
+		"verdict": "OK"
+	},
+	"player_invincible": {
+		"name": "无敌",
+		"verdict": "OK"
+	},
+	"player_move_boost": {
+		"name": "加速",
+		"verdict": "OK"
+	},
+	"player_move_slow": {
+		"name": "减速",
+		"verdict": "OK"
+	},
+	"player_res_down_flat": {
+		"name": "韧性降低(固定)",
+		"verdict": "OK"
+	},
+	"player_res_down_pct": {
+		"name": "韧性降低(%)",
+		"verdict": "OK"
+	},
+	"player_res_up_flat": {
+		"name": "韧性提升(固定)",
+		"verdict": "OK"
+	},
+	"player_res_up_pct": {
+		"name": "韧性提升(%)",
+		"verdict": "OK"
+	},
+	"player_return": {
+		"name": "返回",
+		"verdict": "OK"
+	},
+	"player_reveal": {
+		"name": "显形",
+		"verdict": "OK"
+	},
+	"player_root": {
+		"name": "定身",
+		"verdict": "OK"
+	},
+	"player_silence": {
+		"name": "沉默",
+		"verdict": "OK"
+	},
+	"player_spd_down_flat": {
+		"name": "速度降低(固定)",
+		"verdict": "OK"
+	},
+	"player_spd_down_pct": {
+		"name": "速度降低(%)",
+		"verdict": "OK"
+	},
+	"player_spd_up_flat": {
+		"name": "速度提升(固定)",
+		"verdict": "OK"
+	},
+	"player_spd_up_pct": {
+		"name": "速度提升(%)",
+		"verdict": "OK"
+	},
+	"player_spirit_cd_down": {
+		"name": "冷却缩短",
+		"verdict": "OK"
+	},
+	"player_spirit_cd_up": {
+		"name": "冷却延长",
+		"verdict": "OK"
+	},
+	"player_spirit_cost_down": {
+		"name": "减少消耗",
+		"verdict": "OK"
+	},
+	"player_spirit_cost_up": {
+		"name": "增加消耗",
+		"verdict": "OK"
+	},
+	"player_spirit_double": {
+		"name": "双倍效果",
+		"verdict": "OK"
+	},
+	"player_spirit_half": {
+		"name": "效果减半",
+		"verdict": "OK"
+	},
+	"player_spirit_uses_up": {
+		"name": "增加使用次数",
+		"verdict": "OK"
+	},
+	"player_stealth": {
+		"name": "隐身",
+		"verdict": "OK"
+	},
+	"player_stun": {
+		"name": "眩晕",
+		"verdict": "OK"
+	},
+	"player_teleport": {
+		"name": "传送",
+		"verdict": "OK"
+	},
+	"player_unroot": {
+		"name": "自由",
+		"verdict": "OK"
+	},
+	"player_vulnerable": {
+		"name": "易伤",
+		"verdict": "OK"
+	}
+}
