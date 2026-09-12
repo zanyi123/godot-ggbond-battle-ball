@@ -32,11 +32,24 @@ var _hit_player_ids: Dictionary = {}
 ## 场地弹性系数（FieldPhysicsManager）作为技能加成叠加，见 _get_effective_bounce_e()
 var bounce_coefficient: float = 1.0
 
+## ==================== M4 高度命中 ====================
+
+## 高度窗口：球垂直区间 [z-HALF, z+HALF] 与目标命中区间重叠才可命中/接球
+## 恒高球(55±12)打得到站立者、打不到跳跃顶点者；lob 高飞段需跳起拦截
+func _can_hit_target_at(target: Node) -> bool:
+	if target == null or not is_instance_valid(target):
+		return false
+	if not target.has_method("get_hit_z_range"):
+		return true  # 无高度接口的对象按旧规则可命中
+	var r: Vector2 = target.get_hit_z_range()
+	return (ball_z - BALL_HIT_HALF) < r.y and (ball_z + BALL_HIT_HALF) > r.x
+
+
 ## ==================== M2 蓝墙反弹 ====================
 const WALL_BOUNCE_E: float = 1.0  # 墙反弹恢复系数（1=完全反弹，与球天然弹性口径一致）
 
 ## 撞竖直蓝墙：越界即夹回边界并反射方向（v_n' = -e×v_n，切向保持）
-## 水平反射与 z 弹道/技能豁免无关——追踪/回旋球同样受墙约束
+## 边界=3D 蓝墙实测位（±650/±390），水平反射与 z 弹道/技能豁免无关——追踪/回旋球同样受墙约束
 ## 反弹后球恒在场内，"出界归还球权"仅作兜底不再触发（蓝墙内不出界）
 func _bounce_off_walls() -> void:
 	if not use_wall_bounce:
@@ -44,20 +57,20 @@ func _bounce_off_walls() -> void:
 	var pos := global_position
 	var d := ball_direction
 	var hit_normal := Vector2.ZERO
-	if pos.x < FIELD_X_MIN and d.x < 0.0:
-		pos.x = FIELD_X_MIN
+	if pos.x < WALL_X_MIN and d.x < 0.0:
+		pos.x = WALL_X_MIN
 		d.x = -d.x
 		hit_normal = Vector2.RIGHT
-	elif pos.x > FIELD_X_MAX and d.x > 0.0:
-		pos.x = FIELD_X_MAX
+	elif pos.x > WALL_X_MAX and d.x > 0.0:
+		pos.x = WALL_X_MAX
 		d.x = -d.x
 		hit_normal = Vector2.LEFT
-	if pos.y < FIELD_Y_MIN and d.y < 0.0:
-		pos.y = FIELD_Y_MIN
+	if pos.y < WALL_Y_MIN and d.y < 0.0:
+		pos.y = WALL_Y_MIN
 		d.y = -d.y
 		hit_normal = Vector2.DOWN
-	elif pos.y > FIELD_Y_MAX and d.y > 0.0:
-		pos.y = FIELD_Y_MAX
+	elif pos.y > WALL_Y_MAX and d.y > 0.0:
+		pos.y = WALL_Y_MAX
 		d.y = -d.y
 		hit_normal = Vector2.UP
 	if hit_normal != Vector2.ZERO:
@@ -95,6 +108,18 @@ const FIELD_X_MIN: float = -510.0
 const FIELD_X_MAX: float = 510.0
 const FIELD_Y_MIN: float = -325.0
 const FIELD_Y_MAX: float = 325.0
+
+# M2 蓝墙位置（3D 蓝墙 Border mesh 实测 x=±650 / z=±390，即蓝色禁区外框 1300×780；
+# 注意区分 FIELD_* ±510/±325=外场白线——反弹必须贴 3D 蓝墙，不能用外场线）
+const WALL_X_MIN: float = -650.0
+const WALL_X_MAX: float = 650.0
+const WALL_Y_MIN: float = -390.0
+const WALL_Y_MAX: float = 390.0
+
+# M4 高度命中（球垂直命中半高：球半径≈10.5+判定余量）
+const BALL_HIT_HALF: float = 12.0
+# M4 高抛轨迹（上抛初速：顶点≈55+50px，越过站立球员头顶，需跳跃拦截）
+const LOB_INITIAL_VZ: float = 300.0
 
 signal ball_caught(player: CharacterBody2D)
 signal ball_hit_player(player: CharacterBody2D, damage: float)
@@ -233,7 +258,12 @@ func _physics_process(delta: float) -> void:
 
 
 func _is_out_of_bounds() -> bool:
-	return global_position.x < FIELD_X_MIN or global_position.x > FIELD_X_MAX or global_position.y < FIELD_Y_MIN or global_position.y > FIELD_Y_MAX
+	# M2 墙反弹开启：蓝墙内不出界，判定边界=3D蓝墙位（仅兜底，反弹后正常永不触发）
+	if use_wall_bounce:
+		return global_position.x < WALL_X_MIN or global_position.x > WALL_X_MAX \
+			or global_position.y < WALL_Y_MIN or global_position.y > WALL_Y_MAX
+	return global_position.x < FIELD_X_MIN or global_position.x > FIELD_X_MAX \
+		or global_position.y < FIELD_Y_MIN or global_position.y > FIELD_Y_MAX
 
 
 func _on_ball_out_of_field() -> void:
@@ -312,6 +342,10 @@ func _on_body_entered(body: Node2D) -> void:
 		return
 
 	if not body.has_method("take_damage"):
+		return
+
+	# === M4 高度窗口：球从头顶飞过不触发命中/接球 ===
+	if not _can_hit_target_at(body):
 		return
 
 	var player: CharacterBody2D = body
@@ -495,6 +529,9 @@ func _on_ball_stopped() -> void:
 		if p.is_defeated:
 			continue
 		if _hit_player_ids.has(p.get_instance_id()):
+			continue
+		# M4 高度窗口：跳起者躲过贴地滚球
+		if not _can_hit_target_at(p):
 			continue
 		var dist: float = global_position.distance_to(p.global_position)
 		if dist < nearest_dist:
@@ -820,7 +857,10 @@ func _get_skill_data(skill_id: String) -> Dictionary:
 
 ## 技能接管判定（M0 球侧豁免）：技能定义轨迹的球暂时无视重力/弹跳
 ## 接管 = 弧线等非直行轨迹、追踪、回旋；穿透/精准锁定/直行保护仍是普通弹道球
+## lob 高抛（M4）吃重力走抛物线+落地弹跳，不算接管
 func _is_skill_controlled() -> bool:
+	if trajectory_type == "lob":
+		return false
 	if trajectory_type != "straight":
 		return true
 	if tag_effect_handler == null:
@@ -832,11 +872,19 @@ func _is_skill_controlled() -> bool:
 	return false
 
 
+## M4 高抛轨迹：launch() 后由技能/调用方调用——上抛初速+抛物线+落地弹跳
+## 高飞段（z>62）越过站立球员头顶，需跳起拦截；落地转碰碰球
+func set_lob_trajectory() -> void:
+	trajectory_type = "lob"
+	ball_z = maxf(ball_z, BALL_HEIGHT_CARRY)
+	ball_z_vel = LOB_INITIAL_VZ
+
+
 ## z 轴重力积分 + 落地弹跳。只动 z，不改变水平规则（max_flight_distance 照旧），
 ## 水平飞行与球权流转与旧版完全一致。
 ## 解析式积分（非欧拉）：触地时刻与触地速度精确求解，e=1.0 时能量严格守恒（完全反弹不衰减）
 func _step_ballistic_z(delta: float) -> void:
-	if not use_ballistic_physics:
+	if not use_ballistic_physics and trajectory_type != "lob":
 		return
 	var remaining: float = delta
 	var guard: int = 0
@@ -964,6 +1012,9 @@ func _check_player_collision_distance() -> void:
 		if p == attacker_player:
 			continue
 		if p.is_defeated:
+			continue
+		# M4 高度窗口：跳起的球员从球上方掠过不命中
+		if not _can_hit_target_at(p):
 			continue
 		var dist: float = global_position.distance_to(p.global_position)
 		if dist <= detection_range:

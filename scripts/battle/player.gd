@@ -213,6 +213,7 @@ const JUMP_INITIAL_VZ: float = 380.0  # 起跳初速 → 跳高≈80px（v²/2g�
 const JUMP_ENDURANCE_COST: float = 8.0    # 跳跃耐力消耗（耐力≠血量stamina，独立资源）
 const JUMP_ENDURANCE_REGEN: float = 12.0  # 耐力恢复速率（/s），保证可反复跳跃
 const JUMP_COOLDOWN: float = 1.5      # 跳跃冷却（s）
+const PLAYER_HIT_HEIGHT: float = 50.0  # M4 站立可命中身高（≈模型高 49.86，球从头顶飞过打不到）
 
 # 角色(主攻/防御/辅助)
 var role: String = "attacker"
@@ -1059,6 +1060,12 @@ func is_airborne() -> bool:
 func _regen_endurance(delta: float) -> void:
 	if endurance < max_endurance:
 		endurance = minf(max_endurance, endurance + JUMP_ENDURANCE_REGEN * delta)
+
+
+## M4 命中/接球垂直区间 [底, 顶]：站立 [0,50]，跳跃顶点 [77,127]
+## 球的高度窗口与此区间有重叠才可命中/接球（跳起可躲低球/拦高球）
+func get_hit_z_range() -> Vector2:
+	return Vector2(z_height, z_height + PLAYER_HIT_HEIGHT)
 
 
 ## z 轴积分：起跳→顶点→落地（欧拉足够：单次跳跃无长程能量累积问题）

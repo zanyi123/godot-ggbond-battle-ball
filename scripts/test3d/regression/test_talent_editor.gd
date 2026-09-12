@@ -87,6 +87,14 @@ func _ready() -> void:
 	print("[Edt][%s] 缩放后节点与轴零漂移 (最大%.2fpx)" % ["PASS" if ok_drift else "FAIL", drift])
 	all_ok = all_ok and ok_drift
 
+	# 命中一致性（左上枢轴缩放）：zoom 后点"稳如泰山"卡片中心 → 必选中 def_4
+	var target_card := editor_ctrl.canvas.get_node_or_null("Card_def_4") as Button
+	var hit_center: Vector2 = target_card.position + target_card.size * editor_ctrl.zoom / 2.0
+	var hit = editor_ctrl._hit_test_card(hit_center)
+	var ok_hit: bool = hit != null and hit.name == "Card_def_4"
+	print("[Edt][%s] 缩放后命中一致（点稳如泰山中心选中def_4）" % ["PASS" if ok_hit else "FAIL"])
+	all_ok = all_ok and ok_hit
+
 	# 左键空白拖动 = 平移（业内常规）
 	var view1: Vector2 = editor_ctrl.view_pos
 	var sel0: String = editor_ctrl.selected_id

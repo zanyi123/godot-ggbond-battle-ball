@@ -586,7 +586,10 @@ func _make_card(n: Dictionary) -> void:
 	card.name = "Card_" + id
 	card.text = "%s\n%s (cost %d)" % [str(n.get("name", id)), id, int(n.get("cost", 1))]
 	card.position = world_to_screen(_pos_to_vec(n.get("pos", WORLD_CENTER)))
-	card.size = CARD_SIZE  # 固定屏幕尺寸（不随 zoom 缩放）——position=视觉位置严格1:1
+	card.size = CARD_SIZE
+	# 随 zoom 缩放，枢轴=左上角（默认零）：视觉矩形=position..position+size*zoom
+	# （此前漂移 bug 的根源是中心枢轴 pivot_offset=半尺寸，左上枢轴无此问题）
+	card.scale = Vector2(zoom, zoom)
 	card.add_theme_font_size_override("font_size", 12)
 	var col: Color = DIR_COLOR.get(dir, Color.WHITE)
 	card.add_theme_color_override("font_color", col)
@@ -661,14 +664,14 @@ func _update_hud() -> void:
 
 ## ==================== 交互 ====================
 
-## 屏幕点 → 最上层命中卡片
-## 用 get_global_rect（自带 scale 修正）——手算 size*zoom 在中心枢轴缩放下会错位
+## 屏幕点 → 最上层命中卡片（左上枢轴缩放：矩形=position..position+size*zoom，与视觉严格一致）
 func _hit_test_card(screen_pos: Vector2) -> Button:
 	var found: Button = null
 	for c in canvas.get_children():
 		if c is Button and c.visible:
 			var b := c as Button
-			if b.get_global_rect().has_point(screen_pos):
+			var rect := Rect2(b.position, b.size * zoom)
+			if rect.has_point(screen_pos):
 				found = b  # 取最后=最上层
 	return found
 
@@ -685,6 +688,7 @@ func _refresh_card_positions() -> void:
 		var card := canvas.get_node_or_null(NodePath("Card_" + str(n.get("id"))))
 		if card != null:
 			card.position = world_to_screen(_pos_to_vec(n.get("pos", WORLD_CENTER)))
+			card.scale = Vector2(zoom, zoom)
 
 func _save_card_pos(card: Button) -> void:
 	var id := card.name.trim_prefix("Card_")

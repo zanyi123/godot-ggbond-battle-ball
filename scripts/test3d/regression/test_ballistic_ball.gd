@@ -117,27 +117,27 @@ func _ready() -> void:
 	else:
 		_report("场地弹性加成封顶(1.0+0.3=1.0)", false, "FieldPhysicsManager 未找到")
 
-	# ⑨ 蓝墙反弹（帧间越界检测：球心越过界线才夹回反射）
+	# ⑨ 蓝墙反弹（边界=3D蓝墙实测 ±650/±390；帧间越界检测：球心越过界线才夹回反射）
 	ball.ball_direction = Vector2(-1, 0)
-	ball.global_position = Vector2(-512, 0)
+	ball.global_position = Vector2(-652, 0)
 	ball._bounce_off_walls()
-	_report("撞左墙夹回+反射", ball.global_position.x == -510.0 and ball.ball_direction.x > 0.0,
+	_report("撞左墙夹回+反射(±650)", ball.global_position.x == -650.0 and ball.ball_direction.x > 0.0,
 		"x=%.0f dx=%.2f" % [ball.global_position.x, ball.ball_direction.x])
 
 	ball.ball_direction = Vector2(1, 0)
-	ball.global_position = Vector2(512, 0)
+	ball.global_position = Vector2(652, 0)
 	ball._bounce_off_walls()
-	_report("撞右墙夹回+反射", ball.global_position.x == 510.0 and ball.ball_direction.x < 0.0,
+	_report("撞右墙夹回+反射", ball.global_position.x == 650.0 and ball.ball_direction.x < 0.0,
 		"x=%.0f dx=%.2f" % [ball.global_position.x, ball.ball_direction.x])
 
 	ball.ball_direction = Vector2(0, -1)
-	ball.global_position = Vector2(0, -327)
+	ball.global_position = Vector2(0, -392)
 	ball._bounce_off_walls()
-	_report("撞上墙夹回+反射", ball.global_position.y == -325.0 and ball.ball_direction.y > 0.0,
+	_report("撞上墙夹回+反射(±390)", ball.global_position.y == -390.0 and ball.ball_direction.y > 0.0,
 		"y=%.0f dy=%.2f" % [ball.global_position.y, ball.ball_direction.y])
 
 	ball.ball_direction = Vector2(-0.70710678, 0.70710678).normalized()
-	ball.global_position = Vector2(-512, 0)
+	ball.global_position = Vector2(-652, 0)
 	ball._bounce_off_walls()
 	_report("斜撞墙切向保持", ball.ball_direction.x > 0.6 and ball.ball_direction.y > 0.6,
 		"d=%s" % str(ball.ball_direction))
@@ -149,10 +149,41 @@ func _ready() -> void:
 
 	ball.use_wall_bounce = false
 	ball.ball_direction = Vector2(-1, 0)
-	ball.global_position = Vector2(-512, 0)
+	ball.global_position = Vector2(-652, 0)
 	ball._bounce_off_walls()
-	_report("关墙反弹开关=不动", ball.global_position.x == -512.0 and ball.ball_direction.x < 0.0, "")
+	_report("关墙反弹开关=不动", ball.global_position.x == -652.0 and ball.ball_direction.x < 0.0, "")
 	ball.use_wall_bounce = true
+
+	# ⑩ M4 高度命中窗口（用场上真实球员验证）
+	var p0 = arena.team_a_players[0]
+	p0.z_height = 0.0
+	ball.ball_z = 55.0
+	_report("恒高球打得到站立者", ball._can_hit_target_at(p0) == true, "z=55 vs [0,50]")
+	p0.z_height = 77.0
+	_report("跳跃顶点躲开恒高球", ball._can_hit_target_at(p0) == false, "z=55 vs [77,127]")
+	p0.z_height = 30.0
+	_report("起跳中仍会被击中", ball._can_hit_target_at(p0) == true, "z=55 vs [30,80]")
+	p0.z_height = 0.0
+
+	# ⑪ M4 高抛轨迹
+	ball.trajectory_type = "straight"
+	ball.ball_z = 55.0
+	ball.ball_z_vel = 0.0
+	ball.bounce_count = 0
+	ball.set_lob_trajectory()
+	_report("lob非技能接管(吃重力)", ball._is_skill_controlled() == false and ball.ball_z_vel > 0.0,
+		"vz=%.0f" % ball.ball_z_vel)
+	var lob_rose: bool = false
+	var lob_bounced: bool = false
+	for i in range(600):
+		ball._step_ballistic_z(1.0 / 60.0)
+		if ball.ball_z > 90.0:
+			lob_rose = true
+		if ball.bounce_count >= 1:
+			lob_bounced = true
+			break
+	_report("lob高抛升顶点+落地弹跳", lob_rose and lob_bounced,
+		"count=%d z=%.1f" % [ball.bounce_count, ball.ball_z])
 
 	if _fails == 0:
 		print("[M2] RESULT: PASS")
