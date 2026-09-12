@@ -230,7 +230,7 @@ func _build_ui() -> void:
 
 	# 顶栏
 	var title := Label.new()
-	title.text = "🌿 天赋树编辑器（开发者）——  拖拽摆位 | 连接模式建前置链 | 右侧编辑属性"
+	title.text = "🌿 天赋树编辑器 v2（2026-09-12）——  左键拖节点/拖空白平移/滚轮缩放 | 连接模式 | Ctrl+S 保存"
 	title.position = Vector2(12, 8)
 	title.add_theme_font_size_override("font_size", 17)
 	title.add_theme_color_override("font_color", Color(0.7, 0.9, 0.6))

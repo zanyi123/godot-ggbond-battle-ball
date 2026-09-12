@@ -34,10 +34,15 @@ func _ready() -> void:
 	await get_tree().create_timer(0.2).timeout
 	var moved: bool = card.position.distance_to(pos0) > 100.0
 	var world_moved: bool = editor_ctrl._pos_to_vec(editor_ctrl._node_by_id("atk_1")["pos"]).distance_to(world0) > 100.0
+	# 防回跳：松手后 1.5 秒位置必须纹丝不动（瞬移返回检测）
+	var after_release: Vector2 = card.position
+	await get_tree().create_timer(1.5).timeout
+	var no_snapback: bool = card.position.distance_to(after_release) < 1.0
+	print("[Edt][%s] 松手后无瞬移回跳 (位移%.2fpx)" % ["PASS" if no_snapback else "FAIL", card.position.distance_to(after_release)])
 	# 跟随鼠标断言（不瞬移）：松手时卡片应停在"鼠标最后位置-offset"附近
 	var expected: Vector2 = card.position
-	var follow_ok: bool = moved and world_moved
-	print("[Edt][%s] 拖节点（屏幕动+世界存）" % ["PASS" if follow_ok else "FAIL"])
+	var follow_ok: bool = moved and world_moved and no_snapback
+	print("[Edt][%s] 拖节点（屏幕动+世界存+无回跳）" % ["PASS" if follow_ok else "FAIL"])
 	var all_ok := follow_ok
 
 	# 平移：中键按下→移动→松开
