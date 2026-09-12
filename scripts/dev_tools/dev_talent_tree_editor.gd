@@ -659,12 +659,13 @@ func _update_hud() -> void:
 ## ==================== 交互 ====================
 
 ## 屏幕点 → 最上层命中卡片
+## 用 get_global_rect（自带 scale 修正）——手算 size*zoom 在中心枢轴缩放下会错位
 func _hit_test_card(screen_pos: Vector2) -> Button:
 	var found: Button = null
 	for c in canvas.get_children():
 		if c is Button and c.visible:
 			var b := c as Button
-			if screen_pos >= b.position and screen_pos <= b.position + b.size * zoom:
+			if b.get_global_rect().has_point(screen_pos):
 				found = b  # 取最后=最上层
 	return found
 

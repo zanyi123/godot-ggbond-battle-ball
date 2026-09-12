@@ -58,7 +58,9 @@ func _ready() -> void:
 	# 左键空白拖动 = 平移（业内常规）
 	var view1: Vector2 = editor_ctrl.view_pos
 	var sel0: String = editor_ctrl.selected_id
-	var corner := Vector2(80, 80)  # 空白处（远离节点）
+	# 缩放后取卡片旁的"判定错位区"——正是主人遇到的"吸节点"区域
+	var card_edge := (card.position + Vector2(card.size.x, card.size.y / 2.0)) + Vector2(18, 0)
+	var corner := card_edge
 	_send_mouse(editor_ctrl, corner, MOUSE_BUTTON_LEFT, true)
 	_send_motion(editor_ctrl, corner + Vector2(90, 50))
 	_send_mouse(editor_ctrl, corner + Vector2(90, 50), MOUSE_BUTTON_LEFT, false)
