@@ -10,6 +10,7 @@ extends Control
 var player_panels: Array[Control] = []
 var player_stamina_bars: Array[ProgressBar] = []
 var player_energy_bars: Array[ProgressBar] = []
+var player_endurance_bars: Array[ProgressBar] = []  # M3 耐力条（跳跃资源，非血量）
 var player_name_labels: Array[Label] = []
 # 增益色块：每个球员6个属性色块（stamina/defense/speed/attack/resilience/ball_speed）
 var player_bonus_colors: Array[Array] = []  # [i] = [ColorRect, ColorRect, ...]
@@ -167,6 +168,13 @@ func _update_bars() -> void:
 		player_stamina_bars[i].value = p.stamina
 		player_energy_bars[i].max_value = p.max_spirit_energy
 		player_energy_bars[i].value = p.spirit_energy
+		# M3 耐力条（跳跃资源；球员可能没有 endurance 属性时保持满值）
+		if i < player_endurance_bars.size():
+			var endu_val = p.get("endurance")
+			var endu_max = p.get("max_endurance")
+			if endu_val != null and endu_max != null:
+				player_endurance_bars[i].max_value = endu_max
+				player_endurance_bars[i].value = endu_val
 		# 技能圆形冷却遮罩更新（0=可用，1=满冷却）
 		if i < player_skill_cd_overlays.size():
 			var skills: Array[String] = p.get_equipped_skills()
@@ -427,6 +435,27 @@ func _create_single_panel(index: int, pos: Vector2, width: float, height: float)
 
 	panel.add_child(energy)
 	player_energy_bars.append(energy)
+
+	# M3 耐力条（跳跃消耗的独立资源，黄色；体力=血量（绿）不参与跳跃）
+	var endurance := ProgressBar.new()
+	endurance.position = Vector2(70, 46)
+	endurance.size = Vector2(150, 8)
+	endurance.max_value = 100
+	endurance.value = 100
+	endurance.show_percentage = false
+
+	var endu_bg := StyleBoxFlat.new()
+	endu_bg.bg_color = Color(0.2, 0.2, 0.2, 0.8)
+	endu_bg.set_corner_radius_all(2)
+	endurance.add_theme_stylebox_override("background", endu_bg)
+
+	var endu_fill := StyleBoxFlat.new()
+	endu_fill.bg_color = Color(1.0, 0.75, 0.2)
+	endu_fill.set_corner_radius_all(2)
+	endurance.add_theme_stylebox_override("fill", endu_fill)
+
+	panel.add_child(endurance)
+	player_endurance_bars.append(endurance)
 
 	# 技能图标占位 x3
 	var this_player_skill_boxes: Array = []

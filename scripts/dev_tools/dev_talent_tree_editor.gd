@@ -230,7 +230,7 @@ func _build_ui() -> void:
 
 	# 顶栏
 	var title := Label.new()
-	title.text = "🌿 天赋树编辑器 v2（2026-09-12）——  左键拖节点/拖空白平移/滚轮缩放 | 连接模式 | Ctrl+S 保存"
+	title.text = "🌿 天赋树编辑器 v3（含拖拽/缩放修复）——  左键拖节点 | 拖空白平移 | 滚轮缩放 | Ctrl+S 保存"
 	title.position = Vector2(12, 8)
 	title.add_theme_font_size_override("font_size", 17)
 	title.add_theme_color_override("font_color", Color(0.7, 0.9, 0.6))
@@ -869,10 +869,11 @@ func _input(event: InputEvent) -> void:
 	# ---- 鼠标 ----
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		var pos := mb.position
+		var pos := get_global_mouse_position()  # 画布坐标系（自带 stretch 变换，真实鼠标必备）
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
 				var hit := _hit_test_card(pos)
+				print("[Diag] 左键按下 pos=%s global_mouse=%s hit=%s" % [str(mb.position), str(get_global_mouse_position()), hit.name if hit != null else "无"])
 				if hit != null:
 					# 命中节点 → 拖节点
 					_drag_card = hit
@@ -903,23 +904,24 @@ func _input(event: InputEvent) -> void:
 					canvas.queue_redraw()
 				_panning = false
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
-			_apply_zoom(pos, 1.1)
+			_apply_zoom(get_global_mouse_position(), 1.1)
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
-			_apply_zoom(pos, 1.0 / 1.1)
+			_apply_zoom(get_global_mouse_position(), 1.0 / 1.1)
 		elif mb.button_index in [MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT]:
 			_panning = mb.pressed
-			_pan_start = mb.position
+			_pan_start = get_global_mouse_position()
 			_view_start = view_pos
 			if mb.pressed:
 				get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion:
-		var mm := event as InputEventMouseMotion
+		# 拖拽/平移一律用画布系鼠标位置（event.position 在 stretch 下会偏移）
+		var mouse := get_global_mouse_position()
 		if _drag_card != null:
-			_drag_card.position = mm.position - _drag_offset
+			_drag_card.position = mouse - _drag_offset
 			_save_card_pos(_drag_card)
 			canvas.queue_redraw()
 		elif _panning:
-			view_pos = _view_start - (mm.position - _pan_start) / zoom
+			view_pos = _view_start - (mouse - _pan_start) / zoom
 			_refresh_card_positions()
 			canvas.queue_redraw()
 	# ---- 键盘 ----

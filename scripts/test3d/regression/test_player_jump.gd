@@ -1,6 +1,6 @@
 ## M3 验收测试：球员跳跃（headless 可跑）
-## ① 起跳成功与体力扣减 ② 跳到顶点高度合理 ③ 落地归位
-## ④ 落地冷却拦截 ⑤ 体力不足禁跳 ⑥ 击退打断 ⑦ 击退/僵直中禁跳 ⑧ is_airborne 状态
+## ① 起跳成功与耐力扣减（血量不受影响） ② 跳到顶点高度合理 ③ 落地归位
+## ④ 落地冷却拦截 ⑤ 耐力不足禁跳+自动恢复 ⑥ 击退打断 ⑦ 击退/僵直中禁跳 ⑧ is_airborne 状态
 ## 运行：Godot_console.exe --headless res://scenes/test3d/test_player_jump.tscn
 extends Node3D
 
@@ -27,14 +27,17 @@ func _ready() -> void:
 	p.z_vel = 0.0
 	p.is_jumping = false
 	p._jump_cooldown_left = 0.0
-	p.stamina = 100.0
+	p.endurance = 100.0
 
-	# ① 起跳成功 + 体力扣减
+	# ① 起跳成功 + 耐力扣减（血量 stamina 不参与跳跃）
+	var endurance_before: float = p.endurance
 	var stamina_before: float = p.stamina
 	var jumped: bool = p.try_jump()
 	_report("起跳成功", jumped and p.z_height > 0.0 and p.is_jumping,
 		"z=%.2f vz=%.0f" % [p.z_height, p.z_vel])
-	_report("体力扣减8", absf(p.stamina - (stamina_before - 8.0)) < 0.001,
+	_report("耐力扣减8", absf(p.endurance - (endurance_before - 8.0)) < 0.001,
+		"%.0f→%.0f" % [endurance_before, p.endurance])
+	_report("血量stamina不受影响", absf(p.stamina - stamina_before) < 0.001,
 		"%.0f→%.0f" % [stamina_before, p.stamina])
 
 	# ② 顶点高度合理（理论≈80px，容差 60~90）
@@ -61,14 +64,19 @@ func _ready() -> void:
 	_report("冷却拦截→清零可再跳", blocked and retried,
 		"blocked=%s retried=%s" % [str(blocked), str(retried)])
 
-	# ⑤ 清理第二次跳跃，测体力不足禁跳
+	# ⑤ 清理第二次跳跃，测耐力不足禁跳
 	for i in range(240):
 		p._step_jump_z(1.0 / 60.0)
 	p._jump_cooldown_left = 0.0
-	p.stamina = 1.0
+	p.endurance = 1.0
 	var poor_blocked: bool = (not p.can_jump()) and (not p.try_jump())
-	_report("体力不足禁跳", poor_blocked, "stamina=1 cost=8")
-	p.stamina = 100.0
+	_report("耐力不足禁跳", poor_blocked, "endurance=1 cost=8")
+
+	# ⑤b 耐力自动恢复（12/s；恢复到 ≥8 即可再跳）
+	p._regen_endurance(1.0)
+	_report("耐力自动恢复12/s", absf(p.endurance - 13.0) < 0.001,
+		"endurance=%.0f" % p.endurance)
+	p.endurance = 100.0
 
 	# ⑥ 击退打断：跳到空中后强制落地
 	p.try_jump()

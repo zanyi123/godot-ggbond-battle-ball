@@ -55,6 +55,10 @@ var _jump_cooldown_left: float = 0.0
 var _jump_key_was_pressed: bool = false  # 空格边沿检测
 var _jump_shadow: ColorRect = null       # 跳跃地面影子（2D 表现用）
 
+# 耐力（M3：跳跃消耗的独立资源，与血量 stamina 完全分离，自动恢复）
+var endurance: float = 100.0
+var max_endurance: float = 100.0
+
 # 状态灯（第2步：控制状态系统）
 var _status_lights: Dictionary = {}  # { "stunned": { "remaining": 2.0, ... }, ... }
 
@@ -206,7 +210,8 @@ const SPRINT_COOLDOWN: float = 2.0      # 冷却2秒
 # M3 跳跃物理（2026-09-12）
 const JUMP_GRAVITY_Z: float = 900.0   # 重力 px/s²（与球 M1 一致）
 const JUMP_INITIAL_VZ: float = 380.0  # 起跳初速 → 跳高≈80px（v²/2g）
-const JUMP_STAMINA_COST: float = 8.0  # 跳跃体力消耗
+const JUMP_ENDURANCE_COST: float = 8.0    # 跳跃耐力消耗（耐力≠血量stamina，独立资源）
+const JUMP_ENDURANCE_REGEN: float = 12.0  # 耐力恢复速率（/s），保证可反复跳跃
 const JUMP_COOLDOWN: float = 1.5      # 跳跃冷却（s）
 
 # 角色(主攻/防御/辅助)
@@ -933,6 +938,7 @@ func _physics_process(delta: float) -> void:
 		if _jump_cooldown_left < 0.0:
 			_jump_cooldown_left = 0.0
 	_step_jump_z(delta)
+	_regen_endurance(delta)
 
 	# 击退中：匀减速到0（不处理输入）
 	if _knockback_timer > 0.0:
@@ -1028,17 +1034,17 @@ func try_jump() -> bool:
 	z_height = maxf(z_height, 0.01)
 	is_jumping = true
 	_jump_cooldown_left = JUMP_COOLDOWN
-	stamina = maxf(0.0, stamina - JUMP_STAMINA_COST)
-	print("[Player] %s 起跳! 跳高≈%.0fpx 体力-%.0f 剩余%.0f" % [
+	endurance = maxf(0.0, endurance - JUMP_ENDURANCE_COST)
+	print("[Player] %s 起跳! 跳高≈%.0fpx 耐力-%.0f 剩余%.0f" % [
 		char_data.get("name", "?"), JUMP_INITIAL_VZ * JUMP_INITIAL_VZ / (2.0 * JUMP_GRAVITY_Z),
-		JUMP_STAMINA_COST, stamina])
+		JUMP_ENDURANCE_COST, endurance])
 	return true
 
 
-## 能否起跳：地面 + 无冷却 + 体力足 + 未被击败/击退/僵直/眩晕/定身
+## 能否起跳：地面 + 无冷却 + 耐力足 + 未被击败/击退/僵直/眩晕/定身
 func can_jump() -> bool:
 	return z_height <= 0.0 and z_vel <= 0.0 and not is_jumping \
-		and _jump_cooldown_left <= 0.0 and stamina >= JUMP_STAMINA_COST \
+		and _jump_cooldown_left <= 0.0 and endurance >= JUMP_ENDURANCE_COST \
 		and not is_defeated and _knockback_timer <= 0.0 \
 		and _stagger_timer <= 0.0 \
 		and not is_status_active("stunned") and not is_status_active("rooted")
@@ -1047,6 +1053,12 @@ func can_jump() -> bool:
 ## 是否在空中（跳跃 z 状态；3D 代理与 M4 高度判定读这里）
 func is_airborne() -> bool:
 	return z_height > 0.0 or z_vel != 0.0
+
+
+## 耐力恢复（M3：独立资源自动恢复，保证可反复跳跃；测试可直接驱动）
+func _regen_endurance(delta: float) -> void:
+	if endurance < max_endurance:
+		endurance = minf(max_endurance, endurance + JUMP_ENDURANCE_REGEN * delta)
 
 
 ## z 轴积分：起跳→顶点→落地（欧拉足够：单次跳跃无长程能量累积问题）
