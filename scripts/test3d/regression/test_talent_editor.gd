@@ -67,6 +67,7 @@ func _ready() -> void:
 	_send_mouse(editor_ctrl, get_viewport().get_visible_rect().size / 2.0 + Vector2(120, 60), MOUSE_BUTTON_MIDDLE, false)
 	await get_tree().create_timer(0.2).timeout
 	var panned: bool = editor_ctrl.view_pos != view0
+	print("[Edt] view0=%s → view1=%s" % [str(view0), str(editor_ctrl.view_pos)])
 	print("[Edt][%s] 中键平移视口" % ["PASS" if panned else "FAIL"])
 	all_ok = all_ok and panned
 
@@ -100,7 +101,7 @@ func _ready() -> void:
 	var sel0: String = editor_ctrl.selected_id
 	# 缩放后取卡片旁的"判定错位区"——正是主人遇到的"吸节点"区域
 	var card_edge := (card.position + Vector2(card.size.x, card.size.y / 2.0)) + Vector2(18, 0)
-	var corner := card_edge
+	var corner := Vector2(60, 820)  # 画布左下角（远离全部节点，真空白）
 	_send_mouse(editor_ctrl, corner, MOUSE_BUTTON_LEFT, true)
 	_send_motion(editor_ctrl, corner + Vector2(90, 50))
 	_send_mouse(editor_ctrl, corner + Vector2(90, 50), MOUSE_BUTTON_LEFT, false)
@@ -111,6 +112,32 @@ func _ready() -> void:
 	print("[Edt][%s] 空白松开取消选中" % ["PASS" if sel_cleared else "FAIL"])
 	all_ok = all_ok and pan2 and sel_cleared
 
+	# ===== 主人操作流：选中节点→点面板输入框改名称→应用（面板点击不得清空选中）=====
+	var inp: LineEdit
+	editor_ctrl.selected_id = "buf_6"
+	editor_ctrl._fill_prop_panel(editor_ctrl._node_by_id("buf_6"))
+	# 模拟点击面板上的名称输入框（x>面板左缘）——此前此点击会清空 selected_id
+	_send_mouse(editor_ctrl, Vector2(1150, 120), MOUSE_BUTTON_LEFT, true)
+	_send_mouse(editor_ctrl, Vector2(1150, 120), MOUSE_BUTTON_LEFT, false)
+	await get_tree().create_timer(0.2).timeout
+	var sel_kept: bool = editor_ctrl.selected_id == "buf_6"
+	_report("面板点击不清空选中", sel_kept, "selected=%s" % editor_ctrl.selected_id)
+	all_ok = all_ok and sel_kept
+	# 改名并应用
+	inp = editor_ctrl.inp_name
+	inp.text = "心之力"
+	editor_ctrl._on_apply_edit()
+	await get_tree().create_timer(0.2).timeout
+	var renamed: bool = str(editor_ctrl._node_by_id("buf_6").get("name", "")) == "心之力"
+	_report("应用修改改名成功", renamed, str(editor_ctrl._node_by_id("buf_6").get("name", "")))
+	all_ok = all_ok and renamed
+	var sel_still: bool = editor_ctrl.selected_id == "buf_6"
+	_report("应用后选中保持", sel_still, editor_ctrl.selected_id)
+	all_ok = all_ok and sel_still
+
+	# 还原名称
+	editor_ctrl.inp_name.text = "增益回响"
+	editor_ctrl._on_apply_edit()
 	print("[Edt] RESULT: %s" % ("PASS" if all_ok else "FAIL"))
 	var img := get_viewport().get_texture().get_image()
 	if img:
@@ -140,3 +167,6 @@ func _send_wheel(ed: Control, gpos: Vector2) -> void:
 	ev.button_index = MOUSE_BUTTON_WHEEL_UP
 	ev.pressed = true
 	Input.parse_input_event(ev)
+
+func _report(item: String, ok: bool, detail: String) -> void:
+	print("[Edt][%s] %s (%s)" % ["PASS" if ok else "FAIL", item, detail])

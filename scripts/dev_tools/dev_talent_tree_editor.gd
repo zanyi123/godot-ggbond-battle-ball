@@ -45,6 +45,7 @@ var _drag_offset: Vector2 = Vector2.ZERO
 var _dirty: bool = false
 
 var canvas: Control
+var _panel_x: float = 0.0  ## 面板左缘（此 x 以右=面板区，鼠标交还 GUI）
 var prop_scroll: ScrollContainer
 var prop_box: VBoxContainer
 var hud_label: Label
@@ -250,6 +251,7 @@ func _build_ui() -> void:
 	# 右侧属性面板
 	prop_scroll = ScrollContainer.new()
 	prop_scroll.position = Vector2(bg.size.x - 326, 40)
+	_panel_x = prop_scroll.position.x
 	prop_scroll.size = Vector2(322, bg.size.y - 50)
 	add_child(prop_scroll)
 	prop_box = VBoxContainer.new()
@@ -675,6 +677,9 @@ func _hit_test_card(screen_pos: Vector2) -> Button:
 				found = b  # 取最后=最上层
 	return found
 
+func _panel_y_debug() -> float:
+	return 100000.0
+
 func _apply_zoom(at_screen: Vector2, factor: float) -> void:
 	var world_at := screen_to_world(at_screen)
 	zoom = clampf(zoom * factor, ZOOM_MIN, ZOOM_MAX)
@@ -698,6 +703,7 @@ func _save_card_pos(card: Button) -> void:
 		_dirty = true
 
 func _fill_prop_panel(n: Dictionary) -> void:
+	_node_id_label.text = "已选中: %s" % str(n.get("id", ""))
 	inp_name.text = str(n.get("name", ""))
 	inp_desc.text = str(n.get("desc", ""))
 	inp_cost.value = float(n.get("cost", 1))
@@ -880,6 +886,9 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		var pos: Vector2 = mb.position  # 事件自身坐标（_input 阶段已是内容系，合成/真实鼠标统一）
+		# 面板区/顶栏区的鼠标事件交还 GUI（否则点输入框会被当"空白"清空选中）
+		if pos.x >= _panel_x or pos.y <= 40:
+			return
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
 				var hit := _hit_test_card(pos)
@@ -919,11 +928,16 @@ func _input(event: InputEvent) -> void:
 		elif mb.button_index in [MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT]:
 			_panning = mb.pressed
 			_pan_start = mb.position
+			print("[Diag] 中/右键 %s _panning=%s pos=%s" % ["按下" if mb.pressed else "松开", _panning, str(mb.position)])
 			_view_start = view_pos
 			if mb.pressed:
 				get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion:
 		var mouse: Vector2 = (event as InputEventMouseMotion).position
+		if mouse.x >= _panel_x:
+			return
+		if mouse.y >= _panel_y_debug():
+			pass
 		if _drag_card != null:
 			# offset = 按下时"卡片位置-鼠标位置"（抓取点偏移），跟随=鼠标+offset
 			_drag_card.position = mouse + _drag_offset
