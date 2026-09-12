@@ -545,15 +545,14 @@ func _on_ball_stopped() -> void:
 		_on_body_entered(nearest_player)
 		return
 
-	# === 韧性弹飞球：落地球权回攻击者（防守方收益=韧性减伤，球权需真接住——攻防对称） ===
-	if bounced_by_resilience:
-		bounced_by_resilience = false
-		if attacker_player and is_instance_valid(attacker_player):
-			print("[Ball] 弹飞球落地(%.1fpx),球权回攻击者 %s" % [flight_distance, _pname(attacker_player)])
-			return_to_player(attacker_player)
+	# === E7 攻防对称根治：球停止未命中任何人 = 攻击失败，球权回攻击者 ===
+	# 旧规则"按半场白送球权+瞬移给最近球员"=防守方零成本捡漏（主人反馈的"半场吸附"本体）。
+	# 新规则：没打中=攻击失败球回手，球权转移只能靠【待接球接住】主动夺球。
+	if attacker_player and is_instance_valid(attacker_player):
+		print("[Ball] 球落地(%.1fpx)未命中任何人,球权回攻击者 %s（攻防对称）" % [flight_distance, _pname(attacker_player)])
+		return_to_player(attacker_player)
 		return
-
-	# === 落地无人在附近 → 按半场分配球权 ===
+	# 兜底：无攻击者引用（异常态）才走半场分配
 	print("[Ball] 球落地,飞行距离: %.1f" % flight_distance)
 	if global_position.x < 0:
 		_return_to_nearest_team_player("a")
