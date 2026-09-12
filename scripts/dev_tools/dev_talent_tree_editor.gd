@@ -83,6 +83,12 @@ const EVENT_OPTIONS := [
 	{"label": "技能冷却结束", "name": "Resource.COOLDOWN_READY"},
 	{"label": "体力跨过阈值", "name": "Resource.STAMINA_THRESHOLD"},
 	{"label": "能量跨过阈值", "name": "Resource.ENERGY_THRESHOLD"},
+	{"label": "── 增益类 ──", "name": ""},
+	{"label": "增益施加", "name": "Buff.BUFF_APPLIED"},
+	{"label": "增益到期", "name": "Buff.BUFF_EXPIRED"},
+	{"label": "── 状态类 ──", "name": ""},
+	{"label": "状态施加（定身/隐身等）", "name": "Status.STATUS_APPLIED"},
+	{"label": "状态到期", "name": "Status.STATUS_EXPIRED"},
 ]
 
 func _ready() -> void:

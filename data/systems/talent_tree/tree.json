@@ -135,9 +135,7 @@
 			"type": "manual"
 		},
 		{
-			"condition": {
-
-			},
+			"condition": {},
 			"cooldown": 10.0,
 			"cost": 2.0,
 			"desc": "克制命中后全队攻+8持续5秒（联动元素克制系统）",
@@ -184,6 +182,150 @@
 				"sur_1"
 			],
 			"type": "stat"
+		},
+		{
+			"id": "atk_3",
+			"direction": "进攻",
+			"name": "发球抢先",
+			"requires": [
+				"atk_2"
+			],
+			"cost": 1,
+			"type": "event",
+			"event": "Attack.LAUNCHED",
+			"desc": "我方发球出手的瞬间，全队进入振奋状态——比赛的节奏由我们掌控"
+		},
+		{
+			"id": "atk_4",
+			"direction": "进攻",
+			"name": "连击势头",
+			"requires": [
+				"atk_3"
+			],
+			"cost": 1,
+			"type": "event",
+			"event": "Hit.HIT_TAKEN",
+			"desc": "我方的球命中敌人后，全队攻势上扬——打中一球，气势就压过一截"
+		},
+		{
+			"id": "atk_5",
+			"direction": "进攻",
+			"name": "同仇敌忾",
+			"requires": [
+				"atk_4"
+			],
+			"cost": 1,
+			"type": "event",
+			"event": "Hit.HIT_DEFEATED",
+			"desc": "队友被击倒的瞬间，全队怒火上身——失去同伴的怒火，会变成得分的力量"
+		},
+		{
+			"id": "sur_3",
+			"direction": "生存",
+			"name": "痛觉钝化",
+			"requires": [
+				"sur_2"
+			],
+			"cost": 1,
+			"type": "event",
+			"event": "Hit.HIT_TAKEN",
+			"desc": "受到攻击的瞬间，全队痛觉短暂钝化——疼不疼，打完这场再说"
+		},
+		{
+			"id": "sur_4",
+			"direction": "生存",
+			"name": "濒危本能",
+			"requires": [
+				"sur_3"
+			],
+			"cost": 1,
+			"type": "event",
+			"event": "Resource.STAMINA_THRESHOLD",
+			"desc": "体力跌入危险线的时刻，求生本能觉醒——绝境才能激发真正的潜能"
+		},
+		{
+			"id": "sur_5",
+			"direction": "生存",
+			"name": "软着陆",
+			"requires": [
+				"sur_4"
+			],
+			"cost": 1,
+			"type": "event",
+			"event": "Defend.BOUNCED",
+			"desc": "被韧性弹飞的瞬间顺势卸力——飞出去，也要飞得优雅"
+		},
+		{
+			"id": "def_3",
+			"direction": "防御",
+			"name": "气势防御",
+			"requires": [
+				"def_2"
+			],
+			"cost": 1,
+			"type": "event",
+			"event": "Defend.CATCH_STANCE",
+			"desc": "摆出接球姿态的那一刻，防御气场上身——站着不动，也是一种威慑"
+		},
+		{
+			"id": "def_4",
+			"direction": "防御",
+			"name": "稳如泰山",
+			"requires": [
+				"def_3"
+			],
+			"cost": 1,
+			"type": "event",
+			"event": "Defend.CAUGHT",
+			"desc": "成功接住来球夺得球权后，全队定心——接住这颗球，队伍就稳了"
+		},
+		{
+			"id": "def_5",
+			"direction": "防御",
+			"name": "攻守易势",
+			"requires": [
+				"def_4"
+			],
+			"cost": 1,
+			"type": "event",
+			"event": "Defend.BOUNCED",
+			"desc": "弹飞敌方来球的瞬间，全队攻防转换——把敌方的力量，还给敌方"
+		},
+		{
+			"id": "buf_4",
+			"direction": "增益",
+			"name": "元素共鸣",
+			"requires": [
+				"buf_3"
+			],
+			"cost": 1,
+			"type": "event",
+			"event": "Hit.HIT_COUNTER",
+			"desc": "打出克制一击后，全队元素共鸣（联动元素克制系统）——相克的瞬间，元素在歌唱"
+		},
+		{
+			"id": "buf_5",
+			"direction": "增益",
+			"name": "满蓄奔涌",
+			"requires": [
+				"buf_4"
+			],
+			"cost": 1,
+			"type": "event",
+			"event": "Resource.ENERGY_THRESHOLD",
+			"desc": "元灵能量蓄满的时刻，全队奔涌增益——满溢的力量，不该被浪费"
+		},
+		{
+			"id": "buf_6",
+			"direction": "增益",
+			"name": "增益回响",
+			"requires": [
+				"buf_5"
+			],
+			"cost": 1,
+			"type": "event",
+			"event": "Buff.BUFF_APPLIED",
+			"desc": "我方获得任何增益时产生回响，延长其效果——好运，是会传染的"
 		}
 	],
 	"points_total": 6.0
