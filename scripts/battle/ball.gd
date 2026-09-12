@@ -545,14 +545,22 @@ func _on_ball_stopped() -> void:
 		_on_body_entered(nearest_player)
 		return
 
-	# === E7 攻防对称根治：球停止未命中任何人 = 攻击失败，球权回攻击者 ===
-	# 旧规则"按半场白送球权+瞬移给最近球员"=防守方零成本捡漏（主人反馈的"半场吸附"本体）。
-	# 新规则：没打中=攻击失败球回手，球权转移只能靠【待接球接住】主动夺球。
+	# === E7v2 球权分层（吸附本意恢复+攻防对称）===
+	# ① 停止在外场（凹字形判罚区）→ 吸附给该侧外场所属队（吸附本意，双方对称）
+	# ② 停止在内场（比赛区，未命中任何人）→ 攻击失败，球权回攻击者（内场不白送）
+	var pos := global_position
+	var in_outer_zone: bool = absf(pos.x) > 380.0 or absf(pos.y) > 260.0
+	if in_outer_zone:
+		var outer_team := "a" if pos.x < 0 else "b"  # 左外场区归A / 右外场区归B（吸附本意）
+		print("[Ball] 球停在外场(%.0f,%.0f) → 吸附给队%s" % [pos.x, pos.y, outer_team.to_upper()])
+		_return_to_nearest_team_player(outer_team)
+		return
+	# 内场停止：攻击失败球回手（不白送防守方）
 	if attacker_player and is_instance_valid(attacker_player):
-		print("[Ball] 球落地(%.1fpx)未命中任何人,球权回攻击者 %s（攻防对称）" % [flight_distance, _pname(attacker_player)])
+		print("[Ball] 球停在内场(%.1fpx)未命中,攻击失败球权回攻击者 %s" % [flight_distance, _pname(attacker_player)])
 		return_to_player(attacker_player)
 		return
-	# 兜底：无攻击者引用（异常态）才走半场分配
+	# 兜底：无攻击者引用（异常态）按半场分配
 	print("[Ball] 球落地,飞行距离: %.1f" % flight_distance)
 	if global_position.x < 0:
 		_return_to_nearest_team_player("a")
