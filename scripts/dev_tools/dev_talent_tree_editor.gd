@@ -226,7 +226,6 @@ func _build_ui() -> void:
 	canvas.position = Vector2.ZERO
 	canvas.size = bg.size  # 全屏画布（右侧面板浮层）
 	canvas.draw.connect(_on_canvas_draw)
-	canvas.gui_input.connect(_on_canvas_gui_input)
 	add_child(canvas)
 
 	# 顶栏
@@ -653,44 +652,6 @@ func _update_hud() -> void:
 
 ## ==================== 交互 ====================
 
-## 画布统一输入：左键=命中测试拖节点；中/右键=平移；滚轮=缩放
-func _on_canvas_gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton:
-		var mb := event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_LEFT:
-			if mb.pressed:
-				var hit := _hit_test_card(mb.position)
-				if hit != null:
-					_drag_card = hit
-					_drag_offset = hit.position - mb.position  # 屏幕系 offset
-					# 选中
-					var id := hit.name.trim_prefix("Card_")
-					selected_id = id
-					_fill_prop_panel(_node_by_id(id))
-					canvas.queue_redraw()
-			else:
-				if _drag_card != null:
-					_save_card_pos(_drag_card)
-				_drag_card = null
-		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
-			_apply_zoom(mb.position, 1.1)
-		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
-			_apply_zoom(mb.position, 1.0 / 1.1)
-		elif mb.button_index in [MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT]:
-			_panning = mb.pressed
-			_pan_start = mb.get_global_position()
-			_view_start = view_pos
-	elif event is InputEventMouseMotion:
-		var mm := event as InputEventMouseMotion
-		if _drag_card != null:
-			_drag_card.position = mm.get_global_position() - _drag_offset
-			_save_card_pos(_drag_card)
-			canvas.queue_redraw()
-		elif _panning:
-			view_pos = _view_start - (mm.get_global_position() - _pan_start) / zoom
-			_refresh_card_positions()
-			canvas.queue_redraw()
-
 ## 屏幕点 → 最上层命中卡片
 func _hit_test_card(screen_pos: Vector2) -> Button:
 	var found: Button = null
@@ -698,7 +659,7 @@ func _hit_test_card(screen_pos: Vector2) -> Button:
 		if c is Button and c.visible:
 			var b := c as Button
 			if screen_pos >= b.position and screen_pos <= b.position + b.size * zoom:
-				found = b  # 不 break：取最后（最上层）
+				found = b  # 取最后=最上层
 	return found
 
 func _apply_zoom(at_screen: Vector2, factor: float) -> void:
@@ -920,7 +881,50 @@ func _on_toggle_link() -> void:
 	_update_hud()
 	canvas.queue_redraw()
 
+## 编辑器级统一输入（先于 GUI 分发）：节点拖拽/平移/缩放都在这里命中
 func _input(event: InputEvent) -> void:
+	# ---- 鼠标 ----
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		var pos := mb.position
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				var hit := _hit_test_card(pos)
+				if hit != null:
+					_drag_card = hit
+					_drag_offset = hit.position - pos
+					var id := hit.name.trim_prefix("Card_")
+					selected_id = id
+					_fill_prop_panel(_node_by_id(id))
+					get_viewport().set_input_as_handled()
+					canvas.queue_redraw()
+					_update_hud()
+			else:
+				if _drag_card != null:
+					_save_card_pos(_drag_card)
+					_drag_card = null
+					get_viewport().set_input_as_handled()
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
+			_apply_zoom(pos, 1.1)
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
+			_apply_zoom(pos, 1.0 / 1.1)
+		elif mb.button_index in [MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT]:
+			_panning = mb.pressed
+			_pan_start = mb.position
+			_view_start = view_pos
+			if mb.pressed:
+				get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion:
+		var mm := event as InputEventMouseMotion
+		if _drag_card != null:
+			_drag_card.position = mm.position - _drag_offset
+			_save_card_pos(_drag_card)
+			canvas.queue_redraw()
+		elif _panning:
+			view_pos = _view_start - (mm.position - _pan_start) / zoom
+			_refresh_card_positions()
+			canvas.queue_redraw()
+	# ---- 键盘 ----
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE and link_mode:
 			link_mode = false

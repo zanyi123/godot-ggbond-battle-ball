@@ -11,7 +11,7 @@
 			"direction": "进攻",
 			"id": "atk_1",
 			"name": "弱点洞察",
-			"pos": "(612.0, 415.0)",
+			"pos": "(1575.0, 1000.0)",
 			"requires": [],
 			"stat": "attack_bonus",
 			"type": "stat",
@@ -22,7 +22,7 @@
 			"direction": "进攻",
 			"id": "atk_2",
 			"name": "重装弹药",
-			"pos": "(843.0, 514.0)",
+			"pos": "(1750.0, 1000.0)",
 			"requires": [
 				"atk_1"
 			],
@@ -35,7 +35,7 @@
 			"direction": "生存",
 			"id": "sur_1",
 			"name": "坚韧体魄",
-			"pos": "(452.9581, 197.6709)",
+			"pos": "(1400.0, 825.0)",
 			"requires": [],
 			"stat": "stamina_bonus",
 			"type": "stat",
@@ -55,7 +55,7 @@
 			"event": "Resource.STAMINA_THRESHOLD",
 			"id": "sur_2",
 			"name": "不屈意志",
-			"pos": "(520.0, 90.0)",
+			"pos": "(1400.0, 650.0)",
 			"requires": [
 				"sur_1"
 			],
@@ -75,7 +75,7 @@
 			"direction": "防御",
 			"id": "def_1",
 			"name": "钢铁阵容",
-			"pos": "(235.0, 406.0)",
+			"pos": "(1225.0, 1000.0)",
 			"requires": [],
 			"stat": "defense_bonus",
 			"type": "stat",
@@ -95,7 +95,7 @@
 			"event": "Hit.HIT_TAKEN",
 			"id": "def_2",
 			"name": "受击反震",
-			"pos": "(27.0, 291.0)",
+			"pos": "(1050.0, 1000.0)",
 			"requires": [
 				"def_1"
 			],
@@ -115,7 +115,7 @@
 			"direction": "增益",
 			"id": "buf_1",
 			"name": "能量核心",
-			"pos": "(464.0, 651.0)",
+			"pos": "(1400.0, 1175.0)",
 			"requires": [],
 			"stat": "max_energy_bonus",
 			"type": "stat",
@@ -127,7 +127,7 @@
 			"direction": "增益",
 			"id": "buf_2",
 			"name": "战术大师",
-			"pos": "(274.0, 778.0)",
+			"pos": "(1400.0, 1350.0)",
 			"requires": [
 				"buf_1"
 			],
@@ -146,7 +146,7 @@
 			"event": "Hit.HIT_COUNTER",
 			"id": "buf_3",
 			"name": "克制专家",
-			"pos": "(685.0, 723.0)",
+			"pos": "(1400.0, 1350.0)",
 			"requires": [
 				"buf_1"
 			],
@@ -167,19 +167,19 @@
 			"direction": "进攻",
 			"id": "进_10",
 			"name": "弱点洞察",
-			"pos": "(719.0, 258.0)",
+			"pos": "(1750.0, 1000.0)",
 			"requires": [
 				"atk_1"
 			],
 			"type": "stat"
 		},
 		{
-			"cost": 1,
+			"cost": 1.0,
 			"desc": "",
 			"direction": "生存",
 			"id": "生_11",
 			"name": "坚韧体魄",
-			"pos": "(452.9581, 22.6709)",
+			"pos": "(1400.0, 650.0)",
 			"requires": [
 				"sur_1"
 			],
