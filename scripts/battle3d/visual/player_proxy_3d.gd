@@ -158,10 +158,6 @@ func setup(p_char_id: String, p_team_color: Color) -> void:
 	if _anim_player != null and _anim_player.has_animation("idle"):
 		call_deferred("_play_initial_idle")
 
-	# E10b 单位归一化：各批次 FBX 导出单位差 100 倍（实测 0.011~1.125），进树后实测
-	# 世界身高补偿到标准 49.86（铁律 ModelSlot=70 不动，补偿加在 FBX 根节点单位上）
-	_normalize_unit_deferred()
-
 	print("[PlayerProxy3D] ✅ %s 构建 mesh=%s anims=%s" % [char_id, _mesh_ok, get_anim_names()])
 
 
@@ -235,31 +231,6 @@ func get_hand_proxy() -> Node3D:
 
 func get_anim_player() -> AnimationPlayer:
 	return _anim_player
-
-## E10b 单位归一化：实测 _body_inst 世界包围盒高，缩放到标准 49.86
-## （各批次 FBX 导出单位不一：0.011~1.125；GLB 模式跳过——GLB 单位正确）
-func _normalize_unit_deferred() -> void:
-	if not _mesh_ok or _body_inst == null:
-		return
-	await get_tree().process_frame
-	await get_tree().process_frame
-	if _body_inst == null or not is_instance_valid(_body_inst):
-		return
-	var height := 0.0
-	for mi in _body_inst.find_children("*", "MeshInstance3D", true, false):
-		var m3 := mi as MeshInstance3D
-		if m3.mesh == null:
-			continue
-		var ab: AABB = m3.global_transform * m3.mesh.get_aabb()
-		height = maxf(height, ab.size.y)
-	if height < 0.001 or height > 500.0:
-		return  # 异常高度不补偿（防除零/已正确则跳过区间外）
-	var k: float = 49.86 / height
-	if absf(k - 1.0) < 0.05:
-		return  # 已在 ±5% 内视为正确
-	_body_inst.scale *= k
-	print("[PlayerProxy3D] 单位归一化 %s：世界高%.2f → ×%.3f = 49.86" % [char_id, height, k])
-
 
 func get_anim_names() -> Array:
 	if _anim_player == null:
