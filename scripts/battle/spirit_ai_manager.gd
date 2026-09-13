@@ -666,6 +666,10 @@ func _get_available_skills(sad: Dictionary) -> Array[Dictionary]:
 	var p = sad.player
 	for analysis in sad.skills_analysis:
 		var skill_id = analysis["skill_id"]
+		# 被动技能由事件自动触发，不进主动评分池
+		# （否则每周期选中→use_skill 被拒→无冷却→无限重试刷屏，2026-09-13 seed3 诊断发现）
+		if analysis["skill_data"].get("type", "active") == "passive":
+			continue
 		var cd = spirit_system.get_skill_cooldown(p.get_instance_id(), skill_id)
 		var energy_cost = analysis["skill_data"].get("energy_cost", 20)
 		if cd <= 0.0 and p.spirit_energy >= energy_cost:

@@ -87,7 +87,11 @@ func _bounce_off_walls() -> void:
 var use_ballistic_physics: bool = false  # 总开关（默认关：飞行球暂不落地恒高飞行=旧观感；弹跳框架保留可随时开）
 var ball_z: float = 0.0                  # 球离地高度（像素，向上为正）
 var ball_z_vel: float = 0.0              # 垂直速度（px/s）
-var bounce_count: int = 0                # 已落地弹跳次数
+## E9 轨迹全记录（主人复测工具）：每次发球记录出手/途径/终止全链
+var _traj_active: bool = false
+var _traj_log: Array = []
+var _traj_seq: int = 0
+var bounce_count: int = 0               # 已落地弹跳次数
 var flight_seq: int = 0                  # 发球序号（每次 launch+1；AI 躲球骰子的稳定威胁标识，跨运行可复现）
 var use_wall_bounce: bool = true         # M2 蓝墙反弹开关（水平反射，与 z 弹道无关）
 const GRAVITY_Z: float = 900.0           # 重力加速度 px/s²
@@ -232,8 +236,12 @@ func _physics_process(delta: float) -> void:
 	if trajectory_type == "arc" and allow_arc:
 		ball_direction = ball_direction.rotated(deg_to_rad(30) * delta)
 
+	var prev_x := position.x
 	position += move_vector
 	flight_distance += move_vector.length()
+	# E9 轨迹采样：跨越中线瞬间记录
+	if _traj_active and ((prev_x < 0.0 and position.x >= 0.0) or (prev_x > 0.0 and position.x <= 0.0)):
+		_traj_log.append("过中线@%s 已飞%.0f" % [str(position.round()), flight_distance])
 
 	# === 距离碰撞检测：补充 body_entered 可能漏检的情况 ===
 	_check_player_collision_distance()
@@ -272,6 +280,7 @@ func _on_ball_out_of_field() -> void:
 	is_active = false
 	_set_idle_visual()
 	ball_out_of_bounds.emit()
+	_traj_end("出界")
 
 	# === 韧性弹飞球出界：球权回攻击者（弹飞朝防守方深处飞，按半场给=必白送防守方——攻防对称） ===
 	if bounced_by_resilience:
@@ -489,6 +498,7 @@ func _on_body_entered(body: Node2D) -> void:
 	# === 普通球：球回到攻击者手上 ===
 	if attacker_player and is_instance_valid(attacker_player):
 		is_active = false
+		_traj_end("命中%s回手" % _pname(player))
 		return_to_player(attacker_player)
 		print("[Ball] 击中 %s,球回到 %s" % [_pname(player), _pname(attacker_player)])
 
@@ -506,6 +516,15 @@ func _catch_ball(player: CharacterBody2D) -> void:
 	# 装备耐久消耗（接球）
 	PlayerSaveManager.reduce_equipment_durability(player.character_id, "catch")
 	print("[Ball] %s 接住球!" % _pname(player))
+
+
+## E9 轨迹终止记录并打印完整链
+func _traj_end(reason: String) -> void:
+	if not _traj_active:
+		return
+	_traj_active = false
+	_traj_log.append("终止[%s]@%s 已飞%.0f" % [reason, str(global_position.round()), flight_distance])
+	print("[轨迹#%d] %s" % [_traj_seq, " → ".join(_traj_log)])
 
 
 func _on_ball_stopped() -> void:
@@ -543,6 +562,7 @@ func _on_ball_stopped() -> void:
 		# 球停在球员附近 → 视为命中，走正常伤害判定
 		print("[Ball] 球停在 %s 附近(%.0fpx),视为命中!" % [_pname(nearest_player), nearest_dist])
 		is_active = true  # 临时恢复，让 _on_body_entered 正常执行
+		_traj_end("60px近停命中")
 		_on_body_entered(nearest_player)
 		return
 
@@ -559,6 +579,7 @@ func _on_ball_stopped() -> void:
 	# 内场停止：攻击失败球回手（不白送防守方）
 	if attacker_player and is_instance_valid(attacker_player):
 		print("[Ball] 球停在内场(%s)未命中,球权回攻击者 %s | 攻击方位置=%s 停止位置=%s" % [str(int(flight_distance)) + "px", _pname(attacker_player), str(attacker_player.global_position), str(pos)])
+		_traj_end("内场停回手")
 		return_to_player(attacker_player)
 		return
 	# 兜底：无攻击者引用（异常态）按半场分配
@@ -597,6 +618,11 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	ball_z = BALL_HEIGHT_CARRY
 	ball_z_vel = 0.0
 	bounce_count = 0
+	# E9 轨迹记录：出手点
+	_traj_seq += 1
+	_traj_active = true
+	_traj_log = []
+	_traj_log.append("出手@%s 攻=%s 方向=%s 速=%.0f 距=%.0f" % [str(global_position.round()), _pname(attacker) if attacker else "?", str(ball_direction.round()), ball_speed, max_flight_distance])
 
 	# 获取标签效果处理器
 	if not tag_effect_handler:

@@ -129,6 +129,11 @@ func _ready() -> void:
 		# 默认快速模式（每半场80秒→约30秒一场），除非命令行已指定 --half
 		if GameManager.sim_half_duration_override <= 0.0:
 			GameManager.sim_half_duration_override = DEFAULT_SIM_HALF
+		# sim 无人操作：清空玩家控制位，AI 接管全部球员
+		# （否则球一旦传入控制位手中无人投球，全场僵死——seed3 根因，2026-09-13）
+		if input_mgr:
+			input_mgr.set_controlled_player(null)
+			print("[Sim] 已清空玩家控制位，AI 接管全部球员")
 		# 连接比赛结束信号 → 采集结束 + 输出报告 + 退出
 		GameManager.match_ended.connect(_on_sim_match_ended)
 		# 跳过备战面板，延时自动开始（等 _ready 全完成）

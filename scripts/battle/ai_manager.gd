@@ -9,6 +9,7 @@ const SpiritAIManager = preload("res://scripts/battle/spirit_ai_manager.gd")
 var battle_manager: Node2D
 var input_manager: Node
 var ball_node: Area2D
+var _diag_timer: float = 0.0  # TEMP-DIAG（方案B临时打点）
 var match_stats: Node = null
 var spirit_ai_mgr: Node = null
 
@@ -1951,20 +1952,39 @@ func _do_shoot(ap: Dictionary) -> void:
 	if not p.is_carrying_ball or not ball_node:
 		return
 
-	var target_pos: Vector2 = ap.target_pos
 	var my_pos: Vector2 = p.global_position
 	var shoot_dir: Vector2
 	var shoot_dist: float = 500.0  # 默认飞行距离
+	var target_pos: Vector2
 
-	if target_pos != Vector2.ZERO:
-		var to_target: Vector2 = target_pos - my_pos
-		shoot_dir = to_target.normalized()
-		shoot_dist = clampf(to_target.length() + 80.0, 200.0, 600.0)  # 目标距离+余量，上限600
+	# E9 瞄准修复：优先瞄准最近存活敌人（旧逻辑瞄"阵型位"=朝无人区投球）
+	var nearest_enemy: CharacterBody2D = null
+	var nearest_d := INF
+	var enemy_team := "b" if p.team == "a" else "a"
+	for e in ball_node._get_all_players_array():
+		if e == null or not is_instance_valid(e) or not (e is CharacterBody2D):
+			continue
+		if e.team != enemy_team or e.is_defeated:
+			continue
+		var d: float = my_pos.distance_to(e.global_position)
+		if d < nearest_d:
+			nearest_d = d
+			nearest_enemy = e
+
+	if nearest_enemy != null:
+		# 瞄准最近敌人（带目标移动预判：按球速/距离提前一个身位）
+		var aim_pos: Vector2 = nearest_enemy.global_position
+		if ball_node and ball_node.has_method("get_base_ball_speed"):
+			var fly_t: float = nearest_d / maxf(nearest_enemy.get_base_ball_speed(), 100.0)
+			aim_pos += nearest_enemy.velocity * fly_t * 0.6  # 60%预判系数
+		target_pos = aim_pos
 	else:
-		# 无目标：朝对方半场中心方向投
-		var fallback_target: Vector2 = Vector2(-190.0, 0.0) if p.team == "a" else Vector2(190.0, 0.0)
-		shoot_dir = (fallback_target - my_pos).normalized()
-		shoot_dist = 400.0
+		# 无敌人存活：朝对方核心区投
+		target_pos = Vector2(-190.0, 0.0) if p.team == "a" else Vector2(190.0, 0.0)
+
+	var to_target: Vector2 = target_pos - my_pos
+	shoot_dir = to_target.normalized()
+	shoot_dist = clampf(to_target.length() + 80.0, 200.0, 600.0)
 
 	# 投球方向偏差
 	var error: float = ap.profile.shoot_angle_error
