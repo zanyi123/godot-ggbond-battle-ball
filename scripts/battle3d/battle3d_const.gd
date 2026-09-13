@@ -61,23 +61,28 @@ func _model_num(char_id: String) -> int:
 
 const MODEL_MAP: Dictionary = {
 	"char_001": {
-		"mesh_fbx": ASSET_BASE + "player1动作/Idle.fbx",
+		# "model_glb(FBX动作,隔离期停用)": ASSET_BASE + "player1动作/...fbx",
+		"model_glb": ASSET_BASE + "player1_base.glb",  # E11 隔离：专属GLB静态
 		"pbr_prefix": ASSET_BASE + "player1_base_texture_pbr_20250901",
 	},
 	"char_002": {
-		"mesh_fbx": ASSET_BASE + "player5动作/Standing Block Idle.fbx",
+		# "model_glb(FBX动作,隔离期停用)": ASSET_BASE + "player5动作/...fbx",
+		"model_glb": ASSET_BASE + "player5_base.glb",  # E11 隔离：专属GLB静态
 		"pbr_prefix": ASSET_BASE + "player5_base_texture_pbr_20250901",
 	},
 	"char_003": {
-		"mesh_fbx": ASSET_BASE + "player2动作/Standing Idle.fbx",
+		# "model_glb(FBX动作,隔离期停用)": ASSET_BASE + "player2动作/...fbx",
+		"model_glb": ASSET_BASE + "player2_base.glb",  # E11 隔离：专属GLB静态
 		"pbr_prefix": ASSET_BASE + "player2_base_texture_pbr_20250901",
 	},
 	"char_004": {
-		"mesh_fbx": ASSET_BASE + "player3动作/Standing Block Idle.fbx",
+		# "model_glb(FBX动作,隔离期停用)": ASSET_BASE + "player3动作/...fbx",
+		"model_glb": ASSET_BASE + "player3_base.glb",  # E11 隔离：专属GLB静态
 		"pbr_prefix": ASSET_BASE + "player3_base_texture_pbr_20250901",
 	},
 	"char_005": {
-		"mesh_fbx": ASSET_BASE + "player4动作/Standing Block Idle.fbx",
+		# "model_glb(FBX动作,隔离期停用)": ASSET_BASE + "player4动作/...fbx",
+		"model_glb": ASSET_BASE + "player4_base.glb",  # E11 隔离：专属GLB静态
 		"pbr_prefix": ASSET_BASE + "player4_base_texture_pbr_20250901",
 	},
 	"char_006": {
