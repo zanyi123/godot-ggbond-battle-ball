@@ -65,7 +65,7 @@
 					"value": 30.0
 				},
 				"ball_speed_up_pct": {
-					"multiplier": 40.0
+					"multiplier": 1.4
 				}
 			},
 			"tags": [
@@ -92,7 +92,7 @@
 				},
 				"player_move_slow": {
 					"duration": 3.0,
-					"multiplier": 50.0
+					"multiplier": 1.5
 				}
 			},
 			"tags": [

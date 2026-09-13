@@ -88,6 +88,7 @@ var use_ballistic_physics: bool = false  # 总开关（默认关：飞行球暂�
 var ball_z: float = 0.0                  # 球离地高度（像素，向上为正）
 var ball_z_vel: float = 0.0              # 垂直速度（px/s）
 var bounce_count: int = 0                # 已落地弹跳次数
+var flight_seq: int = 0                  # 发球序号（每次 launch+1；AI 躲球骰子的稳定威胁标识，跨运行可复现）
 var use_wall_bounce: bool = true         # M2 蓝墙反弹开关（水平反射，与 z 弹道无关）
 const GRAVITY_Z: float = 900.0           # 重力加速度 px/s²
 const BALL_HEIGHT_CARRY: float = 55.0    # 出手高度（3D铁律：持球55）
@@ -557,7 +558,7 @@ func _on_ball_stopped() -> void:
 		return
 	# 内场停止：攻击失败球回手（不白送防守方）
 	if attacker_player and is_instance_valid(attacker_player):
-		print("[Ball] 球停在内场(%.1fpx)未命中,攻击失败球权回攻击者 %s" % [flight_distance, _pname(attacker_player)])
+		print("[Ball] 球停在内场(%s)未命中,球权回攻击者 %s | 攻击方位置=%s 停止位置=%s" % [str(int(flight_distance)) + "px", _pname(attacker_player), str(attacker_player.global_position), str(pos)])
 		return_to_player(attacker_player)
 		return
 	# 兜底：无攻击者引用（异常态）按半场分配
@@ -592,6 +593,7 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	trajectory_type = "straight"
 	element_type = ""
 	_hit_player_ids = {}
+	flight_seq += 1
 	ball_z = BALL_HEIGHT_CARRY
 	ball_z_vel = 0.0
 	bounce_count = 0
@@ -1000,14 +1002,22 @@ func apply_impulse(force: Vector2, delta_time: float = 0.1) -> void:
 func _check_player_collision_distance() -> void:
 	"""距离碰撞检测：补充 body_entered 可能漏检的情况
 	命中距离 = 球半径(14) + 球员半径(28) + 球速帧移动距离
+	E8 高速子步进：沿本帧移动方向细分采样，防一帧飞越目标（主人实测复现）
 	"""
 	if not is_active:
 		return
 
 	var delta_val: float = get_process_delta_time()
-	var detection_range: float = 42.0 + ball_speed * delta_val  # 防止高速穿透
+	var step_len: float = ball_speed * delta_val  # 本帧移动距离
+	var detection_range: float = 42.0 + step_len  # 防止高速穿透
 
 	var all_players := _get_all_players_array()
+	var move_dir: Vector2 = ball_direction.normalized() if ball_direction.length_squared() > 0.001 else Vector2.ZERO
+	# 高速子步进：球速>840(42px*60帧换算) 时按 42px 步长细分采样点（上限16子步）
+	var substeps: int = 1
+	if step_len > 42.0:
+		substeps = mini(int(ceil(step_len / 42.0)), 16)
+
 	for p in all_players:
 		if not p or not is_instance_valid(p):
 			continue
@@ -1023,10 +1033,12 @@ func _check_player_collision_distance() -> void:
 		# M4 高度窗口：跳起的球员从球上方掠过不命中
 		if not _can_hit_target_at(p):
 			continue
-		var dist: float = global_position.distance_to(p.global_position)
-		if dist <= detection_range:
-			_on_body_entered(p)
-			return
+		# 子步进采样：0=当前位，1..substeps=沿移动方向的中间/末端点
+		for s in range(substeps + 1):
+			var sample: Vector2 = global_position + move_dir * (step_len * float(s) / float(substeps))
+			if sample.distance_to(p.global_position) <= detection_range:
+				_on_body_entered(p)
+				return
 
 func _check_obstacle_collision() -> void:
 	"""每帧检测球是否碰到障碍物"""

@@ -167,6 +167,11 @@ var skill_synergy_bonus_high: float = 1.3
 var skill_outnumbered_bonus: float = 1.15
 var skill_selection_temperature: float = 2.0
 
+## M5 跳跃躲球（平衡轮 profile 化，2026-09-13）
+## P_dodge = clamp(base × (1 + fear × (1 - stamina/max_stamina)), 0, 0.95)
+var jump_dodge_base: float = 0.65   # 基准躲避倾向（按角色覆盖）
+var jump_dodge_fear: float = 0.5    # 残血修正系数（血量越低越怕球）
+
 
 ## 返回角色预设配置
 static func get_role_preset(role_name: String) -> AIProfile:
@@ -217,6 +222,7 @@ static func get_role_preset(role_name: String) -> AIProfile:
 			p.skill_defense_intent_weight = 0.9
 			p.skill_support_intent_weight = 1.0
 			p.skill_think_interval = 0.3
+			p.jump_dodge_base = 0.45  # 主攻：进攻优先，躲球机会成本高
 
 		"defender":
 			p.weight_pass = 30.0
@@ -254,6 +260,7 @@ static func get_role_preset(role_name: String) -> AIProfile:
 			p.facing_mode_chase = "ball"
 			p.facing_mode_dribble = "move"
 			p.facing_mode_support = "ball"
+			p.jump_dodge_base = 0.80  # 防御：生存即职责，常站传球路线上吃流弹
 			p.facing_mode_defend = "enemy"
 			p.skill_reserve_weight = 1.1
 			p.skill_attack_intent_weight = 0.9
@@ -303,6 +310,7 @@ static func get_role_preset(role_name: String) -> AIProfile:
 			p.skill_defense_intent_weight = 1.0
 			p.skill_support_intent_weight = 1.4
 			p.skill_think_interval = 0.35
+			p.jump_dodge_base = 0.65  # 支援：中庸
 
 		_:
 			# 默认值（balanced）

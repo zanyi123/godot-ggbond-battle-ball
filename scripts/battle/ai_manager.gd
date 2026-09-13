@@ -110,6 +110,9 @@ func _physics_process(delta: float) -> void:
 		# 感知更新(每帧调用,内部有计时控制)
 		_update_awareness(ap, delta)
 
+		# M5 跳跃反应(每帧时机检查,不进决策状态机——躲敌球)
+		_update_jump_reaction(ap)
+
 		# 每个AI有自己独立的决策间隔
 		var profile: AIProfile = ap.profile
 		ap.think_timer += delta
@@ -126,6 +129,96 @@ func _physics_process(delta: float) -> void:
 
 		# 移动执行
 		_move(ap, delta)
+
+
+# ==============================
+# ===== M5 跳跃反应 ============
+# ==============================
+
+## 起跳安全窗口（由 player.gd JUMP_INITIAL_VZ=380 / GRAVITY=900 解析：
+## z(t)>62px 的时段 = 起跳后 [0.22, 0.62]s，顶点≈0.42s 处）
+const AI_JUMP_WINDOW_EARLY: float = 0.22
+const AI_JUMP_WINDOW_LATE: float = 0.62
+const AI_JUMP_DIST_MAX: float = 260.0     # 球距超过此值不预跳（球可能被拦/转向）
+const AI_JUMP_DIR_DOT_MIN: float = 0.85   # 球方向与"指向我"夹角余弦下限（追踪球豁免）
+
+## M5 躲敌球：敌方来球朝我飞、当前高度会命中站立的我、
+## 球到达时刻落在我起跳安全窗内 → 立即起跳（顶点区间罩住球到达瞬间）
+## 待接球姿态不躲（选择接球就承担风险，归既有接球 utility 决策）
+## 平衡轮：性格概率门 P_dodge = base×(1+fear×(1-血量比))，确定性骰子（不用 randf，
+## 同一(球,人)对结果恒定，sim 可复现）
+func _update_jump_reaction(ap: Dictionary) -> void:
+	var p = ap.player
+	if p == null or not is_instance_valid(p):
+		return
+	if not p.has_method("try_jump") or not p.can_jump():
+		return
+	if p.is_ready_to_catch:
+		return  # 接球姿态不躲（接住=拿球权）
+	var ball = ball_node
+	if ball == null or not is_instance_valid(ball) or not ball.is_active:
+		return
+	if ball.attacker_player == p:
+		return  # 自己发的球
+	if ball.attacker_player and is_instance_valid(ball.attacker_player) \
+			and ball.attacker_player.team == ap.team:
+		return  # 队友来球=接球机会，不躲
+
+	var to_me: Vector2 = p.global_position - ball.global_position
+	var dist: float = to_me.length()
+	if dist > AI_JUMP_DIST_MAX or dist < 1.0:
+		return
+
+	# 球是否会经过我这里：沿球方向的最近距离（追踪球必朝我，豁免朝向检查）
+	var speed: float = maxf(ball.ball_speed, 1.0)
+	var is_tracking: bool = ball.tag_effect_handler != null and ball.tag_effect_handler.is_ball_tracking()
+	var t_arrive: float
+	if is_tracking:
+		t_arrive = dist / speed
+	else:
+		var dir: Vector2 = ball.ball_direction.normalized()
+		var t_closest: float = to_me.dot(dir)
+		if t_closest <= 0.0:
+			return  # 球在远离
+		var miss: float = (to_me - dir * t_closest).length()
+		if miss > 42.0:
+			return  # 弹道不经过我（球半径+球员半径）
+		t_arrive = t_closest / speed
+
+	# 当前高度打不到站立的我 → 不用躲（高飞球/贴地滚过脚边）
+	var hit_range: Vector2 = p.get_hit_z_range()
+	if (ball.ball_z - ball.BALL_HIT_HALF) >= hit_range.y or (ball.ball_z + ball.BALL_HIT_HALF) <= hit_range.x:
+		return
+
+	# 时机：球到达时刻落入起跳安全窗 [0.22, 0.62] 才跳
+	# 太晚（<0.22）跳了还在上升段被击中；太早（>0.62）跳完落回原地挨打，等下一帧
+	if t_arrive < AI_JUMP_WINDOW_EARLY or t_arrive > AI_JUMP_WINDOW_LATE:
+		return
+
+	# 性格概率门（平衡轮）：残血修正的效用近似 + 确定性骰子
+	var profile = ap.get("profile")
+	var base: float = profile.jump_dodge_base if profile != null else 0.65
+	var fear: float = profile.jump_dodge_fear if profile != null else 0.5
+	var stamina_ratio: float = clampf(p.stamina / maxf(p.max_stamina, 1.0), 0.0, 1.0)
+	var p_dodge: float = clampf(base * (1.0 + fear * (1.0 - stamina_ratio)), 0.0, 0.95)
+	# 稳定威胁标识：char_id 哈希（数据固定）+ 发球序号（比赛流程确定则序列确定）
+	# 不用 instance_id——跨运行会变，会破坏 sim 可复现性
+	var threat_key: int = hash(str(p.character_id))
+	if _dodge_roll(threat_key, ball.flight_seq) >= p_dodge:
+		return  # 性格/运气：这次不躲（每帧重算结果一致，不会闪烁）
+
+	p.try_jump()
+
+
+## 确定性躲避骰子 ∈ [0,1)：Knuth 乘法散列。
+## 输入先素数取模防 64 位溢出（1e6×2.65e9 ≈ 2.7e15 ≪ 9.2e18）。
+## 不消耗全局随机流 → 同一威胁恒同一结果
+static func _dodge_roll(key_a: int, key_b: int) -> float:
+	var h: int = (key_a % 1000003) * 2654435761 + (key_b % 100007) * 40503
+	h = h % 4294967296
+	if h < 0:
+		h += 4294967296
+	return float(h) / 4294967296.0
 
 
 # ==============================
