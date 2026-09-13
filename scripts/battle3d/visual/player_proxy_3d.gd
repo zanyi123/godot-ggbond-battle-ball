@@ -96,6 +96,19 @@ func setup(p_char_id: String, p_team_color: Color) -> void:
 		_build_ring_only()
 		return
 	slot.add_child(_body_inst)
+	# E10 诊断：实际加载的 mesh 资源路径 + 内嵌贴图
+	print("[E10诊断] %s mesh源=%s" % [char_id, mesh_path])
+	for mi in _body_inst.find_children("*", "MeshInstance3D", true, false):
+		var m3 := mi as MeshInstance3D
+		if m3.mesh != null:
+			var tex_names: Array = []
+			for s2 in range(m3.mesh.get_surface_count()):
+				var mm = m3.mesh.surface_get_material(s2)
+				if mm is StandardMaterial3D and mm.albedo_texture != null:
+					tex_names.append(mm.albedo_texture.resource_path.get_file())
+				elif mm is StandardMaterial3D:
+					tex_names.append("无贴图材质")
+			print("[E10诊断]   mesh=%s 内嵌贴图=%s" % [m3.name, str(tex_names)])
 	# 缩放铁律：FBX 强制 1.0，由 ModelSlot 的 70 控制大小
 	if _body_inst is Node3D:
 		(_body_inst as Node3D).scale = Vector3(CFG.PROXY_FBX_SCALE, CFG.PROXY_FBX_SCALE, CFG.PROXY_FBX_SCALE)

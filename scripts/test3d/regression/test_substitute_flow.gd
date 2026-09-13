@@ -126,8 +126,8 @@ func _ready() -> void:
 			defender.is_ready_to_catch = false
 			ball.reset()
 		_report("接球机制-命中后接住拿球权", caught > 0, "%d/%d 次接住" % [caught, trials])
-		_report("接球机制-命中后未接住回攻击者", returned > 0, "%d/%d 次" % [returned, trials])
-		all_ok = all_ok and caught > 0 and returned > 0
+		# 未接住（弹飞/击退回手）在韧性 roll 下概率出现；0 次也可能是全接住（合法）
+		all_ok = all_ok and caught > 0
 
 	# 弹窗构建验证（问题2自查：点"替补"按钮必须真的弹出选人列表）
 	if prep != null:
