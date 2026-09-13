@@ -9,7 +9,6 @@ const SpiritAIManager = preload("res://scripts/battle/spirit_ai_manager.gd")
 var battle_manager: Node2D
 var input_manager: Node
 var ball_node: Area2D
-var _diag_timer: float = 0.0  # TEMP-DIAG（方案B临时打点）
 var match_stats: Node = null
 var spirit_ai_mgr: Node = null
 
