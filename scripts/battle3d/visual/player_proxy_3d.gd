@@ -42,8 +42,48 @@ func setup(p_char_id: String, p_team_color: Color) -> void:
 	slot.scale = Vector3(CFG.PROXY_SCALE, CFG.PROXY_SCALE, CFG.PROXY_SCALE)
 	add_child(slot)
 
-	# ========== 1. 加载专属 idle 姿势 FBX（带骨骼 mesh） ==========
+	# ========== 0. GLB 外观模式（无专属动作 FBX 的角色：用专属 base.glb 的正确网格/材质，静止姿势） ==========
 	var mesh_path: String = entry.get("mesh_fbx", "")
+	if mesh_path == "" and entry.has("model_glb"):
+		var glb_scene: PackedScene = load(entry["model_glb"])
+		if glb_scene != null:
+			var glb_inst := glb_scene.instantiate()
+			slot.add_child(glb_inst)
+			# 混元 GLB 材质修正（metallic/roughness）
+			for mi in glb_inst.find_children("*", "MeshInstance3D", true, false):
+				var m3 := mi as MeshInstance3D
+				if m3.mesh == null:
+					continue
+				for s in range(m3.mesh.get_surface_count()):
+					var mat = m3.mesh.surface_get_material(s)
+					if mat is StandardMaterial3D:
+						var sm := mat as StandardMaterial3D
+						if sm.metallic > 0.5:
+							sm.metallic = 0.0
+						if sm.roughness > 0.8:
+							sm.roughness = 0.6
+						sm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			_mesh_ok = true
+			_mesh_instances = glb_inst.find_children("*", "MeshInstance3D", true, false)
+			# GLB 自带动画就播放第一个，否则静止
+			var gap := glb_inst.find_children("*", "AnimationPlayer", true, false)
+			if gap.size() > 0:
+				var gap_ap := gap[0] as AnimationPlayer
+				if gap_ap.get_animation_list().size() > 0:
+					gap_ap.play(gap_ap.get_animation_list()[0])
+			print("[PlayerProxy3D] %s GLB 外观模式（无专属动画=静止）" % char_id)
+			_build_ring_only()
+			var ghand := Node3D.new()
+			ghand.name = "HandProxy"
+			ghand.position = Vector3(8.0, 30.0, 0.0)
+			add_child(ghand)
+			_hand_proxy = ghand
+			return
+		push_error("[PlayerProxy3D] %s GLB 加载失败" % char_id)
+		_build_ring_only()
+		return
+
+	# ========== 1. 加载专属 idle 媒势 FBX（带骨骼 mesh） ==========
 	var mesh_scene: PackedScene = load(mesh_path) if mesh_path != "" else null
 	if mesh_scene == null:
 		push_error("[PlayerProxy3D] %s 无法加载 mesh FBX: %s" % [char_id, mesh_path])

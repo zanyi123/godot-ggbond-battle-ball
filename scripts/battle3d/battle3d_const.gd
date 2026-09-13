@@ -81,15 +81,15 @@ const MODEL_MAP: Dictionary = {
 		"pbr_prefix": ASSET_BASE + "player4_base_texture_pbr_20250901",
 	},
 	"char_006": {
-		"mesh_fbx": SHARED_AVATARS + "Idle.fbx",
+		"model_glb": ASSET_BASE + "player6_base.glb",
 		"pbr_prefix": ASSET_BASE + "player6_base_texture_pbr_20250901",
 	},
 	"char_007": {
-		"mesh_fbx": SHARED_AVATARS + "Idle.fbx",
+		"model_glb": ASSET_BASE + "player7_base.glb",
 		"pbr_prefix": ASSET_BASE + "player7_base_texture_pbr_20250901",
 	},
 	"char_008": {
-		"mesh_fbx": SHARED_AVATARS + "Idle.fbx",
+		"model_glb": ASSET_BASE + "player8_base.glb",
 		"pbr_prefix": ASSET_BASE + "player8_base_texture_pbr_20250901",
 	},
 }

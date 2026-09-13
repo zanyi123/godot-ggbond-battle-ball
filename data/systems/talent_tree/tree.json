@@ -11,7 +11,7 @@
 			"direction": "进攻",
 			"id": "atk_1",
 			"name": "弱点洞察",
-			"pos": "(2361.364, 2586.049)",
+			"pos": "(1404.546, 2639.615)",
 			"requires": [],
 			"stat": "attack_bonus",
 			"type": "stat",
