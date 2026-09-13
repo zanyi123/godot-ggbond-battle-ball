@@ -40,26 +40,45 @@ const FIELD_CENTER_CIRCLE_R: float = 60.0
 const ASSET_BASE := "res://建模素材库/3D模型素材/"
 const SHARED_AVATARS := "res://assets/characters/avatars/"
 
+## E10 角色id→模型编号映射（2026-09-12 主人标注的建模事实）
+## 建模编号体系：player1=猪猪侠 player2=菲菲 player3=小呆呆 player4=波比
+##              player5=超人强 player6=迷糊老师（player7/8 待主人标注，暂按数字）
+## characters.json 的 id 顺序与建模编号不同，必须经本表转换，禁止按数字直配！
+const CHAR_TO_MODEL: Dictionary = {
+	"char_001": 1,  # 猪猪侠
+	"char_002": 5,  # 超人强（建模 player5）
+	"char_003": 2,  # 菲菲（建模 player2）
+	"char_004": 3,  # 小呆呆（建模 player3）
+	"char_005": 4,  # 波比（建模 player4）
+	"char_006": 6,  # 迷糊老师
+	"char_007": 7,  # 卜三（待标注，暂按数字）
+	"char_008": 8,  # （待标注，暂按数字）
+}
+
+func _model_num(char_id: String) -> int:
+	return int(CHAR_TO_MODEL.get(char_id, char_id.to_int())) if CHAR_TO_MODEL.has(char_id) else int(char_id.replace("char_", ""))
+
+
 const MODEL_MAP: Dictionary = {
 	"char_001": {
 		"mesh_fbx": ASSET_BASE + "player1动作/Idle.fbx",
 		"pbr_prefix": ASSET_BASE + "player1_base_texture_pbr_20250901",
 	},
 	"char_002": {
+		"mesh_fbx": ASSET_BASE + "player5动作/Standing Block Idle.fbx",
+		"pbr_prefix": ASSET_BASE + "player5_base_texture_pbr_20250901",
+	},
+	"char_003": {
 		"mesh_fbx": ASSET_BASE + "player2动作/Standing Idle.fbx",
 		"pbr_prefix": ASSET_BASE + "player2_base_texture_pbr_20250901",
 	},
-	"char_003": {
+	"char_004": {
 		"mesh_fbx": ASSET_BASE + "player3动作/Standing Block Idle.fbx",
 		"pbr_prefix": ASSET_BASE + "player3_base_texture_pbr_20250901",
 	},
-	"char_004": {
+	"char_005": {
 		"mesh_fbx": ASSET_BASE + "player4动作/Standing Block Idle.fbx",
 		"pbr_prefix": ASSET_BASE + "player4_base_texture_pbr_20250901",
-	},
-	"char_005": {
-		"mesh_fbx": SHARED_AVATARS + "player5_idle.fbx",
-		"pbr_prefix": ASSET_BASE + "player5_base_texture_pbr_20250901",
 	},
 	"char_006": {
 		"mesh_fbx": SHARED_AVATARS + "Idle.fbx",
