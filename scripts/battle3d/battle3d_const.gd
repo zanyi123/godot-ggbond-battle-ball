@@ -37,7 +37,7 @@ const FIELD_CENTER_CIRCLE_R: float = 60.0
 ## ==================== 球员资产映射（唯一映射处） ====================
 ## 每球员：mesh = 专属 idle 姿势 FBX（带骨骼）；动画 = 共享 Mixamo 动作库
 ## player6~8 无专属动作 FBX → mesh 兜底用共享 avatars/Idle.fbx（已知限制）
-const ASSET_BASE := "res://建模素材库/3D模型素材/"
+const ASSET_BASE := "res://assets/game_models/"
 const SHARED_AVATARS := "res://assets/characters/avatars/"
 
 ## E10 角色id→模型编号映射（2026-09-12 主人标注的建模事实）
@@ -107,7 +107,7 @@ const SHARED_ANIMS: Dictionary = {
 }
 
 ## 球模型
-const BALL_GLB_PATH := "res://建模素材库/3D模型素材/battleball.glb"
+const BALL_GLB_PATH := "res://assets/game_models/battleball.glb"
 
 ## ==================== 坐标映射（唯一入口） ====================
 ## 2D 游戏坐标 → 3D 世界坐标，1:1 零换算（铁律）

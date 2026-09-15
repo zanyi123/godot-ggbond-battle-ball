@@ -10,7 +10,7 @@ extends Node3D
 class_name BallProxy3D
 
 ## ==================== 常量 ====================
-const BALL_BODY_PATH: String = "res://建模素材库/3D模型素材/battleball.glb"
+const BALL_BODY_PATH: String = "res://assets/game_models/battleball.glb"
 ## 球缩放 20 匹配球员 scale=70（模型高约 50），20更像手持大小
 const BALL_SCALE: float = 20.0
 const BALL_FLIGHT_HEIGHT: float = 30.0  # 飞行时 3D Y 高度（球员腰部）

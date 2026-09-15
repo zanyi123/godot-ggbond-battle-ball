@@ -113,11 +113,11 @@ func _set_proxy_current_anim(proxy: Node, name: String) -> void:
 
 ## player1 模型路径(大相机内展示用)
 ## 与 battle/player.gd CHAR_3D_MODEL_PATHS["char_001"] 完全一致
-const PLAYER1_BODY_PATH := "res://建模素材库/3D模型素材/player1_base.glb"
-const PLAYER1_IDLE_PATH := "res://建模素材库/3D模型素材/player1动作/Idle.fbx"
-const PLAYER1_RUN_PATH := "res://建模素材库/3D模型素材/player1动作/Jog Forward.fbx"
-const PLAYER1_THROW_PATH := "res://建模素材库/3D模型素材/player1动作/Goalie Throw.fbx"
-const PLAYER1_CATCH_PATH := "res://建模素材库/3D模型素材/player1动作/Goalkeeper Catch.fbx"
+const PLAYER1_BODY_PATH := "res://assets/game_models/player1_base.glb"
+const PLAYER1_IDLE_PATH := "res://assets/game_models/player1动作/Idle.fbx"
+const PLAYER1_RUN_PATH := "res://assets/game_models/player1动作/Jog Forward.fbx"
+const PLAYER1_THROW_PATH := "res://assets/game_models/player1动作/Goalie Throw.fbx"
+const PLAYER1_CATCH_PATH := "res://assets/game_models/player1动作/Goalkeeper Catch.fbx"
 
 ## 3D 球员代理缩放（用户期望值 70，对应模型高度约 50 单位）
 ## 根本修复：只有 idle FBX mesh 可见，其他 3 个 FBX 隐藏 mesh 只贡献动画
@@ -490,7 +490,7 @@ func _make_3d_player_proxy(player: CharacterBody2D, team_color: Color) -> Node3D
 	root.add_child(slot)
 
 	# ========== 加载主 GLB（player1_base.glb，含贴图）==========
-	var glb_path: String = "res://建模素材库/3D模型素材/player1_base.glb"
+	var glb_path: String = "res://assets/game_models/player1_base.glb"
 	var glb_scene: PackedScene = load(glb_path) as PackedScene
 	if glb_scene == null:
 		push_error("[Player3DTest] 无法加载 GLB: %s" % glb_path)
@@ -510,10 +510,10 @@ func _make_3d_player_proxy(player: CharacterBody2D, team_color: Color) -> Node3D
 	# 球员所有动作都基于 player1 猪猪侠，4 个动作文件
 	# 关键修复：只把第一个 FBX (idle) 作为可见网格，其他 3 个仅取其动画
 	var action_paths: Dictionary = {
-		"idle": "res://建模素材库/3D模型素材/player1动作/Idle.fbx",
-		"run": "res://建模素材库/3D模型素材/player1动作/Jog Forward.fbx",
-		"throw": "res://建模素材库/3D模型素材/player1动作/Goalie Throw.fbx",
-		"catch": "res://建模素材库/3D模型素材/player1动作/Goalkeeper Catch.fbx",
+		"idle": "res://assets/game_models/player1动作/Idle.fbx",
+		"run": "res://assets/game_models/player1动作/Jog Forward.fbx",
+		"throw": "res://assets/game_models/player1动作/Goalie Throw.fbx",
+		"catch": "res://assets/game_models/player1动作/Goalkeeper Catch.fbx",
 	}
 	var first_fbx_anim_player: AnimationPlayer = null
 	var all_anim_players: Array[AnimationPlayer] = []
@@ -1105,7 +1105,7 @@ static func _apply_pbr_materials_to_fbx(fbx_root: Node) -> void:
 		return
 	
 	# ========== 加载 PBR 贴图文件 ==========
-	var base_dir: String = "res://建模素材库/3D模型素材/"
+	var base_dir: String = "res://assets/game_models/"
 	var albedo_path: String = base_dir + "player1_base_texture_pbr_20250901.png"
 	var normal_path: String = base_dir + "player1_base_texture_pbr_20250901_normal.png"
 	var mr_path: String = base_dir + "player1_base_texture_pbr_20250901_metallic-texture_pbr_20250901_roughness.png"

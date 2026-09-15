@@ -1,13 +1,26 @@
 #!/usr/bin/env python3
 """
-决竞球 3D 模型批量减面工具
-批量处理 player1-8_base.glb 高面模型，输出统一命名的低面模型
+决竞球 3D 模型批量减面工具（交互式 + 命令行双模式）
+批量扫描指定目录下所有 player*_base.glb 高模，输出 playerX_low.fbx 低模
 
-用法: python tools/batch_decimate.py [目标面数]
+用法1(命令行): blender --background --python tools/batch_decimate.py -- [目标面数] [目录路径]
+用法2(交互式): blender --background --python tools/batch_decimate.py
+  启动后依次提示输入: 目录路径、目标面数、文件匹配模式
+
+默认扫描: 建模素材库/3D模型素材/
 默认目标: 60000 三角面
+默认匹配: player*_base.glb
+输出命名: playerX_low.fbx（放同目录）
 
-输入: 建模素材库/3D模型素材/playerX_base.glb (混元高模)
-输出: 建模素材库/3D模型素材/playerX_low.fbx (低模)
+示例:
+  # 交互式（推荐，路径不固定）
+  blender --background --python tools/batch_decimate.py
+
+  # 命令行 - 扫描默认目录
+  blender --background --python tools/batch_decimate.py -- 60000
+
+  # 命令行 - 指定目录
+  blender --background --python tools/batch_decimate.py -- 60000 "建模素材库/3D模型素材/20260714_glb_player_base"
 """
 
 import sys
@@ -16,8 +29,51 @@ from pathlib import Path
 
 # ========== 配置 ==========
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
-MODEL_DIR = PROJECT_ROOT / "建模素材库" / "3D模型素材"
+DEFAULT_MODEL_DIR = PROJECT_ROOT / "建模素材库" / "3D模型素材"
 MAX_TRIANGLES = 60000  # 目标三角面数
+DEFAULT_PATTERN = "player*_base.glb"
+
+
+def prompt_input(prompt: str, default: str = "") -> str:
+    """交互式输入"""
+    try:
+        val = input(prompt).strip()
+        return val if val else default
+    except (EOFError, OSError):
+        return default
+
+
+def get_input_params() -> tuple:
+    """交互式获取参数，返回 (model_dir, max_tris, pattern)"""
+    print("=" * 60)
+    print("决竞球 3D 模型批量减面工具 - 交互模式")
+    print("=" * 60)
+
+    # 1. 目录路径
+    default_dir = str(DEFAULT_MODEL_DIR)
+    val = prompt_input(f"\n扫描目录路径（回车=默认 {default_dir}）: ", default_dir)
+    val = val.strip('"').strip("'")
+    model_dir = Path(val) if val else DEFAULT_MODEL_DIR
+    if not model_dir.exists():
+        print(f"[ERROR] 目录不存在: {model_dir}")
+        sys.exit(1)
+    if not model_dir.is_dir():
+        print(f"[ERROR] 不是目录: {model_dir}")
+        sys.exit(1)
+
+    # 2. 目标面数
+    val = prompt_input(f"\n目标三角面数（默认 {MAX_TRIANGLES}）: ", str(MAX_TRIANGLES))
+    try:
+        max_tris = int(val) if val else MAX_TRIANGLES
+    except ValueError:
+        print(f"[WARN] 面数无效，使用默认 {MAX_TRIANGLES}")
+        max_tris = MAX_TRIANGLES
+
+    # 3. 文件匹配模式
+    val = prompt_input(f"\n文件匹配模式（回车=默认 {DEFAULT_PATTERN}）: ", DEFAULT_PATTERN)
+    pattern = val if val else DEFAULT_PATTERN
+
+    return model_dir, max_tris, pattern
 
 
 def decimate_model(input_path: Path, output_path: Path, max_tris: int) -> bool:
@@ -111,7 +167,7 @@ def decimate_model(input_path: Path, output_path: Path, max_tris: int) -> bool:
 
 
 def main():
-    # Blender sys.argv 格式: [blender_exe, --background, --python, script.py, --, user_arg1, user_arg2, ...]
+    # Blender sys.argv 格式: [blender_exe, --background, --python, script.py, --, user_arg1, ...]
     # 提取 '--' 之后的用户参数
     user_args = []
     found_separator = False
@@ -121,32 +177,52 @@ def main():
             continue
         if found_separator:
             user_args.append(arg)
-    
-    max_tris = int(user_args[0]) if user_args else MAX_TRIANGLES
-    
-    # 查找所有 playerX_base.glb 文件
-    glb_files = sorted(MODEL_DIR.glob("player*_base.glb"))
-    
-    if not glb_files:
-        print(f"[ERROR] 在 {MODEL_DIR} 下未找到 player*_base.glb 文件")
+
+    if not user_args:
+        # 交互式模式
+        model_dir, max_tris, pattern = get_input_params()
+    else:
+        # 命令行模式: [目标面数] [目录路径] [匹配模式]
+        max_tris = int(user_args[0]) if len(user_args) >= 1 else MAX_TRIANGLES
+        dir_arg = user_args[1] if len(user_args) > 1 else ""
+        pattern = user_args[2] if len(user_args) > 2 else DEFAULT_PATTERN
+
+        if dir_arg:
+            model_dir = Path(dir_arg.strip('"').strip("'"))
+            if not model_dir.is_absolute():
+                model_dir = PROJECT_ROOT / dir_arg
+        else:
+            model_dir = DEFAULT_MODEL_DIR
+
+    if not model_dir.exists():
+        print(f"[ERROR] 目录不存在: {model_dir}")
         sys.exit(1)
-    
+
+    # 查找所有匹配的 glb 文件
+    glb_files = sorted(model_dir.glob(pattern))
+
+    if not glb_files:
+        print(f"[ERROR] 在 {model_dir} 下未找到匹配 {pattern} 的文件")
+        sys.exit(1)
+
+    print(f"[INFO] 扫描目录: {model_dir}")
+    print(f"[INFO] 匹配模式: {pattern}")
     print(f"[INFO] 找到 {len(glb_files)} 个高模文件，目标面数: {max_tris}")
-    print(f"[INFO] 输出目录: {MODEL_DIR}")
+    print(f"[INFO] 输出目录: {model_dir}")
     print(f"[INFO] 命名规则: playerX_low.fbx")
     print("=" * 60)
-    
+
     success_count = 0
     fail_count = 0
-    
+
     for glb_path in glb_files:
         # 生成统一命名输出路径: player1_base.glb -> player1_low.fbx
         player_num = glb_path.stem.replace("_base", "")
         output_name = f"{player_num}_low.fbx"
-        output_path = MODEL_DIR / output_name
-        
+        output_path = model_dir / output_name
+
         print(f"\n[PROCESS] {glb_path.name} -> {output_name}")
-        
+
         try:
             if decimate_model(glb_path, output_path, max_tris):
                 success_count += 1
@@ -155,11 +231,11 @@ def main():
         except Exception as e:
             print(f"  [ERROR] 处理失败: {e}")
             fail_count += 1
-    
+
     print("\n" + "=" * 60)
     print(f"[DONE] 批量减面完成: 成功 {success_count} 个, 失败 {fail_count} 个")
     print(f"[OUTPUT] 低模文件列表:")
-    for f in sorted(MODEL_DIR.glob("player*_low.fbx")):
+    for f in sorted(model_dir.glob("player*_low.fbx")):
         print(f"  - {f.name}")
 
 

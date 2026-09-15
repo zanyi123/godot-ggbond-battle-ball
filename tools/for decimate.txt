@@ -1,0 +1,81 @@
+主人，[batch_decimate.py](file:///e:/项目储存/决竞球battle-ball/tools/batch_decimate.py) 完整流程命令行格式如下。
+
+## 格式 1：交互式（推荐）
+
+```powershell
+blender --background --python tools/batch_decimate.py
+```
+
+启动后按提示输入：
+```
+扫描目录路径（回车=默认 建模素材库/3D模型素材/）:
+目标三角面数（默认 60000）:
+文件匹配模式（回车=默认 player*_base.glb）:
+```
+
+每个参数都支持回车走默认值，输入灵活。
+
+## 格式 2：命令行 - 仅目标面数
+
+```powershell
+blender --background --python tools/batch_decimate.py -- 60000
+```
+
+扫描默认目录 `建模素材库/3D模型素材/`，目标面数 60000，匹配模式 `player*_base.glb`。
+
+## 格式 3：命令行 - 面数 + 目录
+
+```powershell
+blender --background --python tools/batch_decimate.py -- 60000 "建模素材库/3D模型素材/20260714_glb_player_base"
+```
+
+扫描指定子目录，处理该目录下所有 `player*_base.glb`。
+
+## 格式 4：命令行 - 面数 + 目录 + 匹配模式
+
+```powershell
+blender --background --python tools/batch_decimate.py -- 60000 "建模素材库/3D模型素材/20260714_glb_player_base" "player*_base.glb"
+```
+
+完整参数顺序：`[目标面数] [目录路径] [匹配模式]`
+
+## 格式 5：Blender 完整路径（PATH 未配置时）
+
+```powershell
+& "G:\Blender\blender.exe" --background --python tools/batch_decimate.py -- 60000 "建模素材库/3D模型素材/20260714_glb_player_base"
+```
+
+把 `blender` 换成完整路径即可，其余格式不变。
+
+## 参数顺序总结
+
+```
+blender --background --python tools/batch_decimate.py -- [1] [2] [3]
+                                            ↑       ↑   ↑   ↑
+                                          脚本路径  分隔 面数 目录 模式
+                                                   符
+```
+
+| 位置 | 参数 | 默认值 | 是否必填 |
+|------|------|--------|---------|
+| 1 | 目标三角面数 | 60000 | 否（不传走交互或默认） |
+| 2 | 扫描目录路径 | `建模素材库/3D模型素材/` | 否 |
+| 3 | 文件匹配模式 | `player*_base.glb` | 否 |
+
+**规则**：按位置顺序传，不能跳过。要传第 2 参数必须先传第 1，要传第 3 必须先传 1 和 2。
+
+## 常见场景
+
+| 场景 | 命令 |
+|------|------|
+| 处理全部 8 个球员高模 | 格式 1 或 `-- 60000` |
+| 只处理归类文件夹内的 | `-- 60000 "建模素材库/3D模型素材/20260714_glb_player_base"` |
+| 处理备用模型 | `-- 60000 "建模素材库/3D模型素材/20260914_glb_player_-" "player*.glb"` |
+| 面数调到 8 万 | `-- 80000` |
+| 交互式逐个输入 | 不带 `--` 后参数 |
+
+## 输出
+
+- 位置：与扫描目录同目录
+- 命名：`playerX_low.fbx`（原 `player1_base.glb` → `player1_low.fbx`）
+- 完成后打印成功/失败数和输出文件列表

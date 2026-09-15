@@ -7,17 +7,17 @@ func _init() -> void:
 func _run() -> void:
 	print("=== AABB 探针 ===")
 	# 加载 GLB
-	var glb := load("res://建模素材库/3D模型素材/player1_base.glb") as PackedScene
+	var glb := load("res://assets/game_models/player1_base.glb") as PackedScene
 	if glb:
 		var gi: Node = glb.instantiate()
 		_dump("GLB", gi)
 		gi.queue_free()
 	# 加载每个 FBX
 	for path in [
-		"res://建模素材库/3D模型素材/player1动作/Idle.fbx",
-		"res://建模素材库/3D模型素材/player1动作/Jog Forward.fbx",
-		"res://建模素材库/3D模型素材/player1动作/Goalie Throw.fbx",
-		"res://建模素材库/3D模型素材/player1动作/Goalkeeper Catch.fbx",
+		"res://assets/game_models/player1动作/Idle.fbx",
+		"res://assets/game_models/player1动作/Jog Forward.fbx",
+		"res://assets/game_models/player1动作/Goalie Throw.fbx",
+		"res://assets/game_models/player1动作/Goalkeeper Catch.fbx",
 	]:
 		var fbx := load(path) as PackedScene
 		if fbx:

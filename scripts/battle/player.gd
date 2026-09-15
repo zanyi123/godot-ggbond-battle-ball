@@ -255,11 +255,11 @@ const GLB_CATCH_PATH := "res://assets/characters/avatars/Goalkeeper_Catch.glb"
 ## 未配置的角色自动回落使用上方 GLB_*_PATH 默认路径
 const CHAR_3D_MODEL_PATHS := {
 	"char_001": {  # 猪猪侠 (player1)
-		"body": "res://建模素材库/3D模型素材/player1_base.glb",
-		"idle": "res://建模素材库/3D模型素材/player1动作/Idle.fbx",
-		"run": "res://建模素材库/3D模型素材/player1动作/Jog Forward.fbx",
-		"throw": "res://建模素材库/3D模型素材/player1动作/Goalie Throw.fbx",
-		"catch": "res://建模素材库/3D模型素材/player1动作/Goalkeeper Catch.fbx",
+		"body": "res://assets/game_models/player1_base.glb",
+		"idle": "res://assets/game_models/player1动作/Idle.fbx",
+		"run": "res://assets/game_models/player1动作/Jog Forward.fbx",
+		"throw": "res://assets/game_models/player1动作/Goalie Throw.fbx",
+		"catch": "res://assets/game_models/player1动作/Goalkeeper Catch.fbx",
 	},
 }
 
