@@ -66,6 +66,14 @@ var violating_players: Dictionary = {}  # {player: violation_type}
 
 # 瞄准绘制
 var aim_line: Line2D
+var _path_highlighted: Array = []  # P1 当前被命中预览高亮的球员
+var bridge_3d: Node = null         # P1 3D 桥接层引用（场地投影光标用；sim/2D 模式为 null）
+var _aim_cursor_highlight: bool = false  # P1 场地光标红色态（瞄准且路径标中球员）
+
+
+## P1 玩家是否瞄准中（场地光标红色态的前提）
+func is_input_aiming() -> bool:
+	return input_mgr != null and input_mgr.get("is_aiming") == true
 var aim_dots: Array[Node2D] = []  # 瞄准虚线的点
 var mouse_cursor: ColorRect  # 鼠标光标点
 var aim_arrow: Polygon2D  # 瞄准线末端箭头
@@ -158,6 +166,7 @@ func _ready() -> void:
 		bridge.set_script(load("res://scripts/battle3d/battle_arena_3d_bridge.gd"))
 		add_child(bridge)
 		bridge.setup(self)
+		bridge_3d = bridge
 
 
 ## 解析命令行参数（--sim / --speed=N / --seed=N / --half=N / --dev-prep）
@@ -354,7 +363,12 @@ func _on_throw_requested(direction: Vector2, power: float) -> void:
 			skills.append(skill_data)
 
 	player.set_carrying_ball(false)
-	ball_node.launch(player.global_position, direction, damage, max_dist, player, skills)
+	# P0 空中斜线：空中出手时带球点高度与俯角（地面发球 start_z=-1 恒高不变）
+	var throw_start_z: float = input_mgr.last_throw_start_z if input_mgr else -1.0
+	var throw_pitch: float = input_mgr.last_throw_pitch_deg if input_mgr else 0.0
+	ball_node.launch(player.global_position, direction, damage, max_dist, player, skills, throw_start_z, throw_pitch)
+	# P1 发球后清路径高亮（场地光标常驻，由 cursor 信号继续驱动）
+	_clear_path_highlights()
 
 
 func _on_throw_cancelled() -> void:
@@ -363,6 +377,17 @@ func _on_throw_cancelled() -> void:
 	if aim_line:
 		aim_line.visible = false
 	_cleanup_old_aim_lines()
+	# P1 清除命中预览高亮
+	_clear_path_highlights()
+
+
+## P1 清除全部路径高亮
+func _clear_path_highlights() -> void:
+	for pl in _path_highlighted:
+		if is_instance_valid(pl):
+			pl.set_path_highlight(false)
+	_path_highlighted = []
+	_aim_cursor_highlight = false
 
 
 func _on_catch_entered() -> void:
@@ -929,6 +954,8 @@ func _on_aim_info_updated(aim_info: Dictionary) -> void:
 		aim_line.visible = false
 		mouse_cursor.visible = false
 		_cleanup_old_aim_lines()
+		_clear_path_highlights()
+		# 场地投影光标为常驻功能（由 cursor 信号每帧驱动），此处不关闭
 		return
 
 	var start: Vector2 = aim_info["start"]
@@ -957,6 +984,43 @@ func _on_aim_info_updated(aim_info: Dictionary) -> void:
 
 	# 更新瞄准线末端箭头
 	_update_aim_arrow(end, direction)
+
+	# P1 命中预览：瞄准路径经过的球员高亮（提示非锁定）
+	_update_path_highlights(aim_info)
+
+
+## P1 命中预览高亮：瞄准路径上"球会经过其可命中高度窗口"的玩家亮头像
+func _update_path_highlights(aim_info: Dictionary) -> void:
+	var p = input_mgr.controlled_player if input_mgr else null
+	if p == null:
+		return
+	var start_z: float = p.get_ball_origin_z()
+	# 俯角与 input_manager 发球口径一致：空中出手俯向鼠标点，地面出手恒高
+	var pitch: float = 0.0
+	if p.z_height > 0.0:
+		pitch = -rad_to_deg(atan2(start_z, aim_info["distance"]))
+	var hits: Array = ball_node.preview_path_hits(
+		p.global_position, start_z, pitch, aim_info["distance"],
+		aim_info["direction"], _get_all_players())
+	# diff 更新高亮集合
+	for pl in _path_highlighted:
+		if is_instance_valid(pl) and not hits.has(pl):
+			pl.set_path_highlight(false)
+	for pl in hits:
+		if is_instance_valid(pl) and not _path_highlighted.has(pl):
+			pl.set_path_highlight(true)
+	_path_highlighted = hits
+	# 场地光标红色态 = 路径上有命中者（显示与否由 cursor 常显驱动统一处理）
+	_aim_cursor_highlight = not hits.is_empty()
+
+
+func _get_all_players() -> Array:
+	var all: Array = []
+	if team_a_players:
+		all.append_array(team_a_players)
+	if team_b_players:
+		all.append_array(team_b_players)
+	return all
 
 
 func _draw_dashed_line(start: Vector2, end: Vector2, direction: Vector2, total_distance: float) -> void:
@@ -1019,6 +1083,14 @@ func _on_cursor_info_updated(cursor_info: Dictionary) -> void:
 	cursor_ring.color = Color(1, 1, 0, 0.6)  # 黄色半透明
 	cursor_ring.antialiased = true
 	cursor_ring.visible = true
+
+	# P1 场地投影光标常显：鼠标在球场内（±650/±390=3D 场地范围）即显示，出界隐藏。
+	# 与瞄准解耦（永久性功能）；瞄准标中球员时由 _aim_cursor_highlight 置红
+	if bridge_3d and bridge_3d.has_method("set_aim_cursor"):
+		# FP 期间鼠标被捕获（无屏幕位置），场地光标一并隐藏
+		var in_field: bool = absf(pos.x) <= 650.0 and absf(pos.y) <= 390.0 \
+			and (input_mgr == null or input_mgr.get("fp_mode") != true)
+		bridge_3d.set_aim_cursor(in_field, pos, _aim_cursor_highlight and is_input_aiming())
 
 
 func _update_all_player_arrows() -> void:

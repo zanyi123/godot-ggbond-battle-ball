@@ -31,6 +31,9 @@ var _field_zone_script: GDScript = null
 var _parity_error_count: int = 0
 ## P4：特效适配器
 var _fx_adapter: SkillFx3DAdapter = null
+var _aim_cursor: MeshInstance3D = null  # P1 场地投影落点光标（贴地环）
+var _fp_crosshair: ColorRect = null     # P2 第一人称中心准星
+var _fp_prev_mode: int = 0              # 进 FP 前的相机模式（退出恢复）
 
 ## ==================== 构建 ====================
 
@@ -45,7 +48,104 @@ func setup(mgr: Node2D) -> void:
 	_spawn_ball_proxy()
 	_setup_fx_adapter()
 	_setup_parity_check()
+	_spawn_aim_cursor()
 	print("[Bridge3D] ✅ 3D 场景层构建完成 (players=%d)" % _player_proxies.size())
+
+## P1 场地投影落点光标：贴地环（黄=瞄准中，红=路径标中球员），显示在鼠标地面投影处
+func _spawn_aim_cursor() -> void:
+	_aim_cursor = MeshInstance3D.new()
+	_aim_cursor.name = "AimCursor"
+	var torus := TorusMesh.new()
+	torus.inner_radius = 14.0
+	torus.outer_radius = 20.0
+	_aim_cursor.mesh = torus
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.85, 0.2, 0.85)
+	mat.no_depth_test = false
+	_aim_cursor.material_override = mat
+	_aim_cursor.visible = false
+	_world.add_child(_aim_cursor)
+
+
+## battle_manager 瞄准时每帧调用；pos2d=鼠标地面投影点（2D 坐标 1:1）
+func set_aim_cursor(show: bool, pos2d: Vector2, highlight: bool = false) -> void:
+	if _aim_cursor == null or _world == null:
+		return
+	_aim_cursor.visible = show and _world.visible
+	if _aim_cursor.visible:
+		_aim_cursor.global_position = Vector3(pos2d.x, 0.6, pos2d.y)
+		var mat := _aim_cursor.material_override as StandardMaterial3D
+		if mat:
+			mat.albedo_color = Color(1.0, 0.25, 0.2, 0.95) if highlight else Color(1.0, 0.85, 0.2, 0.85)
+
+
+## P2 第一人称：读 input_manager.fp_mode 切相机、喂视角参数、准星显隐
+## （2D 权威：FP 状态全部存 2D 层 input_manager，bridge 只读渲染）
+func _sync_fp_mode(_delta: float) -> void:
+	if _cam == null:
+		return
+	var input_mgr = battle_mgr.input_mgr if battle_mgr else null
+	var want_fp: bool = input_mgr != null and input_mgr.get("fp_mode") == true
+	var ctrl = battle_mgr.input_mgr.controlled_player if input_mgr != null else null
+
+	if want_fp and _cam.mode != Camera3DController.Mode.FIRST_PERSON:
+		_fp_prev_mode = _cam.mode
+		_cam.set_mode(Camera3DController.Mode.FIRST_PERSON)
+		_show_fp_crosshair(true)
+	elif not want_fp and _cam.mode == Camera3DController.Mode.FIRST_PERSON:
+		_cam.set_mode(_fp_prev_mode as Camera3DController.Mode)
+		_show_fp_crosshair(false)
+		_set_fp_own_proxy_visible(true, null)  # 退出：恢复全部代理可见
+		return
+	if not want_fp or ctrl == null:
+		return
+
+	# FP 期间隐藏自机代理（标准 FPS 做法：低头/转身不再穿模看到自己身体内部；
+	# 每帧强制——兼容 FP 中 Tab 换人/代理重建）
+	_set_fp_own_proxy_visible(false, ctrl)
+
+	# 每帧喂视角数据（球员移动+鼠标转动）
+	_cam.fp_pos2d = ctrl.global_position
+	_cam.fp_height_z = ctrl.get("z_height") + 60.0  # 眼高=跳跃高度+60
+	_cam.fp_yaw = input_mgr.fp_yaw
+	_cam.fp_pitch = input_mgr.fp_pitch
+
+	# 准星高亮：视线直线命中预览（复用 preview_path_hits）
+	if _cam.mode == Camera3DController.Mode.FIRST_PERSON:
+		var hits: Array = battle_mgr.ball_node.preview_path_hits(
+			ctrl.global_position, _cam.fp_height_z, rad_to_deg(input_mgr.fp_pitch),
+			600.0, Vector2(cos(input_mgr.fp_yaw), sin(input_mgr.fp_yaw)),
+			battle_mgr._get_all_players())
+		if _fp_crosshair:
+			_fp_crosshair.color = Color(1.0, 0.25, 0.2) if not hits.is_empty() else Color(1.0, 1.0, 1.0, 0.9)
+
+
+## P2 准星（屏心十字块，CanvasLayer 上叠）
+func _show_fp_crosshair(show_it: bool) -> void:
+	if show_it and _fp_crosshair == null:
+		_fp_crosshair = ColorRect.new()
+		_fp_crosshair.size = Vector2(6, 6)
+		_fp_crosshair.color = Color(1, 1, 1, 0.9)
+		_display_layer.add_child(_fp_crosshair)
+	if _fp_crosshair:
+		var vp_size: Vector2 = get_viewport().size if get_viewport() else Vector2(1440, 900)
+		_fp_crosshair.position = vp_size / 2.0 - Vector2(3, 3)
+		_fp_crosshair.visible = show_it
+		if show_it:
+			_fp_crosshair.color = Color(1, 1, 1, 0.9)  # 重置为白色
+
+
+## P2 FP 自机代理显隐：visible=true 时恢复全部；false 时只藏 controlled（换人也正确）
+func _set_fp_own_proxy_visible(visible_flag: bool, controlled) -> void:
+	for p2d in _player_proxies:
+		var proxy = _player_proxies[p2d]
+		if proxy == null or not is_instance_valid(proxy):
+			continue
+		var is_own: bool = visible_flag == false and p2d == controlled
+		proxy.visible = not is_own
+
 
 func _setup_fx_adapter() -> void:
 	var adapter_script: GDScript = load("res://scripts/battle3d/visual/skill_fx_3d_adapter.gd")
@@ -217,6 +317,7 @@ func _process(delta: float) -> void:
 	_sync_players()
 	_sync_ball()
 	_sync_camera()
+	_sync_fp_mode(delta)
 	_fps_timer += delta
 	if _fps_timer >= 10.0:
 		_fps_timer = 0.0

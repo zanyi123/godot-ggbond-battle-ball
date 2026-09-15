@@ -17,6 +17,16 @@ var skill_state_manager: SkillStateManager = null
 
 # 鼠标位置（世界坐标）
 var mouse_world_pos: Vector2 = Vector2.ZERO
+# P0 空中斜线发球参数（release 时写入，battle_manager 读取；信号签名不动）
+var last_throw_start_z: float = -1.0
+var last_throw_pitch_deg: float = 0.0
+# P2 第一人称模式（E 键切换；独立按键，不改既有鼠标语义）
+var fp_mode: bool = false
+var fp_yaw: float = 0.0              # 水平角（弧度；朝 2D +x 为 0）
+var fp_pitch: float = 0.0            # 俯仰角（弧度，抬头为正）
+const FP_PITCH_MIN: float = deg_to_rad(-60.0)
+const FP_PITCH_MAX: float = deg_to_rad(30.0)
+const FP_MOUSE_SENS: float = 0.003   # 鼠标灵敏度（弧度/像素）
 
 # 鼠标光标圆环动画
 var cursor_ring_timer: float = 0.0
@@ -70,6 +80,9 @@ func _input(event: InputEvent) -> void:
 		# Tab切换球员
 		elif event.keycode == KEY_TAB:
 			_cycle_player()
+		# P2 E键：第一人称进出（独立按键，不涉既有鼠标操作）
+		elif event.keycode == KEY_E:
+			toggle_fp_mode()
 	
 	# === 鼠标操作 ===
 	if event is InputEventMouseButton:
@@ -86,6 +99,36 @@ func _input(event: InputEvent) -> void:
 				_on_right_click_press()
 			else:
 				_on_right_click_release()
+
+	# P2 第一人称：鼠标移动=转视角（相对模式，不依赖屏幕光标位置）
+	# 水平：鼠标右移 rel.x>0 → 视线右转（yaw 增，朝向 (cosθ,·,sinθ) 的 θ 增方向）
+	if fp_mode and event is InputEventMouseMotion:
+		fp_yaw = fposmod(fp_yaw + event.relative.x * FP_MOUSE_SENS, TAU)
+		fp_pitch = clampf(fp_pitch - event.relative.y * FP_MOUSE_SENS, FP_PITCH_MIN, FP_PITCH_MAX)
+
+
+## P2 FP 移动向量（视角相对）：W前S后A左D右，随视线旋转（ax=A/D=-1/+1, ay=W/S=-1/+1）
+## 返回世界系单位向量；输入全零返回 ZERO
+func compute_fp_move(ax: float, ay: float) -> Vector2:
+	if ax == 0.0 and ay == 0.0:
+		return Vector2.ZERO
+	var fwd := Vector2(cos(fp_yaw), sin(fp_yaw))
+	var right := Vector2(-sin(fp_yaw), cos(fp_yaw))
+	return (fwd * -ay + right * ax).normalized()
+
+
+## P2 第一人称进出（E 键）。进入时以当前朝向初始化 yaw，pitch 清平视
+## 进入=捕获鼠标（OS 光标隐藏，只出相对位移）；退出=恢复可见
+func toggle_fp_mode() -> void:
+	fp_mode = not fp_mode
+	if fp_mode:
+		if controlled_player and controlled_player.facing_direction.length_squared() > 0.001:
+			fp_yaw = controlled_player.facing_direction.angle()
+		fp_pitch = 0.0
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	else:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	print("[Input] 第一人称 %s" % ("进入" if fp_mode else "退出"))
 
 
 func _on_left_click_press() -> void:
@@ -112,11 +155,32 @@ func _on_left_click_release() -> void:
 		return
 
 	if controlled_player.is_carrying_ball and is_aiming:
-		# 释放：计算力度和方向（鼠标到球员方向），发球
-		var direction := (mouse_world_pos - controlled_player.global_position).normalized()
-		var distance: float = (mouse_world_pos - controlled_player.global_position).length()
-		var power := clampf(distance / 500.0, 0.1, 1.0)  # 最大力度对应500像素距离
-		
+		# 释放：计算力度和方向，发球
+		var direction: Vector2
+		var distance: float
+		var power: float
+
+		# P2 第一人称：方向=视线水平投影，力度=满蓄视觉距离（FP 无落点概念，按固定距离比例）
+		if fp_mode:
+			direction = Vector2(cos(fp_yaw), sin(fp_yaw))
+			distance = 300.0 + 0.0
+			power = 0.6
+			# 出手参数：球点高度 + 视线俯仰（可打任意高度，含空中平射）
+			last_throw_start_z = controlled_player.get_ball_origin_z()
+			last_throw_pitch_deg = rad_to_deg(fp_pitch)
+		else:
+			# 第三人称：鼠标地面投影瞄准（既有逻辑）
+			direction = (mouse_world_pos - controlled_player.global_position).normalized()
+			distance = (mouse_world_pos - controlled_player.global_position).length()
+			power = clampf(distance / 500.0, 0.1, 1.0)  # 最大力度对应500像素距离
+			# P0 空中斜线发球：仅在跳跃空中出手时启用（地面发球恒高不变，sim 基线零影响）
+			# 俯角对准鼠标地面投影点：tanφ = 出手高 / 水平距离
+			last_throw_start_z = -1.0
+			last_throw_pitch_deg = 0.0
+			if controlled_player.z_height > 0.0 and distance > 20.0:
+				last_throw_start_z = controlled_player.get_ball_origin_z()
+				last_throw_pitch_deg = -rad_to_deg(atan2(last_throw_start_z, distance))
+
 		if distance > 20.0:  # 最小距离阈值
 			throw_requested.emit(direction, power)
 		else:
@@ -212,8 +276,11 @@ func _process(delta: float) -> void:
 		else:
 			mouse_world_pos = viewport.get_mouse_position()
 	
-	# 更新球员朝向
-	controlled_player.facing_direction = (mouse_world_pos - controlled_player.global_position).normalized()
+	# 更新球员朝向（FP 下=视线方向；鼠标捕获后 mouse_world_pos 冻结不可用）
+	if fp_mode:
+		controlled_player.facing_direction = Vector2(cos(fp_yaw), sin(fp_yaw))
+	else:
+		controlled_player.facing_direction = (mouse_world_pos - controlled_player.global_position).normalized()
 	player_facing_updated.emit(controlled_player, controlled_player.facing_direction)
 	
 	# 更新瞄准信息（始终发送，确保取消时能清除）

@@ -32,6 +32,22 @@ var _hit_player_ids: Dictionary = {}
 ## 场地弹性系数（FieldPhysicsManager）作为技能加成叠加，见 _get_effective_bounce_e()
 var bounce_coefficient: float = 1.0
 
+## 空中斜线（P0）：z 随水平距离线性插值，触地贴地。直线不下坠原则保持——是直线，只是斜的
+func _step_z_lerp() -> void:
+	var z: float = z_lerp_start + flight_distance * z_lerp_tan
+	if z <= 0.0:
+		ball_z = 0.0  # 触地：贴地滑行
+	else:
+		ball_z = z
+
+
+## a方案 耗尽下坠触发：距离耗尽且球在空中时调用（球权分配后播短抛物线落回地面）
+func start_visual_fall() -> void:
+	if ball_z > 0.0:
+		visual_fall_left = 0.35
+		ball_z_vel = -ball_z / 0.35 + 0.5 * GRAVITY_Z * 0.35  # 0.35s 恰好落到 z=0
+
+
 ## ==================== M4 高度命中 ====================
 
 ## 高度窗口：球垂直区间 [z-HALF, z+HALF] 与目标命中区间重叠才可命中/接球
@@ -43,6 +59,31 @@ func _can_hit_target_at(target: Node) -> bool:
 		return true  # 无高度接口的对象按旧规则可命中
 	var r: Vector2 = target.get_hit_z_range()
 	return (ball_z - BALL_HIT_HALF) < r.y and (ball_z + BALL_HIT_HALF) > r.x
+
+
+## 命中预览（P1 双视角共用核心）：直线 z(L)=start_z+L·tanφ 与各球员命中窗口求交
+## 返回会被路径击中的球员数组（提示用，非锁定）。players 元素需有 global_position/get_hit_z_range
+static func preview_path_hits(from: Vector2, start_z: float, pitch_deg: float, max_dist: float, direction: Vector2, players: Array) -> Array:
+	var hits: Array = []
+	var tan_p: float = tan(deg_to_rad(clampf(pitch_deg, -60.0, 30.0)))
+	var dir: Vector2 = direction.normalized()
+	for p in players:
+		if p == null or not is_instance_valid(p) or not p is Node2D:
+			continue
+		if p.get("is_defeated"):
+			continue
+		var to_p: Vector2 = p.global_position - from
+		var L: float = to_p.dot(dir)              # 沿路径的水平距离
+		if L <= 0.0 or L > max_dist:
+			continue
+		var miss: float = (to_p - dir * L).length()
+		if miss > 42.0:
+			continue                              # 不在路径走廊内
+		var z_at: float = start_z + L * tan_p
+		var hit_range: Vector2 = p.get_hit_z_range() if p.has_method("get_hit_z_range") else Vector2(0, 50)
+		if (z_at - BALL_HIT_HALF) < hit_range.y and (z_at + BALL_HIT_HALF) > hit_range.x:
+			hits.append(p)
+	return hits
 
 
 ## ==================== M2 蓝墙反弹 ====================
@@ -94,6 +135,12 @@ var _traj_seq: int = 0
 var bounce_count: int = 0               # 已落地弹跳次数
 var flight_seq: int = 0                  # 发球序号（每次 launch+1；AI 躲球骰子的稳定威胁标识，跨运行可复现）
 var use_wall_bounce: bool = true         # M2 蓝墙反弹开关（水平反射，与 z 弹道无关）
+
+## 空中斜线发球（P0）：z 沿飞行距离线性插值，触地贴地
+var z_lerp_active: bool = false
+var z_lerp_start: float = 0.0
+var z_lerp_tan: float = 0.0
+var visual_fall_left: float = 0.0        # a方案：球权已分配后的下坠表现剩余时间（仅视觉）
 const GRAVITY_Z: float = 900.0           # 重力加速度 px/s²
 const BALL_HEIGHT_CARRY: float = 55.0    # 出手高度（3D铁律：持球55）
 const BOUNCE_SPEED_MIN: float = 80.0     # 反弹速度低于此值→贴地滚动
@@ -177,8 +224,18 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	# M1 弹道 2D 表现：球精灵随 z 上移、影子留地变淡（is_active=false 时复位）
-	var lift: float = ball_z if is_active else 0.0
+	# a方案 耗尽下坠表现：球权已即时分配（is_active=false），高度继续短抛物线落回 0
+	if visual_fall_left > 0.0:
+		visual_fall_left -= delta
+		ball_z += ball_z_vel * delta
+		ball_z_vel -= GRAVITY_Z * delta
+		if ball_z <= 0.0:
+			ball_z = 0.0
+			visual_fall_left = 0.0
+	elif not is_active:
+		ball_z = 0.0
+	# M1 弹道 2D 表现：球精灵随 z 上移、影子留地变淡
+	var lift: float = ball_z if (is_active or visual_fall_left > 0.0) else 0.0
 	if ball_visual:
 		ball_visual.position.y = -11.0 - lift
 	if ball_shadow:
@@ -197,7 +254,10 @@ func _physics_process(delta: float) -> void:
 
 	# === M1 弹道物理：z 轴积分（技能接管球跳过——暂时无视物理，高度由技能定义）===
 	if not _is_skill_controlled():
-		_step_ballistic_z(delta)
+		if z_lerp_active:
+			_step_z_lerp()
+		else:
+			_step_ballistic_z(delta)
 
 	# === 追踪球状态（供后续距离判断使用）===
 	var is_tracking: bool = tag_effect_handler and tag_effect_handler.is_ball_tracking()
@@ -531,6 +591,8 @@ func _on_ball_stopped() -> void:
 	"""球停止(超出距离但未出界)
 	先检查附近是否有球员（视为命中），否则按半场分配球权
 	"""
+	# a方案：球在空中耗尽 → 球权照常即时分配，高度走视觉下坠（0.35s 抛物线）
+	start_visual_fall()
 	is_active = false
 	_set_idle_visual()
 
@@ -593,7 +655,7 @@ func _on_ball_stopped() -> void:
 ## 标签效果处理器引用
 var tag_effect_handler: SpiritTagEffectHandler = null
 
-func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, attacker: CharacterBody2D, skills: Array[Dictionary] = []) -> void:
+func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, attacker: CharacterBody2D, skills: Array[Dictionary] = [], start_z: float = -1.0, pitch_deg: float = 0.0) -> void:
 	global_position = from
 	ball_direction = direction.normalized()
 	ball_damage = damage
@@ -615,9 +677,15 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	element_type = ""
 	_hit_player_ids = {}
 	flight_seq += 1
-	ball_z = BALL_HEIGHT_CARRY
+	# 空中斜线发球（P0）：start_z>=0 时启用 z 线性插值（直线，只是斜的）：
+	# z(L) = start_z + L·tanφ，触地后贴地滑行至距离耗尽。默认 -1=恒高（现行为）
+	z_lerp_active = start_z >= 0.0
+	z_lerp_start = maxf(start_z, BALL_HEIGHT_CARRY)
+	z_lerp_tan = tan(deg_to_rad(clampf(pitch_deg, -60.0, 30.0))) if z_lerp_active else 0.0
+	ball_z = z_lerp_start if z_lerp_active else BALL_HEIGHT_CARRY
 	ball_z_vel = 0.0
 	bounce_count = 0
+	visual_fall_left = 0.0
 	# E9 轨迹记录：出手点
 	_traj_seq += 1
 	_traj_active = true

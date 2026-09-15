@@ -1004,6 +1004,18 @@ func _physics_process(delta: float) -> void:
 		try_jump()
 	_jump_key_was_pressed = jump_pressed
 
+	# P2 FP 移动（视角相对）：W前S后A左D右随视线旋转（第三人称世界轴方案在 FP 下会前后左右对调）
+	if is_player_controlled:
+		var im: Node = get_parent().get_node_or_null("InputManager") if get_parent() else null
+		if im and im.get("fp_mode") == true:
+			var ax := Input.get_axis("move_left", "move_right")
+			var ay := Input.get_axis("move_up", "move_down")
+			var fp_move: Vector2 = im.compute_fp_move(ax, ay)
+			velocity = fp_move * move_speed if fp_move != Vector2.ZERO else Vector2.ZERO
+			move_and_slide()
+			_clamp_to_field()
+			return
+
 	# 移动（包括外场球员，由隔离墙限制范围即可）
 	var input_dir := Vector2.ZERO
 	input_dir.x = Input.get_axis("move_left", "move_right")
@@ -1066,6 +1078,29 @@ func _regen_endurance(delta: float) -> void:
 ## 球的高度窗口与此区间有重叠才可命中/接球（跳起可躲低球/拦高球）
 func get_hit_z_range() -> Vector2:
 	return Vector2(z_height, z_height + PLAYER_HIT_HEIGHT)
+
+
+## P0 空中发球：出手球点高度（球员当前高度+头顶持球高 55）
+func get_ball_origin_z() -> float:
+	return z_height + 55.0
+
+
+## P1 命中预览高亮：瞄准路径会经过该球员（提示非锁定）——头像描边变色
+func set_path_highlight(on: bool) -> void:
+	if avatar_bg == null:
+		return
+	if on:
+		var hb := StyleBoxFlat.new()
+		hb.bg_color = Color.YELLOW
+		hb.set_corner_radius_all(20)
+		hb.border_color = Color(1.0, 0.2, 0.2)
+		hb.set_border_width_all(3)
+		avatar_bg.add_theme_stylebox_override("normal", hb)
+	else:
+		var base := StyleBoxFlat.new()
+		base.bg_color = Color.BLUE if team == "a" else Color.RED
+		base.set_corner_radius_all(20)
+		avatar_bg.add_theme_stylebox_override("normal", base)
 
 
 ## z 轴积分：起跳→顶点→落地（欧拉足够：单次跳跃无长程能量累积问题）
