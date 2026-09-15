@@ -11,7 +11,9 @@ const PROXY_FBX_SCALE: float = 1.0       ## FBX 强制 1.0（缩放铁律）
 const PROXY_MODEL_HEIGHT: float = 49.86  ## 球员模型实际高度（实测）
 
 ## ==================== 球规格（player_3d_test 一体化平台口径） ====================
-const BALL_SCALE: float = 30.0
+## battleball.glb 原生直径实测 1.1927（2026-09-15 步骤④ headless 实测）
+## 30→11.75：原 35.8px/身高45% 巨球 → 14px/身高18%（Blender 杯型手验收比例，主人拍板"球太大"）
+const BALL_SCALE: float = 11.75
 const BALL_CARRIED_Y: float = 55.0       ## 持球高度（手部）
 const BALL_FLIGHT_Y: float = 30.0        ## 飞行高度（腰部）
 const BALL_SPIN_SPEED: float = 12.0      ## 飞行自旋 rad/s
