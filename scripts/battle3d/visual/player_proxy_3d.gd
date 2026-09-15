@@ -75,7 +75,7 @@ func setup(p_char_id: String, p_team_color: Color) -> void:
 			_build_ring_only()
 			var ghand := Node3D.new()
 			ghand.name = "HandProxy"
-			ghand.position = Vector3(8.0, 30.0, 0.0)
+			ghand.position = _hand_offset_for(char_id)
 			add_child(ghand)
 			_hand_proxy = ghand
 			return
@@ -147,7 +147,7 @@ func setup(p_char_id: String, p_team_color: Color) -> void:
 	_build_ring_only()
 	var hand := Node3D.new()
 	hand.name = "HandProxy"
-	hand.position = Vector3(8.0, 30.0, 0.0)
+	hand.position = _hand_offset_for(char_id)
 	add_child(hand)
 	_hand_proxy = hand
 
@@ -228,6 +228,10 @@ func play_action(action: String) -> void:
 ## 手部挂接点（持球时球代理贴这里）
 func get_hand_proxy() -> Node3D:
 	return _hand_proxy
+
+## 逐角色手挂点偏移（battle3d_const.HAND_PROXY_OFFSET，缺省兜底历史占位值）
+static func _hand_offset_for(p_char_id: String) -> Vector3:
+	return CFG.HAND_PROXY_OFFSET.get(p_char_id, CFG.HAND_PROXY_DEFAULT)
 
 func get_anim_player() -> AnimationPlayer:
 	return _anim_player

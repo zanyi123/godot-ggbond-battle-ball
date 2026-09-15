@@ -46,10 +46,21 @@
    Godot 解读出与 Blender 不同的姿态，导出前清理干净（只留骨骼 rotation_mode
    对应的那一种）
 6. **原件永不覆盖**：每步产出新文件名，源文件只读
+7. **视口陈旧帧已攻克（2026-09-15 深夜，目检管道正式可用）**：
+   - 根因三层：`view_all`/`view_selected` 是 modal 平滑动画（立即读 view_distance=旧值）；
+     Blender 窗口后台化时跳过重绘（redraw_timer 仅 0.01ms=没画）；rv3d 属性赋值对数据生效但屏幕不刷新
+   - `view_selected` 在 temp_override 下还会静默失败——别依赖视口 operator 做机位
+   - **解法**：直接设 `rv3d.view_location/view_distance/view_rotation`（数据层生效）→
+     `bpy.ops.render.opengl()` + `img.save_render(filepath)` 强制出图（渲染管线不依赖窗口前台）→ Read png 目检
+   - **坐标系三坑**：GL 渲染走世界坐标，glTF 导入 mesh 局部系 Y-up、matrix_world 带 ±90°X 旋转，
+     机位/放物必须 `matrix_world @` 变换；`v.co` 是局部坐标、`bound_box @ matrix_world` 是世界坐标；
+     `primitive_uv_sphere_add(location=)` 吃世界坐标（喂局部会埋地下）
 
 ## 已知边界（2026-09-15 时点）
 
 - 手型方案为"静态杯形"：因模型无指骨，所有动画下手型恒为杯状——Q版可接受
-- 指骨级手指动画：需先有带指缝的模型源 + 可靠视觉反馈，暂缓
+- 指骨级手指动画：需先有带指缝的模型源 + 可靠视觉反馈，暂缓（视觉反馈已解决，卡模型源）
 - 游戏 3D 当前为"雕像模式"（E11 外观模式无骨架动画），原地/跑动持球动画
   属于骨架路线目标，见 docs/3D场景回归Godot融合方案.md
+- **base.glb 系（混元产出）无骨架无顶点组**：手部等区域只能几何定位+顶点级静态变形；
+  步骤③动画路线需绑骨或走 FBX 载体（路线甲），网格换皮（乙）对 base 无意义（无绑定可换）

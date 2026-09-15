@@ -72,7 +72,7 @@ const MODEL_MAP: Dictionary = {
 	},
 	"char_003": {
 		# "model_glb(FBX动作,隔离期停用)": ASSET_BASE + "player2动作/...fbx",
-		"model_glb": ASSET_BASE + "player2_base.glb",  # E11 隔离：专属GLB静态
+		"model_glb": ASSET_BASE + "player2_base_cup.glb",  # E11隔离+杯型手版（步骤②交付，2026-09-15）
 		"pbr_prefix": ASSET_BASE + "player2_base_texture_pbr_20250901",
 	},
 	"char_004": {
@@ -104,6 +104,14 @@ const SHARED_ANIMS: Dictionary = {
 	"run": SHARED_AVATARS + "Jog_Forward.fbx",
 	"throw": SHARED_AVATARS + "Goalie_Throw.fbx",
 	"catch": SHARED_AVATARS + "Goalkeeper_Catch.fbx",
+}
+
+## 手部挂点偏移（HandProxy 局部位置，球代理持球时贴此点）
+## 缺省兜底 = 历史占位值；逐角色实测校准（步骤④，杯心坐标×PROXY_SCALE）
+## player2 实测：Blender 杯心球位局部(-0.463,0.654,0.038) → slot空间×70，2026-09-15
+const HAND_PROXY_DEFAULT := Vector3(8.0, 30.0, 0.0)
+const HAND_PROXY_OFFSET: Dictionary = {
+	"char_003": Vector3(-32.4, 45.8, 2.7),  # 菲菲 player2_base_cup 杯心实测
 }
 
 ## 球模型
