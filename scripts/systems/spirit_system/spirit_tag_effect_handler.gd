@@ -36,28 +36,41 @@ const FLUSH_WINDOW: float = 0.1
 ## 是否启用优先级队列(测试平台可关闭)
 var priority_queue_enabled: bool = true
 
-# 球的临时修饰符（发球时生效，球落地/回收时清空）
-var _ball_mods: Dictionary = {
-	"dmg_mult": 1.0,        # 伤害倍率
-	"dmg_flat": 0.0,        # 伤害固定加减
-	"speed_mult": 1.0,      # 速度倍率
-	"speed_flat": 0.0,      # 速度固定加减
-	"range_mult": 1.0,      # 飞行距离倍率
-	"range_flat": 0.0,      # 飞行距离固定加减
-	"penetrate": false,      # 穿透
-	"armor": 0.0,           # 护甲值（抵消伤害）
-	"tracking_target": null, # 追踪目标节点
-	"tracking_turn_speed": 0.0,
-	"boomerang": false,      # 回旋
-	"boomerang_triggered": false,
-	"boomerang_return_dir": Vector2.ZERO,
-	"boomerang_dist": 0.0,
-	"lock_straight": false,  # 直行（禁用其他轨迹）
-	"spread_done": false,    # 扩散已触发
-	"aoe_radius": 0.0,       # AOE半径
-	"aoe_damage_pct": 0.5,   # AOE伤害百分比
-	"lockon_target": null,   # 精准锁定目标
-}
+# 球的临时修饰符准备区（2026-09-19 Step2：按投球者隔离+有效期，修全局串味/覆盖/无期限）
+# 每个 caster 一张纸；写入带 expires_at（比赛时钟，无 duration=投球前不过期）；投球取走即清
+var _ball_mods_by_caster: Dictionary = {}   # {caster_id: mods_dict}
+var _last_ball_caster: int = -1             # 最近写入者（兼容旧 getter 视图）
+var _match_clock: float = 0.0               # 比赛时钟（_process 累计，time_scale/暂停自动同步）
+
+func _default_ball_mods() -> Dictionary:
+	return {
+		"dmg_mult": 1.0, "dmg_flat": 0.0,
+		"speed_mult": 1.0, "speed_flat": 0.0,
+		"range_mult": 1.0, "range_flat": 0.0,
+		"penetrate": false, "armor": 0.0,
+		"tracking_target": null, "tracking_turn_speed": 0.0,
+		"boomerang": false, "boomerang_triggered": false,
+		"boomerang_return_dir": Vector2.ZERO, "boomerang_dist": 0.0,
+		"lock_straight": false, "spread_done": false,
+		"aoe_radius": 0.0, "aoe_damage_pct": 0.5,
+		"lockon_target": null,
+	}
+
+## 取/建该施法者的修饰符准备区
+func _ensure_ball_mods(caster_id: int) -> Dictionary:
+	if not _ball_mods_by_caster.has(caster_id):
+		_ball_mods_by_caster[caster_id] = _default_ball_mods()
+	_last_ball_caster = caster_id
+	return _ball_mods_by_caster[caster_id]
+
+## 标记字段有效期（duration<=0 = 投球前不过期）
+func _mark_expiry(mods: Dictionary, fields: Array, duration: float) -> void:
+	if duration <= 0.0:
+		return
+	var expires: Dictionary = mods.get("_expires", {})
+	for f in fields:
+		expires[f] = _match_clock + duration
+	mods["_expires"] = expires
 
 
 func _ready() -> void:
@@ -198,74 +211,103 @@ func _flush_pending_tags() -> void:
 
 ## ==================== 球修饰符接口（供 ball.gd 调用）====================
 
-## 发球前重置所有修饰符
+## 兼容全清（测试面板用）；生产路径请用 reset_ball_mods_for（按 caster 清）
 func reset_ball_mods() -> void:
-	_ball_mods = {
-		"dmg_mult": 1.0, "dmg_flat": 0.0,
-		"speed_mult": 1.0, "speed_flat": 0.0,
-		"range_mult": 1.0, "range_flat": 0.0,
-		"penetrate": false, "armor": 0.0,
-		"tracking_target": null, "tracking_turn_speed": 0.0,
-		"boomerang": false, "boomerang_triggered": false,
-		"boomerang_return_dir": Vector2.ZERO, "boomerang_dist": 0.0,
-		"lock_straight": false, "spread_done": false,
-		"aoe_radius": 0.0, "aoe_damage_pct": 0.5,
-		"lockon_target": null,
-	}
+	_ball_mods_by_caster.clear()
+	_last_ball_caster = -1
 
-## 获取修饰后的球伤害
-func get_modified_ball_damage(base_damage: float) -> float:
-	var result: float = (base_damage + _ball_mods.dmg_flat) * _ball_mods.dmg_mult
-	result = max(0.0, result - _ball_mods.armor)
+## 清指定施法者的准备区（trigger._fire_skill 开头调用，不再全清别人的）
+func reset_ball_mods_for(caster_id: int) -> void:
+	_ball_mods_by_caster.erase(caster_id)
+
+## 2026-09-19 Step2：取该投球者的快照——过期字段回落默认值，取走即清该准备区
+func take_ball_mods_snapshot(caster_id: int) -> Dictionary:
+	var mods: Dictionary = _ball_mods_by_caster.get(caster_id, {})
+	_ball_mods_by_caster.erase(caster_id)
+	var snap: Dictionary = _default_ball_mods()
+	if not mods.is_empty():
+		snap.merge(mods, true)
+		var expires: Dictionary = mods.get("_expires", {})
+		var fresh: Dictionary = _default_ball_mods()
+		for f in expires:
+			if _match_clock > float(expires[f]):
+				snap[f] = fresh.get(f)
+	return snap
+
+## 兼容视图：最近活跃 caster 的准备区（过期字段回落）；供旧 getter / AI / 测试面板读取
+func _view_ball_mods() -> Dictionary:
+	var mods: Dictionary = _ball_mods_by_caster.get(_last_ball_caster, {})
+	var snap: Dictionary = _default_ball_mods()
+	if not mods.is_empty():
+		snap.merge(mods, true)
+		var expires: Dictionary = mods.get("_expires", {})
+		var fresh: Dictionary = _default_ball_mods()
+		for f in expires:
+			if _match_clock > float(expires[f]):
+				snap[f] = fresh.get(f)
+		snap.erase("_expires")
+	return snap
+
+## 获取修饰后的球伤害（mods 缺省时读兼容视图；ball 传自己的快照）
+func get_modified_ball_damage(base_damage: float, mods: Dictionary = {}) -> float:
+	var m: Dictionary = mods if not mods.is_empty() else _view_ball_mods()
+	var result: float = (base_damage + m.dmg_flat) * m.dmg_mult
+	result = max(0.0, result - m.armor)
 	return result
 
-## 获取修饰后的球速度
-func get_modified_ball_speed(base_speed: float) -> float:
-	return (base_speed + _ball_mods.speed_flat) * _ball_mods.speed_mult
+## 获取修饰后的球速度（mods 缺省时读兼容视图；ball 传自己的快照）
+func get_modified_ball_speed(base_speed: float, mods: Dictionary = {}) -> float:
+	var m: Dictionary = mods if not mods.is_empty() else _view_ball_mods()
+	return (base_speed + m.speed_flat) * m.speed_mult
 
-## 获取修饰后的飞行距离
-func get_modified_ball_range(base_range: float) -> float:
-	return (base_range + _ball_mods.range_flat) * _ball_mods.range_mult
+## 获取修饰后的飞行距离（mods 缺省时读兼容视图）
+func get_modified_ball_range(base_range: float, mods: Dictionary = {}) -> float:
+	var m: Dictionary = mods if not mods.is_empty() else _view_ball_mods()
+	return (base_range + m.range_flat) * m.range_mult
 
-## 球是否穿透
+## 球是否穿透（兼容视图）
 func is_ball_penetrating() -> bool:
-	return _ball_mods.penetrate
+	return _view_ball_mods().penetrate
 
-## 球是否回旋
+## 球是否回旋（兼容视图）
 func is_ball_boomerang() -> bool:
-	return _ball_mods.boomerang and not _ball_mods.lock_straight
+	var m: Dictionary = _view_ball_mods()
+	return m.boomerang and not m.lock_straight
 
-## 球是否追踪
+## 球是否追踪（兼容视图）
 func is_ball_tracking() -> bool:
-	return _ball_mods.tracking_target != null and not _ball_mods.lock_straight
+	var m: Dictionary = _view_ball_mods()
+	return m.tracking_target != null and not m.lock_straight
 
-## 获取追踪目标
+## 获取追踪目标（兼容视图）
 func get_tracking_target() -> Node:
-	return _ball_mods.tracking_target
+	return _view_ball_mods().tracking_target
 
-## 获取追踪转向速度
+## 获取追踪转向速度（兼容视图）
 func get_tracking_turn_speed() -> float:
-	return _ball_mods.tracking_turn_speed
+	return _view_ball_mods().tracking_turn_speed
 
-## 球是否有AOE范围伤害
+## 球是否有AOE范围伤害（兼容视图）
 func has_ball_aoe() -> bool:
-	return _ball_mods.has("aoe_radius") and _ball_mods.aoe_radius > 0.0
+	var m: Dictionary = _view_ball_mods()
+	return m.has("aoe_radius") and m.aoe_radius > 0.0
 
-## 获取AOE半径
+## 获取AOE半径（兼容视图）
 func get_ball_aoe_radius() -> float:
-	return _ball_mods.get("aoe_radius", 0.0)
+	return _view_ball_mods().get("aoe_radius", 0.0)
 
-## 获取AOE伤害百分比
+## 获取AOE伤害百分比（兼容视图）
 func get_ball_aoe_damage_pct() -> float:
-	return _ball_mods.get("aoe_damage_pct", 0.5)
+	return _view_ball_mods().get("aoe_damage_pct", 0.5)
 
-## 球回旋触发（ball.gd 飞到一半距离时调用）
+## 球回旋触发（兼容保留：ball 已内联此逻辑，不再调用）
 func trigger_boomerang(current_dir: Vector2) -> Vector2:
-	if _ball_mods.boomerang_triggered:
+	var m: Dictionary = _ensure_ball_mods(_last_ball_caster)
+	if m.boomerang_triggered:
 		return Vector2.ZERO
-	_ball_mods.boomerang_triggered = true
-	_ball_mods.boomerang_return_dir = -current_dir
-	return _ball_mods.boomerang_return_dir
+	m.boomerang_triggered = true
+	m.boomerang_return_dir = -current_dir
+	return m.boomerang_return_dir
 
 
 ## ==================== 主入口 ====================
@@ -291,36 +333,36 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 
 	var success := false
 
-	# === 对球效果 ===
+	# === 对球效果（2026-09-19 Step2：全部带 caster_id，写入该施法者自己的准备区）===
 	match tag_id:
 		# 数值类 (01-08)
 		"ball_dmg_up_pct":
-			_apply_ball_dmg_up(params)
+			_apply_ball_dmg_up(params, caster_id)
 			success = true
 		"ball_dmg_down_pct":
-			_apply_ball_dmg_down(params)
+			_apply_ball_dmg_down(params, caster_id)
 			success = true
 		"ball_dmg_up_flat":
 			var flat_params_up: Dictionary = params.duplicate()
 			flat_params_up["value_type"] = "flat"
-			_apply_ball_dmg_up(flat_params_up)
+			_apply_ball_dmg_up(flat_params_up, caster_id)
 			success = true
 		"ball_dmg_down_flat":
 			var flat_params_down: Dictionary = params.duplicate()
 			flat_params_down["value_type"] = "flat"
-			_apply_ball_dmg_down(flat_params_down)
+			_apply_ball_dmg_down(flat_params_down, caster_id)
 			success = true
 		"ball_speed_up_pct":
-			_apply_ball_speed_up(params)
+			_apply_ball_speed_up(params, caster_id)
 			success = true
 		"ball_speed_down_pct":
-			_apply_ball_speed_down(params)
+			_apply_ball_speed_down(params, caster_id)
 			success = true
 		"ball_speed_up_flat":
-			_apply_ball_speed_up(params)
+			_apply_ball_speed_up(params, caster_id)
 			success = true
 		"ball_speed_down_flat":
-			_apply_ball_speed_down(params)
+			_apply_ball_speed_down(params, caster_id)
 			success = true
 		# 飞行行为类 (09-14)
 		"ball_tracking":
@@ -329,10 +371,10 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 		"ball_avoid":
 			success = true  # 避障待场地系统
 		"ball_boomerang":
-			_apply_ball_boomerang(params)
+			_apply_ball_boomerang(params, caster_id)
 			success = true
 		"ball_straight":
-			_apply_ball_straight(params)
+			_apply_ball_straight(params, caster_id)
 			success = true
 		"ball_lockon":
 			_apply_ball_lockon(params, caster_id)
@@ -341,13 +383,13 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 			success = true  # 扩散在球碰撞时处理
 		# 穿透/范围类 (15-17)
 		"ball_penetrate":
-			_apply_ball_penetrate(params)
+			_apply_ball_penetrate(params, caster_id)
 			success = true
 		"ball_range_up":
-			_apply_ball_range_up(params)
+			_apply_ball_range_up(params, caster_id)
 			success = true
 		"ball_range_down":
-			_apply_ball_range_down(params)
+			_apply_ball_range_down(params, caster_id)
 			success = true
 		# 对场地标签 (已实现2个 + 预留10个)
 		"field_obs_add":
@@ -573,11 +615,30 @@ func remove_tag_effect(effect_id: String) -> void:
 
 
 func _process(delta: float) -> void:
+	# 比赛时钟（快照有效期基准；Engine.time_scale/暂停自动同步）
+	_match_clock += delta
+
 	# 优先级队列窗口计时
 	if _flush_timer > 0.0:
 		_flush_timer -= delta
 		if _flush_timer <= 0.0:
 			_flush_pending_tags()
+
+	# 球修饰符准备区过期清扫（兜底；正常由投球取走即清回收）
+	var expired_casters: Array = []
+	for cid in _ball_mods_by_caster:
+		var expires: Dictionary = _ball_mods_by_caster[cid].get("_expires", {})
+		if expires.is_empty():
+			continue
+		var all_expired: bool = true
+		for f in expires:
+			if _match_clock <= float(expires[f]):
+				all_expired = false
+				break
+		if all_expired:
+			expired_casters.append(cid)
+	for cid in expired_casters:
+		_ball_mods_by_caster.erase(cid)
 
 	# 活跃效果倒计时
 	var to_remove: PackedStringArray = []
@@ -635,86 +696,113 @@ func _get_nearest_enemy(caster: CharacterBody2D) -> CharacterBody2D:
 ## ==================== 对球效果实现 (14个) ====================
 
 ## 01 增伤 — params: {value_type, value, duration}
-func _apply_ball_dmg_up(params: Dictionary) -> void:
+func _apply_ball_dmg_up(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
 	var val: float = float(params.get("value", 0))
 	var vtype: String = str(params.get("value_type", "percentage"))
-	var dur: float = float(params.get("duration", 0))
-
+	var fields: Array = []
 	if vtype == "percentage":
-		_ball_mods.dmg_mult += val / 100.0
+		mods.dmg_mult += val / 100.0
+		fields = ["dmg_mult"]
 	else:
-		_ball_mods.dmg_flat += val
-	print("[TagEffect] 增伤: type=%s val=%.1f mult=%.2f flat=%.1f" % [vtype, val, _ball_mods.dmg_mult, _ball_mods.dmg_flat])
+		mods.dmg_flat += val
+		fields = ["dmg_flat"]
+	_mark_expiry(mods, fields, float(params.get("duration", 0)))
+	print("[TagEffect] 增伤: type=%s val=%.1f mult=%.2f flat=%.1f (caster=%d)" % [vtype, val, mods.dmg_mult, mods.dmg_flat, caster_id])
 
 ## 02 减伤
-func _apply_ball_dmg_down(params: Dictionary) -> void:
+func _apply_ball_dmg_down(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
 	var val: float = float(params.get("value", 0))
 	var vtype: String = str(params.get("value_type", "percentage"))
-
+	var fields: Array = []
 	if vtype == "percentage":
-		_ball_mods.dmg_mult -= val / 100.0
+		mods.dmg_mult -= val / 100.0
+		fields = ["dmg_mult"]
 	else:
-		_ball_mods.dmg_flat -= val
-	_ball_mods.dmg_mult = max(0.0, _ball_mods.dmg_mult)
-	print("[TagEffect] 减伤: mult=%.2f flat=%.1f" % [_ball_mods.dmg_mult, _ball_mods.dmg_flat])
+		mods.dmg_flat -= val
+		fields = ["dmg_flat"]
+	mods.dmg_mult = max(0.0, mods.dmg_mult)
+	_mark_expiry(mods, fields, float(params.get("duration", 0)))
+	print("[TagEffect] 减伤: mult=%.2f flat=%.1f (caster=%d)" % [mods.dmg_mult, mods.dmg_flat, caster_id])
 
 ## 03 穿透 — params: {duration}
-func _apply_ball_penetrate(params: Dictionary) -> void:
-	_ball_mods.penetrate = true
-	print("[TagEffect] 穿透: 启用")
+func _apply_ball_penetrate(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
+	mods.penetrate = true
+	_mark_expiry(mods, ["penetrate"], float(params.get("duration", 0)))
+	print("[TagEffect] 穿透: 启用 (caster=%d)" % caster_id)
 
 ## 04 护甲 — params: {value_type, value, duration}
-func _apply_ball_armor(params: Dictionary) -> void:
+func _apply_ball_armor(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
 	var val: float = float(params.get("value", 0))
-	_ball_mods.armor += val
-	print("[TagEffect] 护甲: armor=%.1f" % _ball_mods.armor)
+	mods.armor += val
+	_mark_expiry(mods, ["armor"], float(params.get("duration", 0)))
+	print("[TagEffect] 护甲: armor=%.1f (caster=%d)" % [mods.armor, caster_id])
 
 ## 05 加速 — params: {multiplier, value(固定值), duration}
-func _apply_ball_speed_up(params: Dictionary) -> void:
+func _apply_ball_speed_up(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
 	var mult: float = float(params.get("multiplier", 0))
 	# 兼容 registry 的 value 字段(ball_speed_up_flat 用 value)
 	var fixed: float = float(params.get("value", params.get("fixed_value", 0)))
-
+	var fields: Array = []
 	if mult > 0:
-		_ball_mods.speed_mult *= mult
+		mods.speed_mult *= mult
+		fields.append("speed_mult")
 	if fixed != 0:
-		_ball_mods.speed_flat += fixed
-	print("[TagEffect] 球加速: mult=%.2f flat=%.1f" % [_ball_mods.speed_mult, _ball_mods.speed_flat])
+		mods.speed_flat += fixed
+		fields.append("speed_flat")
+	_mark_expiry(mods, fields, float(params.get("duration", 0)))
+	print("[TagEffect] 球加速: mult=%.2f flat=%.1f (caster=%d)" % [mods.speed_mult, mods.speed_flat, caster_id])
 
 ## 06 减速
-func _apply_ball_speed_down(params: Dictionary) -> void:
+func _apply_ball_speed_down(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
 	var mult: float = float(params.get("multiplier", 0))
 	var fixed: float = float(params.get("value", params.get("fixed_value", 0)))
-
+	var fields: Array = []
 	if mult > 0:
-		_ball_mods.speed_mult /= mult
+		mods.speed_mult /= mult
+		fields.append("speed_mult")
 	if fixed != 0:
-		_ball_mods.speed_flat -= fixed
-	_ball_mods.speed_mult = max(0.1, _ball_mods.speed_mult)
-	print("[TagEffect] 球减速: mult=%.2f flat=%.1f" % [_ball_mods.speed_mult, _ball_mods.speed_flat])
+		mods.speed_flat -= fixed
+		fields.append("speed_flat")
+	mods.speed_mult = max(0.1, mods.speed_mult)
+	_mark_expiry(mods, fields, float(params.get("duration", 0)))
+	print("[TagEffect] 球减速: mult=%.2f flat=%.1f (caster=%d)" % [mods.speed_mult, mods.speed_flat, caster_id])
 
 ## 07 范围扩大/AOE — params: {radius, damage_pct, multiplier(兼容)}
 ## registry 定义: radius=AOE半径, damage_pct=范围伤害比(0-1)
-func _apply_ball_range_up(params: Dictionary) -> void:
+func _apply_ball_range_up(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
 	var radius: float = float(params.get("radius", 0))
 	var dmg_pct: float = float(params.get("damage_pct", 0))
 	var mult: float = float(params.get("multiplier", 0))
-	# 设置 AOE 半径和伤害比(供 ball.gd 的 has_ball_aoe/get_ball_aoe_radius 使用)
+	var fields: Array = []
+	# 设置 AOE 半径和伤害比(供球侧快照 aoe_radius 使用)
 	if radius > 0:
-		_ball_mods.aoe_radius = radius
+		mods.aoe_radius = radius
+		fields.append("aoe_radius")
 	if dmg_pct > 0:
-		_ball_mods.aoe_damage_pct = dmg_pct
+		mods.aoe_damage_pct = dmg_pct
+		fields.append("aoe_damage_pct")
 	if mult > 0:
-		_ball_mods.range_mult *= mult
-	print("[TagEffect] 范围扩大/AOE: radius=%.1f dmg_pct=%.2f mult=%.2f" % [_ball_mods.aoe_radius, _ball_mods.aoe_damage_pct, _ball_mods.range_mult])
+		mods.range_mult *= mult
+		fields.append("range_mult")
+	_mark_expiry(mods, fields, float(params.get("duration", 0)))
+	print("[TagEffect] 范围扩大/AOE: radius=%.1f dmg_pct=%.2f mult=%.2f (caster=%d)" % [mods.aoe_radius, mods.aoe_damage_pct, mods.range_mult, caster_id])
 
 ## 08 范围缩小
-func _apply_ball_range_down(params: Dictionary) -> void:
+func _apply_ball_range_down(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
 	var mult: float = float(params.get("multiplier", 0))
 	if mult > 0:
-		_ball_mods.range_mult /= mult
-	_ball_mods.range_mult = max(0.1, _ball_mods.range_mult)
-	print("[TagEffect] 范围缩小: mult=%.2f" % _ball_mods.range_mult)
+		mods.range_mult /= mult
+		_mark_expiry(mods, ["range_mult"], float(params.get("duration", 0)))
+	mods.range_mult = max(0.1, mods.range_mult)
+	print("[TagEffect] 范围缩小: mult=%.2f (caster=%d)" % [mods.range_mult, caster_id])
 
 ## 09 精准锁定 — 锁定最近敌人方向
 func _apply_ball_lockon(params: Dictionary, caster_id: int) -> void:
@@ -723,15 +811,17 @@ func _apply_ball_lockon(params: Dictionary, caster_id: int) -> void:
 	if caster:
 		var target := _get_nearest_enemy(caster)
 		if target:
-			_ball_mods.lockon_target = target
-			print("[TagEffect] 精准锁定: 目标=%s" % target.char_data.get("name", "?"))
+			var mods: Dictionary = _ensure_ball_mods(caster_id)
+			mods.lockon_target = target
+			_mark_expiry(mods, ["lockon_target"], float(params.get("duration", 0)))
+			print("[TagEffect] 精准锁定: 目标=%s (caster=%d)" % [target.char_data.get("name", "?"), caster_id])
 		else:
 			print("[TagEffect] 精准锁定: 无目标")
 	else:
 		print("[TagEffect] 精准锁定: 找不到施法者")
 
 ## 10 扩散效果 — 碰撞时分裂
-## 扩散标记已设，ball.gd 碰撞时检查 _ball_mods.spread_done
+## 扩散标记 spread_done 存于各 caster 准备区（当前 ball 侧未消费）
 
 ## 11 追踪 — 持续追踪目标
 func _apply_ball_tracking(params: Dictionary, caster_id: int) -> void:
@@ -741,28 +831,34 @@ func _apply_ball_tracking(params: Dictionary, caster_id: int) -> void:
 		return
 	var target := _get_nearest_enemy(caster)
 	if target:
-		_ball_mods.tracking_target = target
-		_ball_mods.tracking_turn_speed = float(params.get("turn_speed", 3.0))
-		print("[TagEffect] 追踪: 目标=%s 转速=%.1f" % [target.char_data.get("name", "?"), _ball_mods.tracking_turn_speed])
+		var mods: Dictionary = _ensure_ball_mods(caster_id)
+		mods.tracking_target = target
+		mods.tracking_turn_speed = float(params.get("turn_speed", 3.0))
+		_mark_expiry(mods, ["tracking_target", "tracking_turn_speed"], float(params.get("duration", 0)))
+		print("[TagEffect] 追踪: 目标=%s 转速=%.1f (caster=%d)" % [target.char_data.get("name", "?"), mods.tracking_turn_speed, caster_id])
 	else:
 		print("[TagEffect] 追踪: 无目标")
 
 ## 12 避障 — 待场地系统实现
-## 标记已存在，ball.gd 可检查 _ball_mods["avoid"]
+## 标记已存在，ball 侧可检查快照["avoid"]
 
 ## 13 回旋 — 飞到一半距离时返回
-func _apply_ball_boomerang(params: Dictionary) -> void:
-	_ball_mods.boomerang = true
-	_ball_mods.boomerang_dist = float(params.get("return_distance", 0.5))
-	print("[TagEffect] 回旋: 启用 返回点=%.0f%%" % (_ball_mods.boomerang_dist * 100))
+func _apply_ball_boomerang(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
+	mods.boomerang = true
+	mods.boomerang_dist = float(params.get("return_distance", 0.5))
+	_mark_expiry(mods, ["boomerang", "boomerang_dist"], float(params.get("duration", 0)))
+	print("[TagEffect] 回旋: 启用 返回点=%.0f%% (caster=%d)" % [mods.boomerang_dist * 100, caster_id])
 
 ## 14 直行 — 禁用所有轨迹修改
-func _apply_ball_straight(params: Dictionary) -> void:
-	_ball_mods.lock_straight = true
+func _apply_ball_straight(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
+	mods.lock_straight = true
 	# 清除追踪和回旋
-	_ball_mods.tracking_target = null
-	_ball_mods.boomerang = false
-	print("[TagEffect] 直行: 启用，禁用追踪/回旋")
+	mods.tracking_target = null
+	mods.boomerang = false
+	_mark_expiry(mods, ["lock_straight"], float(params.get("duration", 0)))
+	print("[TagEffect] 直行: 启用，禁用追踪/回旋 (caster=%d)" % caster_id)
 
 
 ## ==================== 对场地效果 (预留) ====================

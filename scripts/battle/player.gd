@@ -228,6 +228,10 @@ var equipped_skills: Array[String] = []  # 最多4个技能ID
 
 # 技能CD追踪
 var skill_cooldowns: Dictionary = {}
+# 2026-09-17 单表化：权威CD表在 SpiritSkillTrigger（battle_manager 注入）；本地表仅无注入时兜底
+var spirit_trigger: Node = null
+# 2026-09-20 P1-1：球节点引用（battle_manager 注入；组 "ball" 生产无人注册，组查询仅兜底）
+var ball_ref: Node = null
 
 # 视觉节点
 var avatar_label: Label
@@ -1549,9 +1553,13 @@ func use_skill(slot_index: int) -> void:
 		print("[Player] 技能未解锁: %s" % (skill_data.get("name", "")))
 		return
 
-	# 检查CD
-	var current_cd: float = skill_cooldowns[skill_id] if skill_cooldowns.has(skill_id) else 0.0
-	if current_cd > 0:
+	# 检查CD（权威表在 SpiritSkillTrigger；无注入时读本地表兜底）
+	var on_cooldown: bool = false
+	if spirit_trigger and is_instance_valid(spirit_trigger):
+		on_cooldown = spirit_trigger.get_skill_cooldown(get_instance_id(), skill_id) > 0.0
+	else:
+		on_cooldown = skill_cooldowns.has(skill_id) and skill_cooldowns[skill_id] > 0.0
+	if on_cooldown:
 		print("[Player] 技能冷却中: %s" % (skill_data.get("name") if skill_data.has("name") else ""))
 		return
 
@@ -1573,14 +1581,7 @@ func use_skill(slot_index: int) -> void:
 		print("[Player] 能量不足: %s (需要%.1f, 当前%.1f)" % [(skill_data.get("name") if skill_data.has("name") else ""), total_cost, spirit_energy])
 		return
 
-	# 消耗能量
-	spirit_energy -= total_cost
-	print("[Player] 扣除能量: %.1f (基础:%.1f + 标签:%.1f)" % [total_cost, base_cost, tags_cost])
-	# 能量条由下方球员栏更新，此处不处理
-
-	# 设置CD（应用CD折扣卡）
-	skill_cooldowns[skill_id] = float(skill_data["cooldown"] if skill_data.has("cooldown") else 5.0) * get_skill_cd_mult()
-
+	# 2026-09-17 单点扣费：能量与CD由 SpiritSkillTrigger 统一扣除/设置（修玩家双扣能+双CD表）
 	print("[Player] %s 使用技能: %s" % [char_data["name"] if char_data.has("name") else "", skill_data.get("name") if skill_data.has("name") else ""])
 
 	# 技能效果由SkillSystem处理
@@ -1727,7 +1728,9 @@ func _clear_ball_skill_aura() -> void:
 
 
 func _get_ball_node() -> Node:
-	"""获取球节点"""
+	"""获取球节点（优先注入引用；无注入时回退组查询兜底）"""
+	if ball_ref and is_instance_valid(ball_ref):
+		return ball_ref
 	var tree = get_tree()
 	if tree:
 		var ball_nodes = tree.get_nodes_in_group("ball")
@@ -1762,7 +1765,10 @@ func get_visual_radius() -> float:
 
 
 ## 返回某技能的冷却进度（0=可用，1=刚释放满冷却）
+## 权威表在 SpiritSkillTrigger（按实际生效CD算比例）；无注入时读本地表兜底
 func get_skill_cooldown_ratio(skill_id: String) -> float:
+	if spirit_trigger and is_instance_valid(spirit_trigger):
+		return spirit_trigger.get_skill_cooldown_ratio(get_instance_id(), skill_id)
 	if not skill_cooldowns.has(skill_id) or skill_cooldowns[skill_id] <= 0.0:
 		return 0.0
 	var skill_data: Dictionary = DataManager.get_skill_by_id(skill_id)

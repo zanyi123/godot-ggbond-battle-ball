@@ -1413,6 +1413,10 @@ func _deferred_init_spirit_system() -> void:
 			var skill_ids: Array[String] = player.get_equipped_skills()
 			var pid: int = player.get_instance_id()
 			spirit_system.set_player_skills(pid, skill_ids)
+			# 2026-09-17 单表化：球员CD判定/显示统一走 trigger 权威表
+			player.spirit_trigger = spirit_system.skill_trigger
+			# 2026-09-20 P1-1：球节点引用（球技能光环 player→ball 通知路径）
+			player.ball_ref = ball_node
 
 			# 2026-06-19：每个球员绑定自身实例作为施法者（避免误用 controlled_player）
 			if not player.skill_used.is_connected(_on_player_skill_used):
@@ -1589,6 +1593,8 @@ func _on_spirit_changed(index: int, spirit_id: String) -> void:
 		var pid: int = player.get_instance_id()
 		var skill_ids: Array[String] = player.get_equipped_skills()
 		spirit_system.set_player_skills(pid, skill_ids)
+		# 2026-09-17 单表化：保持 CD 权威表引用最新
+		player.spirit_trigger = spirit_system.skill_trigger
 		print("[BattleManager] 元灵切换后更新技能: %s" % str(skill_ids))
 
 	# 同步刷新 HUD 技能栏
@@ -1650,7 +1656,14 @@ func _on_prep_match_started() -> void:
 	if has_node("/root/TalentSystem"):
 		var talent = get_node("/root/TalentSystem")
 		talent.setup_battle()
-		talent.apply_manual_skills(input_mgr.controlled_player if input_mgr else null)
+		var ctrl_player: CharacterBody2D = input_mgr.controlled_player if input_mgr else null
+		var skills_before: Array = ctrl_player.get_equipped_skills() if ctrl_player else []
+		talent.apply_manual_skills(ctrl_player)
+		# 2026-09-17：manual 解锁技能增量同步进 trigger 名册（修名册缺失导致技能被拒）
+		if ctrl_player and spirit_system:
+			for sid in ctrl_player.get_equipped_skills():
+				if not sid in skills_before:
+					spirit_system.skill_trigger.add_player_skill(ctrl_player.get_instance_id(), sid)
 
 	if _is_half_time_prep:
 		# ===== 中场休息后恢复下半场 =====
@@ -1844,6 +1857,8 @@ func _setup_spirit_for_dev_prep() -> void:
 			var skill_ids: Array[String] = player.get_equipped_skills()
 			var pid: int = player.get_instance_id()
 			spirit_system.set_player_skills(pid, skill_ids)
+			# 2026-09-20 P1-1：球节点引用（dev 路径同注入；ball 为空时 player 侧回退组查询）
+			player.ball_ref = ball_node
 
 			if not player.skill_used.is_connected(_on_player_skill_used):
 				player.skill_used.connect(_on_player_skill_used.bind(player))

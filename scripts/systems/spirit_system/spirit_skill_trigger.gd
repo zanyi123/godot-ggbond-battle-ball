@@ -22,6 +22,8 @@ var _passive_registry: Dictionary = {}
 
 # 技能冷却状态
 var _skill_cooldowns: Dictionary = {}  # {player_id: {skill_id: remaining_time}}
+# CD 初值记录（供冷却进度按实际生效CD计算比例）
+var _skill_cd_totals: Dictionary = {}  # {player_id: {skill_id: applied_cd}}
 
 # 战斗中引用
 var battle_manager: Node
@@ -209,8 +211,11 @@ func trigger_skill(player_id: int, skill_id: String, target_data: Dictionary = {
 
 ## 实际触发路径（主动与被动自动触发共用；调用方已完成资格校验）
 func _fire_skill(skill_data: Dictionary, player_id: int, skill_id: String, target_data: Dictionary) -> bool:
-	# 检查能量消耗
-	var energy_cost = skill_data.get("energy_cost", 0)
+	# 检查能量消耗（2026-09-17 单点扣费：基础 + 标签附加）
+	var energy_cost: int = int(skill_data.get("energy_cost", 0))
+	for tag_id in skill_data.get("tags", []):
+		var tag_data: Dictionary = _tags_registry.get(tag_id, {})
+		energy_cost += int(tag_data.get("energy_cost", 0))
 	if not _consume_energy(player_id, energy_cost):
 		print("[SpiritSkillTrigger] 能量不足")
 		return false
@@ -218,9 +223,9 @@ func _fire_skill(skill_data: Dictionary, player_id: int, skill_id: String, targe
 	# 发送技能触发信号
 	skill_triggered.emit(skill_id, player_id, target_data)
 
-	# 先重置球修饰符（清空上一次技能的残留）
+	# 先重置施法者自己的球修饰符准备区（2026-09-19 Step2：不再全清，别人的准备区不受影响）
 	if _effect_handler:
-		_effect_handler.reset_ball_mods()
+		_effect_handler.reset_ball_mods_for(player_id)
 
 	# 执行技能标签效果
 	_execute_skill_tags(skill_id, player_id, target_data)
@@ -320,17 +325,21 @@ func _build_tag_params(tag_data: Dictionary, skill_data: Dictionary, player_id: 
 
 	return params
 
-## 消耗能量（E3 接真：扣 player.spirit_energy）
+## 消耗能量（E3 接真：扣 player.spirit_energy；2026-09-17 起为全路径唯一扣费点）
+## 费用 = (基础 + 标签附加) × 施法者消耗倍率（折扣/涨价卡挂在被施法者身上）
 func _consume_energy(player_id: int, amount: int) -> bool:
 	var p := _get_player_by_id(player_id)
 	if p == null:
 		return true  # 找不到球员时兼容旧路径（如 UI 预览调用）
 	if amount <= 0:
 		return true
-	if p.spirit_energy < amount:
+	var cost: float = float(amount)
+	if p.has_method("get_skill_cost_mult"):
+		cost *= p.get_skill_cost_mult()
+	if p.spirit_energy < cost:
 		return false
-	p.spirit_energy -= amount
-	print("[SpiritSkillTrigger] 扣能量 %d → 剩余 %.0f" % [amount, p.spirit_energy])
+	p.spirit_energy -= cost
+	print("[SpiritSkillTrigger] 扣能量 %.1f → 剩余 %.0f" % [cost, p.spirit_energy])
 	return true
 
 ## 按 instance_id 找球员节点
@@ -340,11 +349,18 @@ func _get_player_by_id(player_id: int) -> Node:
 			return p
 	return null
 
-## 设置技能冷却
+## 设置技能冷却（2026-09-17 起为全路径唯一CD表；应用施法者CD倍率并记录初值）
 func _set_skill_cooldown(player_id: int, skill_id: String, cooldown: float) -> void:
+	var applied := cooldown
+	var p := _get_player_by_id(player_id)
+	if p and p.has_method("get_skill_cd_mult"):
+		applied = cooldown * p.get_skill_cd_mult()
 	if not _skill_cooldowns.has(player_id):
 		_skill_cooldowns[player_id] = {}
-	_skill_cooldowns[player_id][skill_id] = cooldown
+	_skill_cooldowns[player_id][skill_id] = applied
+	if not _skill_cd_totals.has(player_id):
+		_skill_cd_totals[player_id] = {}
+	_skill_cd_totals[player_id][skill_id] = applied
 
 ## 更新冷却时间（每帧调用）
 func _process(delta: float) -> void:
@@ -363,6 +379,31 @@ func get_skill_cooldown(player_id: int, skill_id: String) -> float:
 	if _skill_cooldowns.has(player_id) and _skill_cooldowns[player_id].has(skill_id):
 		return _skill_cooldowns[player_id][skill_id]
 	return 0.0
+
+## 获取技能冷却进度（0=可用，1=刚释放满冷却；按实际生效CD计算）
+func get_skill_cooldown_ratio(player_id: int, skill_id: String) -> float:
+	var remaining := get_skill_cooldown(player_id, skill_id)
+	if remaining <= 0.0:
+		return 0.0
+	var total := 0.0
+	if _skill_cd_totals.has(player_id) and _skill_cd_totals[player_id].has(skill_id):
+		total = float(_skill_cd_totals[player_id][skill_id])
+	if total <= 0.0:
+		return 0.0
+	return clampf(remaining / total, 0.0, 1.0)
+
+## 增量注入单个技能（如天赋树 manual 解锁；避免全量重调导致被动重复订阅）
+func add_player_skill(player_id: int, skill_id: String) -> void:
+	if not _player_skills.has(player_id):
+		_player_skills[player_id] = []
+	if skill_id in _player_skills[player_id]:
+		return
+	_player_skills[player_id].append(skill_id)
+	if not _skill_cooldowns.has(player_id):
+		_skill_cooldowns[player_id] = {}
+	_skill_cooldowns[player_id][skill_id] = 0.0
+	var skills: Array[String] = [skill_id]
+	_subscribe_passives(player_id, skills)
 
 ## 获取玩家上场技能列表
 func get_player_skills(player_id: int) -> Array[String]:

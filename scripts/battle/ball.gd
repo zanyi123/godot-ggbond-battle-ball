@@ -219,8 +219,8 @@ func _ready() -> void:
 	monitorable = true
 	monitoring = true
 
-	# 连接到技能状态信号
-	call_deferred("_connect_skill_signals")
+	# 2026-09-20 P1-1：原"连接技能状态信号"死路径已删（组内无 skill_activated/cancelled 信号，
+	# has_signal 防御致静默不连）；球技能光环由 player 侧主动通知（set_active_skill/cancel_active_skill）
 
 
 func _physics_process(delta: float) -> void:
@@ -259,36 +259,37 @@ func _physics_process(delta: float) -> void:
 		else:
 			_step_ballistic_z(delta)
 
-	# === 追踪球状态（供后续距离判断使用）===
-	var is_tracking: bool = tag_effect_handler and tag_effect_handler.is_ball_tracking()
+	# === 追踪球状态（2026-09-19 快照化：全部读球私有快照）===
+	var is_tracking: bool = ball_mods.get("tracking_target") != null and not ball_mods.get("lock_straight", false)
 
 	# === 追踪：向目标转向 ===
 	if is_tracking:
-		var target: Node = tag_effect_handler.get_tracking_target()
+		var target: Node = ball_mods.get("tracking_target")
 		if target and is_instance_valid(target) and not target.is_defeated:
 			# 目标隐身 → 丢失目标，转直飞
 			if target.has_method("is_status_active") and target.is_status_active("stealthed"):
-				tag_effect_handler._ball_mods.tracking_target = null
+				ball_mods["tracking_target"] = null
 			else:
 				var desired_dir: Vector2 = (target.global_position - global_position).normalized()
-				var turn_speed: float = tag_effect_handler.get_tracking_turn_speed()
+				var turn_speed: float = ball_mods.get("tracking_turn_speed", 0.0)
 				ball_direction = ball_direction.move_toward(desired_dir, turn_speed * delta).normalized()
 		else:
-			tag_effect_handler._ball_mods.tracking_target = null
+			ball_mods["tracking_target"] = null
 
-	# === 回旋：飞到一半距离时返回 ===
-	if tag_effect_handler and tag_effect_handler.is_ball_boomerang():
-		var trigger_ratio: float = tag_effect_handler._ball_mods.boomerang_dist
+	# === 回旋：飞到一半距离时返回（触发状态内联为球私有）===
+	var is_boomerang: bool = ball_mods.get("boomerang", false) and not ball_mods.get("lock_straight", false)
+	if is_boomerang:
+		var trigger_ratio: float = ball_mods.get("boomerang_dist", 0.0)
 		if trigger_ratio <= 0.0:
 			trigger_ratio = 0.5
-		if not tag_effect_handler._ball_mods.boomerang_triggered and flight_distance >= max_flight_distance * trigger_ratio:
-			var return_dir := tag_effect_handler.trigger_boomerang(ball_direction)
-			if return_dir != Vector2.ZERO:
-				ball_direction = return_dir
+		if not _boomerang_triggered and flight_distance >= max_flight_distance * trigger_ratio:
+			_boomerang_triggered = true
+			_boomerang_return_dir = -ball_direction
+			ball_direction = _boomerang_return_dir
 
 	# 非直行时才允许弧线
 	var allow_arc: bool = true
-	if tag_effect_handler and tag_effect_handler._ball_mods.lock_straight:
+	if ball_mods.get("lock_straight", false):
 		allow_arc = false
 
 	var move_vector: Vector2 = ball_direction * ball_speed * delta
@@ -460,32 +461,18 @@ func _on_body_entered(body: Node2D) -> void:
 			mps.report_ball_intercepted(player)
 
 	# === AOE范围伤害：以被击中球员为圆心，对范围内敌方球员造成伤害 ===
-	if tag_effect_handler and tag_effect_handler.has_ball_aoe():
-		var aoe_radius: float = tag_effect_handler.get_ball_aoe_radius()
-		var aoe_pct: float = tag_effect_handler.get_ball_aoe_damage_pct()
+	# 2026-09-20 P0-2 修复：索敌从 "players" 组（生产仅幻象注册→命中恒空）改为权威名册
+	# _get_all_players_array()（GameManager.team_a/b，与 handler/trigger 注入名册同源）
+	if ball_mods.get("aoe_radius", 0.0) > 0.0:
+		var aoe_radius: float = ball_mods.get("aoe_radius", 0.0)
+		var aoe_pct: float = ball_mods.get("aoe_damage_pct", 0.5)
 		var aoe_damage: float = ball_damage * aoe_pct
 		var hit_count: int = 0
 		if attacker_player and is_instance_valid(attacker_player):
 			var enemy_team: String = "b" if attacker_player.team == "a" else "a"
-			for p in get_tree().get_nodes_in_group("players") if get_tree() else []:
-				if p == player:
-					continue
-				if not p is CharacterBody2D:
-					continue
-				if p.team != enemy_team:
-					continue
-				if p.is_defeated:
-					continue
-				# 隐身者不受AOE影响（看不到就不会被波及）
-				if p.has_method("is_status_active") and p.is_status_active("stealthed"):
-					continue
-				# 幻象不受AOE影响（虚假目标，不计入范围伤害）
-				if p.get("is_illusion") == true:
-					continue
-				var dist: float = player.global_position.distance_to(p.global_position)
-				if dist <= aoe_radius:
-					p.take_damage(aoe_damage, attacker_player, _attacker_element())
-					hit_count += 1
+			for p in _collect_aoe_targets(player, enemy_team, aoe_radius):
+				p.take_damage(aoe_damage, attacker_player, _attacker_element())
+				hit_count += 1
 		print("[Ball] AOE范围伤害: 半径=%.0f 范围伤害=%.1f 命中%d人" % [aoe_radius, aoe_damage, hit_count])
 
 	# E2 事件：HIT_TAKEN（含接球姿态命中，effect 供订阅者区分结果）
@@ -501,9 +488,9 @@ func _on_body_entered(body: Node2D) -> void:
 		print("[Ball] %s 待接球接住来球! 球权转换→队%s" % [_pname(player), player.team.to_upper()])
 		return
 
-	# === 状态标记 ===
-	var is_penetrating: bool = tag_effect_handler and tag_effect_handler.is_ball_penetrating()
-	var is_tracking: bool = tag_effect_handler and tag_effect_handler.is_ball_tracking()
+	# === 状态标记（2026-09-19 快照化：读球私有快照）===
+	var is_penetrating: bool = ball_mods.get("penetrate", false)
+	var is_tracking: bool = ball_mods.get("tracking_target") != null and not ball_mods.get("lock_straight", false)
 
 	# === 被击败 ===
 	if player.is_defeated:
@@ -652,8 +639,13 @@ func _on_ball_stopped() -> void:
 		_return_to_nearest_team_player("b")
 
 
-## 标签效果处理器引用
-var tag_effect_handler: SpiritTagEffectHandler = null
+## 标签效果处理器引用（2026-09-19 快照化：ball 只调其公开只读接口，不再依赖具体类型）
+var tag_effect_handler: Node = null
+
+# 2026-09-19 快照化：球私有修饰符快照（launch 时从 handler 领取）+ 回旋飞行状态（内联自 handler）
+var ball_mods: Dictionary = {}
+var _boomerang_triggered: bool = false
+var _boomerang_return_dir: Vector2 = Vector2.ZERO
 
 func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, attacker: CharacterBody2D, skills: Array[Dictionary] = [], start_z: float = -1.0, pitch_deg: float = 0.0) -> void:
 	global_position = from
@@ -700,8 +692,8 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	if not injected_skills.is_empty():
 		_show_skill_aura(injected_skills[0])
 
-	# 不在这里reset_ball_mods，因为技能标签在投球前已经执行过了
-	# reset在 skill_trigger.trigger_skill() 开头完成
+	# 技能标签在投球前已写入施法者的准备区（trigger._fire_skill 开头只清施法者自己的残留）；
+	# 下方 launch 时领取该投球者的快照（过期字段回落默认值，取走即清）
 
 	# 应用旧式技能
 	for skill in skills:
@@ -714,16 +706,19 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	if _bus:
 		_bus.emit_event(BattleEventBus.GameEvent.ATTACK_LAUNCHED, {"attacker": attacker, "direction": ball_direction, "damage": ball_damage, "max_dist": max_flight_distance, "skills": injected_skills})
 
-	# 标签修饰符应用到球属性
+	# 标签修饰符应用到球属性（2026-09-19 快照化：领取快照后按快照计算，ball 不再直读 handler）
+	ball_mods = _default_ball_mods()
+	_boomerang_triggered = false
+	_boomerang_return_dir = Vector2.ZERO
 	if tag_effect_handler:
-		ball_damage = tag_effect_handler.get_modified_ball_damage(ball_damage)
-		ball_speed = tag_effect_handler.get_modified_ball_speed(ball_speed)
+		ball_mods = tag_effect_handler.take_ball_mods_snapshot(attacker.get_instance_id() if attacker else -1)
+		ball_damage = tag_effect_handler.get_modified_ball_damage(ball_damage, ball_mods)
+		ball_speed = tag_effect_handler.get_modified_ball_speed(ball_speed, ball_mods)
 
 		# 精准锁定：修正发球方向指向最近敌人
-		if tag_effect_handler._ball_mods.get("lockon_target") != null:
-			var lockon_target: Node = tag_effect_handler._ball_mods.get("lockon_target")
-			if lockon_target and is_instance_valid(lockon_target) and not lockon_target.is_defeated:
-				ball_direction = (lockon_target.global_position - from).normalized()
+		var lockon_target: Node = ball_mods.get("lockon_target")
+		if lockon_target and is_instance_valid(lockon_target) and not lockon_target.is_defeated:
+			ball_direction = (lockon_target.global_position - from).normalized()
 
 	var attack_style := StyleBoxFlat.new()
 	attack_style.bg_color = Color(1, 0.3, 0.3)
@@ -737,17 +732,34 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	_clear_skill_aura()
 
 
-func _get_tag_effect_handler() -> SpiritTagEffectHandler:
+func _get_tag_effect_handler() -> Node:
 	var tree := get_tree()
 	if tree:
 		for node in tree.get_nodes_in_group("spirit_system"):
-			if node is SpiritTagEffectHandler:
+			if node.has_method("take_ball_mods_snapshot"):
 				return node
 		# 备用：遍历根节点
 		for node in tree.root.get_children():
-			if node is SpiritSystemManager:
-				return node.tag_effect_handler
+			var h = node.get("tag_effect_handler")
+			if h != null:
+				return h
 	return null
+
+
+## 球修饰符快照默认值（与 handler reset_ball_mods 同源；ball 侧兜底）
+func _default_ball_mods() -> Dictionary:
+	return {
+		"dmg_mult": 1.0, "dmg_flat": 0.0,
+		"speed_mult": 1.0, "speed_flat": 0.0,
+		"range_mult": 1.0, "range_flat": 0.0,
+		"penetrate": false, "armor": 0.0,
+		"tracking_target": null, "tracking_turn_speed": 0.0,
+		"boomerang": false, "boomerang_triggered": false,
+		"boomerang_return_dir": Vector2.ZERO, "boomerang_dist": 0.0,
+		"lock_straight": false, "spread_done": false,
+		"aoe_radius": 0.0, "aoe_damage_pct": 0.5,
+		"lockon_target": null,
+	}
 
 
 func return_to_player(player: CharacterBody2D) -> void:
@@ -768,6 +780,9 @@ func reset() -> void:
 	ball_damage = 0.0
 	flight_distance = 0.0
 	active_skill_data = {}
+	ball_mods = _default_ball_mods()
+	_boomerang_triggered = false
+	_boomerang_return_dir = Vector2.ZERO
 	ball_z = 0.0
 	ball_z_vel = 0.0
 	bounce_count = 0
@@ -898,62 +913,12 @@ func cancel_active_skill() -> void:
 	_clear_skill_aura()
 
 
-## 连接技能信号（延迟调用）
-func _connect_skill_signals() -> void:
-	"""连接技能系统的激活/取消信号"""
-	call_deferred("_do_connect_skill_signals")
-
-
-func _do_connect_skill_signals() -> void:
-	"""实际执行信号连接"""
-	var spirit_systems = get_tree().get_nodes_in_group("spirit_system")
-	for node in spirit_systems:
-		if node.has_signal("skill_activated"):
-			if not node.skill_activated.is_connected(_on_spirit_skill_activated):
-				node.skill_activated.connect(_on_spirit_skill_activated)
-				print("[Ball] 已连接 skill_activated 信号")
-		if node.has_signal("skill_cancelled"):
-			if not node.skill_cancelled.is_connected(_on_spirit_skill_cancelled):
-				node.skill_cancelled.connect(_on_spirit_skill_cancelled)
-				print("[Ball] 已连接 skill_cancelled 信号")
-
-
-func _on_spirit_skill_activated(skill_id: String, player_id: int) -> void:
-	"""技能激活时显示光环（持球且发球前）"""
-	# 只有持球且是当前玩家激活的技能才显示光环
-	if owner_player and owner_player.get_instance_id() == player_id:
-		var skill_data = _get_skill_data(skill_id)
-		if not skill_data.is_empty():
-			set_active_skill(skill_data)
-
-
-func _on_spirit_skill_cancelled(skill_id: String, player_id: int) -> void:
-	"""技能取消时清除光环"""
-	cancel_active_skill()
-
-
-func _get_skill_data(skill_id: String) -> Dictionary:
-	"""获取技能数据"""
-	if not FileAccess.file_exists("res://data/spirits/skills.json"):
-		return {}
-
-	var file = FileAccess.open("res://data/spirits/skills.json", FileAccess.READ)
-	if not file:
-		return {}
-
-	var json_text = file.get_as_text()
-	file.close()
-
-	var json = JSON.new()
-	if json.parse(json_text) != OK:
-		return {}
-
-	var skills_array = json.data.get("skills", [])
-	for skill in skills_array:
-		if skill.get("id", "") == skill_id:
-			return skill
-
-	return {}
+## 2026-09-20 P1-1：以下死路径已删除——
+## _connect_skill_signals/_do_connect_skill_signals（订阅组内不存在的信号，静默不连）
+## _on_spirit_skill_activated/_on_spirit_skill_cancelled（对应回调）
+## _get_skill_data（仅被上述回调调用，连带孤儿；它也是 P2-2 记录的"每次调用即IO"点）
+## 信号 skill_activated/skill_cancelled 真实属于 SkillStateManager（input_manager 创建持有），
+## 未经修复的注入链不可达；球技能光环改由 player 侧主动通知（set_active_skill/cancel_active_skill）。
 
 
 ## ==================== 物理系统 ====================
@@ -966,11 +931,10 @@ func _is_skill_controlled() -> bool:
 		return false
 	if trajectory_type != "straight":
 		return true
-	if tag_effect_handler == null:
-		return false
-	if tag_effect_handler.is_ball_tracking():
+	# 2026-09-19 快照化：读球私有快照（无追踪无回旋=普通弹道）
+	if ball_mods.get("tracking_target") != null and not ball_mods.get("lock_straight", false):
 		return true
-	if tag_effect_handler.is_ball_boomerang():
+	if ball_mods.get("boomerang", false) and not ball_mods.get("lock_straight", false):
 		return true
 	return false
 
@@ -1223,7 +1187,36 @@ func _get_all_players_array() -> Array:
 			all_players.append_array(team_a)
 		if team_b:
 			all_players.append_array(team_b)
+	# 兜底：名册为空（测试场景自行注册 "players" 组）时回退组遍历；生产两队必有值走不到
+	if all_players.is_empty() and get_tree():
+		all_players = get_tree().get_nodes_in_group("players")
 	return all_players
+
+
+## P0-2（2026-09-20）：AOE 目标筛选——数据源=权威名册；幻象维持"不吃 AOE"设计现状
+## （名册本无幻象，该过滤条为纯防御+设计意图声明）
+## source 缺省时内部取 _get_all_players_array()；测试可注入名册数组做纯筛选断言
+func _collect_aoe_targets(center_player: Node2D, enemy_team: String, radius: float, source: Array = []) -> Array:
+	var targets: Array = []
+	var candidates: Array = source if not source.is_empty() else _get_all_players_array()
+	for p in candidates:
+		if p == center_player:
+			continue
+		if not p is CharacterBody2D:
+			continue
+		if p.team != enemy_team:
+			continue
+		if p.is_defeated:
+			continue
+		# 隐身者不受AOE影响（看不到就不会被波及）
+		if p.has_method("is_status_active") and p.is_status_active("stealthed"):
+			continue
+		# 幻象不受AOE影响（虚假目标，不计入范围伤害）
+		if p.get("is_illusion") == true:
+			continue
+		if center_player.global_position.distance_to(p.global_position) <= radius:
+			targets.append(p)
+	return targets
 
 func _find_obstacle_manager() -> Node:
 	"""查找障碍物管理器"""
