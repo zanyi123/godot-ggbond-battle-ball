@@ -22,6 +22,9 @@ var _action_lock: bool = false
 var _hand_proxy: Node3D = null
 var _mesh_ok: bool = false
 var _mesh_instances: Array = []  # MeshInstance3D 缓存（击倒透明化用）
+var _cup_anchor: Node3D = null   ## 杯心宿主节点（GLB 根，步骤④右手实测）
+var _cup_local := Vector3.ZERO   ## 杯心（glb 根局部坐标，顶点云质心）
+var _cup_valid := false          ## 杯心实测成功标记（失败回退 HAND_PROXY_OFFSET 配置值）
 
 ## ==================== 构建 ====================
 
@@ -72,6 +75,7 @@ func setup(p_char_id: String, p_team_color: Color) -> void:
 				if gap_ap.get_animation_list().size() > 0:
 					gap_ap.play(gap_ap.get_animation_list()[0])
 			print("[PlayerProxy3D] %s GLB 外观模式（无专属动画=静止）" % char_id)
+			_build_cup_anchor(glb_inst)
 			_build_ring_only()
 			var ghand := Node3D.new()
 			ghand.name = "HandProxy"
@@ -229,6 +233,70 @@ func play_action(action: String) -> void:
 func get_hand_proxy() -> Node3D:
 	return _hand_proxy
 
+## 右手杯心全局坐标（GLB 外观模式=顶点云实测值每帧跟随；未实测=挂点配置值）
+func get_cup_center_global() -> Vector3:
+	if _cup_valid and _cup_anchor != null and is_instance_valid(_cup_anchor):
+		return _cup_anchor.global_transform * _cup_local
+	if _hand_proxy != null and is_instance_valid(_hand_proxy):
+		return _hand_proxy.global_position
+	return Vector3.ZERO
+
+## 步骤④右手实测：扫网格顶点云取右手杯腔质心（与 tools/measure_cup_v3.gd 同条件），
+## 缓存为 glb 根局部坐标，供 _physics_process 每帧把 HandProxy 贴到真实右手
+func _build_cup_anchor(glb_root: Node3D) -> void:
+	var main_mesh: MeshInstance3D = null
+	var best := -1.0
+	for mi in glb_root.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh != null and m.mesh.get_aabb().size.length_squared() > best:
+			best = m.mesh.get_aabb().size.length_squared()
+			main_mesh = m
+	if main_mesh == null:
+		return
+	# glb_root → mesh 的局部变换链
+	var chain := Transform3D.IDENTITY
+	var cur: Node = glb_root
+	var guard := 0
+	while guard < 10 and cur != null:
+		guard += 1
+		if cur is Node3D:
+			chain = chain * (cur as Node3D).transform
+		if cur == main_mesh:
+			break
+		var nxt: Node = null
+		for c in cur.get_children():
+			if c is Node3D:
+				nxt = c
+				break
+		cur = nxt
+	var am := main_mesh.mesh as ArrayMesh
+	if am == null:
+		return
+	var sum := Vector3.ZERO
+	var n := 0
+	for s in range(am.get_surface_count()):
+		var arrays := am.surface_get_arrays(s)
+		if arrays.size() <= Mesh.ARRAY_VERTEX:
+			continue
+		var pv: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		for v in pv:
+			var sp := chain * v
+			if sp.x >= -0.52 and sp.x <= -0.40 and sp.y >= 0.545 and sp.y <= 0.65:
+				sum += sp
+				n += 1
+	if n < 100:
+		push_warning("[PlayerProxy3D] %s 杯腔顶点过少(%d)，HandProxy 回退配置值" % [char_id, n])
+		return
+	var cup_slot := sum / float(n)
+	# 主人验收校准（2026-09-15）：球心在杯腔质心基础上再降一个球直径，落进掌心
+	cup_slot.y -= 14.0 / CFG.PROXY_SCALE
+	# 杯心回 map 到 mesh 局部（原始顶点空间）；anchor=mesh 自身：
+	# global_transform 已含 node_0 旋转与 slot×70，乘杯心即得正确的全局像素坐标
+	_cup_local = chain.affine_inverse() * cup_slot
+	_cup_anchor = main_mesh
+	_cup_valid = true
+	print("[PlayerProxy3D] %s 杯心实测 n=%d slot=%s 局部=%s" % [char_id, n, cup_slot, _cup_local])
+
 ## 逐角色手挂点偏移（battle3d_const.HAND_PROXY_OFFSET，缺省兜底历史占位值）
 static func _hand_offset_for(p_char_id: String) -> Vector3:
 	return CFG.HAND_PROXY_OFFSET.get(p_char_id, CFG.HAND_PROXY_DEFAULT)
@@ -268,6 +336,10 @@ func set_defeated_visual(defeated: bool) -> void:
 
 func _physics_process(_delta: float) -> void:
 	_force_reset_root_bones()
+	# 步骤④：HandProxy 每帧贴右手杯心实测点（几何贴合，与朝向/缩放/层级变换无关）
+	if _cup_valid and _cup_anchor != null and is_instance_valid(_cup_anchor) \
+			and _hand_proxy != null and is_instance_valid(_hand_proxy):
+		_hand_proxy.global_position = _cup_anchor.global_transform * _cup_local
 
 ## 只重置模型骨架子树的位置（不动 ring/hand 挂点——对 player_3d_test 的改进收窄）
 func _force_reset_root_bones() -> void:

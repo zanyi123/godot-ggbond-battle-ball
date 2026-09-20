@@ -18,6 +18,7 @@ var _display_rect: TextureRect = null
 var _player_proxies: Dictionary = {}   # player_2d(Node) -> PlayerProxy3D
 var _ball_proxy: BallProxy3DV2 = null
 var _ball_2d: Node2D = null
+var _dbg_tick: int = 0                 # 挂点调试打印节流（步骤④实测用）
 var _field_zone: Node2D = null
 
 var _placeholders_hidden: bool = false
@@ -430,6 +431,18 @@ func _sync_ball() -> void:
 	if owner_p != null and is_instance_valid(owner_p) and _player_proxies.has(owner_p):
 		var proxy = _player_proxies[owner_p]
 		_ball_proxy.set_carried(proxy.get_hand_proxy())
+		# 步骤④实测：右手挂点 vs 右手实测杯心 vs 球 实时全局坐标（每 60 帧一行）
+		_dbg_tick += 1
+		if _dbg_tick % 60 == 0:
+			var hp: Node3D = proxy.get_hand_proxy()
+			var cid: String = str(owner_p.get("char_id"))
+			print("[挂点调试] owner=%s hand=%s cup_real=%s ball=%s rot_y=%.1f" % [
+				cid,
+				str(hp.global_position) if hp != null and is_instance_valid(hp) else "null",
+				str(proxy.get_cup_center_global()),
+				str(_ball_proxy.global_position),
+				proxy.rotation_degrees.y,
+			])
 	elif _ball_2d.is_active:
 		# M1 弹道：3D 球高度跟随 2D 层 ball_z（属性缺失时回退常量，由 proxy 内部处理）
 		var flight_z: float = _ball_2d.get("ball_z") if _ball_2d.get("ball_z") != null else -1.0

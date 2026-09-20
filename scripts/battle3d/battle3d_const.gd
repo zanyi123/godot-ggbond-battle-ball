@@ -109,11 +109,12 @@ const SHARED_ANIMS: Dictionary = {
 }
 
 ## 手部挂点偏移（HandProxy 局部位置，球代理持球时贴此点）
-## 缺省兜底 = 历史占位值；逐角色实测校准（步骤④，杯心坐标×PROXY_SCALE）
-## player2 实测：Blender 杯心球位局部(-0.463,0.654,0.038) → slot空间×70，2026-09-15
+## 缺省兜底 = 历史占位值；逐角色实测校准（步骤④）
+## player2 校准终值：几何杯心(-31.8,39.3,2.1)在斜视角下屏幕轨迹脱离手臂线（透视漂移）
+## → 改挂手臂轴线(-20,36,0)：朝向 0°/60° 双投影验算球均落在肩→指尖屏幕线内（偏差<1.5px）
 const HAND_PROXY_DEFAULT := Vector3(8.0, 30.0, 0.0)
 const HAND_PROXY_OFFSET: Dictionary = {
-	"char_003": Vector3(-32.4, 45.8, 2.7),  # 菲菲 player2_base_cup 杯心实测
+	"char_003": Vector3(-20.0, 36.0, 0.0),  # 菲菲 右臂轴线托球位（屏幕轨迹稳定解）
 }
 
 ## 球模型
