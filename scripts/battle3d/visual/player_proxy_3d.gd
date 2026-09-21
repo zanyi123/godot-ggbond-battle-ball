@@ -274,28 +274,55 @@ func _build_cup_anchor(glb_root: Node3D) -> void:
 		return
 	var sum := Vector3.ZERO
 	var n := 0
-	for s in range(am.get_surface_count()):
-		var arrays := am.surface_get_arrays(s)
-		if arrays.size() <= Mesh.ARRAY_VERTEX:
-			continue
-		var pv: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		for v in pv:
-			var sp := chain * v
-			if sp.x >= -0.52 and sp.x <= -0.40 and sp.y >= 0.545 and sp.y <= 0.65:
-				sum += sp
-				n += 1
+	# 优先：RightHand 骨骼蒙皮定位（骨架合规线，尺度无关；运行时顶点组烘焙为 BONES/WEIGHTS）
+	var skeleton: Skeleton3D = null
+	for sk in glb_root.find_children("*", "Skeleton3D", true, false):
+		skeleton = sk
+		break
+	var rh_bone := -1
+	if skeleton != null:
+		rh_bone = skeleton.find_bone("RightHand")
+	if rh_bone >= 0:
+		for s in range(am.get_surface_count()):
+			var arrays := am.surface_get_arrays(s)
+			if arrays.size() <= Mesh.ARRAY_VERTEX:
+				continue
+			var pv: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+			var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+			if bones.size() < pv.size() * 4:
+				continue
+			for vi in range(pv.size()):
+				var wsum := 0.0
+				for k in range(4):
+					if bones[vi * 4 + k] == rh_bone:
+						wsum += weights[vi * 4 + k]
+				if wsum >= 0.5:
+					sum += pv[vi]
+					n += 1
+		if n >= 100:
+			_cup_local = sum / float(n)
+	if n < 100:
+		# base 系回退：几何筛选（slot 空间 x∈[-0.52,-0.40], 高度 y∈[0.545,0.65]）
+		for s in range(am.get_surface_count()):
+			var arrays := am.surface_get_arrays(s)
+			if arrays.size() <= Mesh.ARRAY_VERTEX:
+				continue
+			var pv: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			for v in pv:
+				var sp := chain * v
+				if sp.x >= -0.52 and sp.x <= -0.40 and sp.y >= 0.545 and sp.y <= 0.65:
+					sum += sp
+					n += 1
+		if n >= 100:
+			_cup_local = chain.affine_inverse() * (sum / float(n))
 	if n < 100:
 		push_warning("[PlayerProxy3D] %s 杯腔顶点过少(%d)，HandProxy 回退配置值" % [char_id, n])
 		return
-	var cup_slot := sum / float(n)
-	# 主人验收校准（2026-09-15）：球心在杯腔质心基础上再降一个球直径，落进掌心
-	cup_slot.y -= 14.0 / CFG.PROXY_SCALE
-	# 杯心回 map 到 mesh 局部（原始顶点空间）；anchor=mesh 自身：
-	# global_transform 已含 node_0 旋转与 slot×70，乘杯心即得正确的全局像素坐标
-	_cup_local = chain.affine_inverse() * cup_slot
 	_cup_anchor = main_mesh
 	_cup_valid = true
-	print("[PlayerProxy3D] %s 杯心实测 n=%d slot=%s 局部=%s" % [char_id, n, cup_slot, _cup_local])
+	print("[PlayerProxy3D] %s 杯心实测 n=%d 路径=%s 局部=%s" % [
+		char_id, n, "骨骼蒙皮" if rh_bone >= 0 else "几何", _cup_local])
 
 ## 逐角色手挂点偏移（battle3d_const.HAND_PROXY_OFFSET，缺省兜底历史占位值）
 static func _hand_offset_for(p_char_id: String) -> Vector3:
@@ -337,9 +364,12 @@ func set_defeated_visual(defeated: bool) -> void:
 func _physics_process(_delta: float) -> void:
 	_force_reset_root_bones()
 	# 步骤④：HandProxy 每帧贴右手杯心实测点（几何贴合，与朝向/缩放/层级变换无关）
+	# 主人验收校准：球心在杯腔质心下方一个球直径（14px，全局像素空间，尺度无关）
 	if _cup_valid and _cup_anchor != null and is_instance_valid(_cup_anchor) \
 			and _hand_proxy != null and is_instance_valid(_hand_proxy):
-		_hand_proxy.global_position = _cup_anchor.global_transform * _cup_local
+		var cup_global: Vector3 = _cup_anchor.global_transform * _cup_local
+		cup_global.y -= 14.0
+		_hand_proxy.global_position = cup_global
 
 ## 只重置模型骨架子树的位置（不动 ring/hand 挂点——对 player_3d_test 的改进收窄）
 func _force_reset_root_bones() -> void:

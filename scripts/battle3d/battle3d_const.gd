@@ -73,8 +73,9 @@ const MODEL_MAP: Dictionary = {
 		"pbr_prefix": ASSET_BASE + "player5_base_texture_pbr_20250901",
 	},
 	"char_003": {
-		# "model_glb(FBX动作,隔离期停用)": ASSET_BASE + "player2动作/...fbx",
-		"model_glb": ASSET_BASE + "player2_base_cup.glb",  # E11隔离+杯型手版（步骤②交付，2026-09-15）
+		# 战术D：FBX直载验证（low_gu_v2骨骼数据经GLB管线→Godot章鱼；FBX管线走ufbx可能正常）
+		"mesh_fbx": ASSET_BASE + "player2_low_gu_v2.fbx",
+		"model_glb": ASSET_BASE + "player2_low_gu_v2_cup.glb",  # GLB版备用（FBX验证失败回退用）
 		"pbr_prefix": ASSET_BASE + "player2_base_texture_pbr_20250901",
 	},
 	"char_004": {
