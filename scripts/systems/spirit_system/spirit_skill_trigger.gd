@@ -83,8 +83,44 @@ func set_player_skills(player_id: int, skill_ids: Array[String]) -> void:
 	for skill_id in skill_ids:
 		if not _skill_cooldowns[player_id].has(skill_id):
 			_skill_cooldowns[player_id][skill_id] = 0.0
+	# 波3 #20 方案A（主人裁决）：带 charges 配置的技能初始化满充能池
+	for skill_id in skill_ids:
+		var sd := _get_skill_data(skill_id)
+		var charges_cfg: Dictionary = sd.get("charges", {}) if not sd.is_empty() else {}
+		if not charges_cfg.is_empty():
+			_init_charge_pool(player_id, skill_id, charges_cfg)
 	# E3：被动技能按 trigger.event 向事件总线订阅
 	_subscribe_passives(player_id, skill_ids)
+
+
+## ==================== 波3 #20 储存多段·方案A：技能充能池（主人裁决 2026-09-22）====================
+## 数据格式（主人在元灵管理配技能时填写）：技能条目带 "charges": {"max": 6, "recharge_time": 8.0}
+## 本窗口只实现消费逻辑（trigger 门槛+扣格+回充），skills.json 零触碰（R1）
+
+# 充能池运行时状态 {player_id: {skill_id: {charges: int, recharge_left: float}}}
+var _skill_charges: Dictionary = {}
+
+func _charges_cfg_of(skill_id: String) -> Dictionary:
+	var sd := _get_skill_data(skill_id)
+	if sd.is_empty():
+		return {}
+	var cfg: Dictionary = sd.get("charges", {})
+	return cfg if cfg is Dictionary else {}
+
+func _init_charge_pool(player_id: int, skill_id: String, cfg: Dictionary) -> void:
+	if not _skill_charges.has(player_id):
+		_skill_charges[player_id] = {}
+	_skill_charges[player_id][skill_id] = {
+		"charges": maxi(1, int(cfg.get("max", 1))),
+		"recharge_left": 0.0,
+	}
+
+## 技能当前剩余充能（无充能配置的技能返回 -1 = 不走充能门槛）
+func get_skill_charges(player_id: int, skill_id: String) -> int:
+	if not _charges_cfg_of(skill_id).is_empty() and _skill_charges.has(player_id) \
+			and _skill_charges[player_id].has(skill_id):
+		return int(_skill_charges[player_id][skill_id]["charges"])
+	return -1
 
 ## 被动注册：trigger.event → 响应器（事件到达→条件→CD→能量→_fire_skill）
 func _subscribe_passives(player_id: int, skill_ids: Array[String]) -> void:
@@ -205,6 +241,16 @@ func trigger_skill(player_id: int, skill_id: String, target_data: Dictionary = {
 	if skill_data.get("type", "active") == "passive":
 		print("[SpiritSkillTrigger] 被动技能不可主动释放: ", skill_id)
 		return false
+
+	# 波3 #20 方案A：充能门槛（带 charges 配置的技能，0 格拒放；放行扣 1 格，回充由 _process 计时）
+	if not _charges_cfg_of(skill_id).is_empty():
+		var left: int = get_skill_charges(player_id, skill_id)
+		if left <= 0:
+			print("[SpiritSkillTrigger] 充能不足: ", skill_id, " 剩余 ", left)
+			return false
+		_skill_charges[player_id][skill_id]["charges"] = left - 1
+		_skill_charges[player_id][skill_id]["recharge_left"] = float(_charges_cfg_of(skill_id).get("recharge_time", 8.0))
+		print("[SpiritSkillTrigger] 扣充能: ", skill_id, " 剩余 ", left - 1)
 
 	return _fire_skill(skill_data, player_id, skill_id, target_data)
 
@@ -327,6 +373,7 @@ func _build_tag_params(tag_data: Dictionary, skill_data: Dictionary, player_id: 
 
 ## 消耗能量（E3 接真：扣 player.spirit_energy；2026-09-17 起为全路径唯一扣费点）
 ## 费用 = (基础 + 标签附加) × 施法者消耗倍率（折扣/涨价卡挂在被施法者身上）
+## 波3 #19 能量分摊（09 工单）：同队持灯者分摊 share_pct（取最大比例不叠乘，份额均摊，付不起付到 0）
 func _consume_energy(player_id: int, amount: int) -> bool:
 	var p := _get_player_by_id(player_id)
 	if p == null:
@@ -336,10 +383,30 @@ func _consume_energy(player_id: int, amount: int) -> bool:
 	var cost: float = float(amount)
 	if p.has_method("get_skill_cost_mult"):
 		cost *= p.get_skill_cost_mult()
-	if p.spirit_energy < cost:
+	var self_cost: float = cost
+	if p.has_method("get_energy_share_pct"):
+		var sharers: Array = []
+		var max_pct: float = 0.0
+		for q in players:
+			if q == null or not is_instance_valid(q) or q == p or q.is_defeated:
+				continue
+			if q.team != p.team:
+				continue
+			var sp: float = q.get_energy_share_pct() if q.has_method("get_energy_share_pct") else 0.0
+			if sp > 0.0:
+				sharers.append(q)
+				max_pct = maxf(max_pct, sp)
+		if not sharers.is_empty():
+			var shared: float = cost * clampf(max_pct, 0.0, 1.0)
+			self_cost = cost - shared
+			var per: float = shared / sharers.size()
+			for s in sharers:
+				s.spirit_energy = maxf(0.0, s.spirit_energy - per)
+				print("[SpiritSkillTrigger] 能量分摊: %s 替付 %.1f" % [str(s.name), per])
+	if p.spirit_energy < self_cost:
 		return false
-	p.spirit_energy -= cost
-	print("[SpiritSkillTrigger] 扣能量 %.1f → 剩余 %.0f" % [cost, p.spirit_energy])
+	p.spirit_energy -= self_cost
+	print("[SpiritSkillTrigger] 扣能量 %.1f → 剩余 %.0f" % [self_cost, p.spirit_energy])
 	return true
 
 ## 按 instance_id 找球员节点
@@ -373,6 +440,20 @@ func _process(delta: float) -> void:
 				# E2/G 类事件：冷却结束
 				if _skill_cooldowns[player_id][skill_id] == 0.0 and bus:
 					bus.emit_event(BattleEventBus.GameEvent.RESOURCE_COOLDOWN_READY, {"player_id": player_id, "skill_id": skill_id})
+	# 波3 #20 方案A：充能回充计时（每帧累计 recharge_left，攒满一格回 1，不超 max）
+	for player_id in _skill_charges.keys():
+		for skill_id in _skill_charges[player_id].keys():
+			var pool: Dictionary = _skill_charges[player_id][skill_id]
+			var max_c: int = maxi(1, int(_charges_cfg_of(skill_id).get("max", 1)))
+			if int(pool["charges"]) >= max_c:
+				continue
+			var cfg_recharge: float = float(_charges_cfg_of(skill_id).get("recharge_time", 8.0))
+			if cfg_recharge <= 0.0:
+				continue
+			pool["recharge_left"] = float(pool.get("recharge_left", 0.0)) - delta
+			if float(pool["recharge_left"]) <= 0.0:
+				pool["charges"] = mini(int(pool["charges"]) + 1, max_c)
+				pool["recharge_left"] = cfg_recharge
 
 ## 获取技能剩余冷却时间
 func get_skill_cooldown(player_id: int, skill_id: String) -> float:

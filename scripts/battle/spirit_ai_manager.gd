@@ -368,6 +368,16 @@ func _compute_ball_value(tag_params: Dictionary) -> float:
 		
 		if tag_id.begins_with("ball_dmg_up"):
 			value += tag_value * 1.5
+		# 波4 球类参数化（10 工单）
+		elif tag_id.begins_with("ball_bounce_enhance"):
+			value += params.get("max_bounces", params.get("bounce_max", 0)) * 4.0
+			value += params.get("speed_keep_pct", params.get("speed_mult", 0)) * 8.0
+		elif tag_id.begins_with("ball_sure_hit"):
+			value += 30.0
+		elif tag_id.begins_with("ball_transform"):
+			value += params.get("size_scale", 0) * 15.0
+		elif tag_id.begins_with("ball_stealth"):
+			value += 25.0
 		elif tag_id.begins_with("ball_speed_up"):
 			value += multiplier * 1.0
 		elif tag_id.begins_with("ball_range_up"):
@@ -416,6 +426,24 @@ func _compute_player_value(tag_params: Dictionary) -> float:
 		elif tag_id.begins_with("player_stealth"):
 			value += 30.0
 			value += duration * 5.0
+		# 波3 球员管道变体（09 工单）
+		elif tag_id.begins_with("player_heal_block"):
+			value += duration * 6.0
+		elif tag_id.begins_with("player_damage_reflect"):
+			value += tag_value * 1.2
+			value += params.get("pct", 0) * 60.0
+			value += duration * 3.0
+		elif tag_id.begins_with("player_element_immune") or tag_id.begins_with("player_element_weak"):
+			value += 25.0
+			value += params.get("elements", []).size() * 5.0
+			value += duration * 3.0
+		elif tag_id.begins_with("player_energy_share"):
+			value += params.get("share_pct", 0) * 30.0
+			value += duration * 3.0
+		elif tag_id.begins_with("player_charge_stock"):
+			value += params.get("charges", 0) * 6.0
+		elif tag_id.begins_with("player_on_hit_expire"):
+			value += 10.0
 		elif tag_id.begins_with("player_shield"):
 			value += tag_value * 1.8
 	
@@ -448,7 +476,25 @@ func _compute_field_value(tag_params: Dictionary) -> float:
 			value += duration * 25.0
 		elif tag_id.begins_with("field_clone"):
 			value += tag_value * 30.0
-	
+		elif tag_id.begins_with("player_shield_obstacle"):
+			# V1-2 体外实体盾（05 文档）：与岩石墙同尺度——耐久+时长+次数
+			value += hp * 0.1
+			value += duration * 3.0
+			value += params.get("uses", 0) * 5.0
+		elif tag_id.begins_with("field_zone_boost") or tag_id.begins_with("field_zone_slow"):
+			# V1-3 区域效果（06 文档）：半径映射的尺寸+倍率+时长
+			value += (params.get("width", 0) as float) * 0.15
+			value += (params.get("height", 0) as float) * 0.15
+			value += multiplier * 8.0
+			value += duration * 4.0
+		elif tag_id.begins_with("field_zone_danger"):
+			# 危险区：伤害区价值（灼烧 dot 口径）
+			value += (params.get("radius", 0) as float) * 0.4
+			value += params.get("damage_value", 0) * 4.0
+			value += duration * 6.0
+		elif tag_id.begins_with("field_zone_safe"):
+			value += duration * 5.0
+
 	return max(value, 15.0)
 
 func _determine_intents(tags: Array[String], tag_params: Dictionary) -> Dictionary:
@@ -499,6 +545,17 @@ func _compute_tag_intents(tag: String, tag_params: Dictionary) -> Dictionary:
 	for tag_id in tag_params:
 		if tag_id.begins_with("ball_dmg_up") or tag_id.begins_with("ball_speed_up") or tag_id.begins_with("ball_range_up"):
 			intents["attack"] = max(intents["attack"], 0.8)
+		# 波4 球类参数化（10 工单）
+		elif tag_id.begins_with("ball_bounce_enhance"):
+			intents["control"] = max(intents["control"], 0.5)
+			intents["attack"] = max(intents["attack"], 0.4)
+		elif tag_id.begins_with("ball_sure_hit"):
+			intents["attack"] = max(intents["attack"], 0.9)
+		elif tag_id.begins_with("ball_transform"):
+			intents["attack"] = max(intents["attack"], 0.6)
+		elif tag_id.begins_with("ball_stealth"):
+			intents["attack"] = max(intents["attack"], 0.7)
+			intents["control"] = max(intents["control"], 0.4)
 		elif tag_id.begins_with("ball_dmg_down") or tag_id.begins_with("ball_slow"):
 			intents["control"] = max(intents["control"], 0.5)
 		elif tag_id.begins_with("ball_deception"):
@@ -518,6 +575,30 @@ func _compute_tag_intents(tag: String, tag_params: Dictionary) -> Dictionary:
 			intents["defense"] = max(intents["defense"], 0.3)
 		elif tag_id.begins_with("field_obs_add"):
 			intents["defense"] = max(intents["defense"], 0.9)
+		# 波3 球员管道变体（09 工单）
+		elif tag_id.begins_with("player_heal_block"):
+			intents["control"] = max(intents["control"], 0.6)
+			intents["attack"] = max(intents["attack"], 0.4)
+		elif tag_id.begins_with("player_damage_reflect"):
+			intents["defense"] = max(intents["defense"], 0.8)
+		elif tag_id.begins_with("player_element_immune") or tag_id.begins_with("player_element_weak"):
+			intents["defense"] = max(intents["defense"], 0.9)
+		elif tag_id.begins_with("player_energy_share"):
+			intents["support"] = max(intents["support"], 0.7)
+		elif tag_id.begins_with("player_charge_stock"):
+			intents["support"] = max(intents["support"], 0.4)
+		elif tag_id.begins_with("player_on_hit_expire"):
+			intents["control"] = max(intents["control"], 0.5)
+		elif tag_id.begins_with("field_zone_danger"):
+			intents["attack"] = max(intents["attack"], 0.6)
+			intents["defense"] = max(intents["defense"], 0.4)
+		elif tag_id.begins_with("field_zone_slow"):
+			intents["control"] = max(intents["control"], 0.6)
+			intents["defense"] = max(intents["defense"], 0.5)
+		elif tag_id.begins_with("field_zone_boost"):
+			intents["support"] = max(intents["support"], 0.7)
+		elif tag_id.begins_with("field_zone_safe"):
+			intents["defense"] = max(intents["defense"], 0.7)
 		elif tag_id.begins_with("field_slow"):
 			intents["control"] = max(intents["control"], 0.6)
 			intents["defense"] = max(intents["defense"], 0.5)

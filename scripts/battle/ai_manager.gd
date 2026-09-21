@@ -165,6 +165,9 @@ func _update_jump_reaction(ap: Dictionary) -> void:
 		return  # 队友来球=接球机会，不躲
 
 	var to_me: Vector2 = p.global_position - ball.global_position
+	# 波4 #7 球隐身：看不见的球不躲（判定层接口；球对自己队伍仍可见）
+	if ball.has_method("is_ball_visible_to") and not ball.is_ball_visible_to(p):
+		return
 	var dist: float = to_me.length()
 	if dist > AI_JUMP_DIST_MAX or dist < 1.0:
 		return

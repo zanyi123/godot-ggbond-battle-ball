@@ -402,9 +402,9 @@ func refresh_bonuses() -> void:
 	_recalculate_all_bonuses()
 
 
-## 中场休息时场上元灵能量恢复20点
+## 中场休息时场上元灵能量恢复20点（波3 #11 禁能：灯亮不回复）
 func _on_phase_changed(phase) -> void:
-	if phase == GameManager.MatchPhase.HALF_TIME:
+	if phase == GameManager.MatchPhase.HALF_TIME and not is_status_active("energy_block"):
 		spirit_energy = minf(max_spirit_energy, spirit_energy + 20.0)
 
 
@@ -1185,6 +1185,11 @@ func take_damage(amount: float, attacker: CharacterBody2D = null, attacker_eleme
 		if defender_element != "":
 			counter_mult = DataManager.get_counter_multiplier(attacker_element, defender_element)
 	var effective_amount: float = amount * dmg_mult * counter_mult
+	# 波3 #16 元素免疫/弱点（09 工单）：对指定元素攻击 ×multiplier（0=免疫）
+	if attacker_element != "" and is_status_active("element_immune"):
+		var _shield_elements: Array = _status_lights["element_immune"].get("elements", [])
+		if attacker_element in _shield_elements:
+			effective_amount = effective_amount * float(_status_lights["element_immune"].get("multiplier", 0.0))
 	if counter_mult > 1.0:
 		var _bus = get_tree().get_first_node_in_group("battle_event_bus") if is_inside_tree() else null
 		if _bus:
@@ -1256,6 +1261,19 @@ func take_damage(amount: float, attacker: CharacterBody2D = null, attacker_eleme
 				mps.report_damage_dealt(attacker, actual_damage)
 		# 装备耐久消耗（被击中）
 		PlayerSaveManager.reduce_equipment_durability(character_id, "hit")
+
+	# 波3 #21 受击解除：受实际伤害 → 带 break_on_hit 标记的灯立即熄灭
+	if actual_damage > 0:
+		_expire_lights_on_hit()
+	# 波3 #5 反伤：实际受伤 → 攻击者吃反伤（_reflecting 守卫防递归；反伤伤害不再触发反伤）
+	if actual_damage > 0 and not _reflecting and attacker and is_instance_valid(attacker) \
+			and is_status_active("reflect") and attacker.has_method("take_damage"):
+		var _r_extra: Dictionary = _status_lights.get("reflect", {})
+		var _reflect_dmg: float = float(_r_extra.get("value", 0.0)) + actual_damage * float(_r_extra.get("pct", 0.0))
+		if _reflect_dmg > 0.0:
+			_reflecting = true
+			attacker.take_damage(_reflect_dmg, self, "")
+			_reflecting = false
 
 	return {"damage": actual_damage, "effect": effect}
 
@@ -1822,6 +1840,12 @@ func unequip_spirit() -> void:
 # 控制类状态名列表（受免控灯保护）
 const _CC_STATUSES: PackedStringArray = ["stunned", "silenced", "disarmed", "rooted"]
 
+# 波3 #5 反伤递归守卫：反伤结算期间不再触发反伤
+var _reflecting: bool = false
+
+## 波3 #20 充能容器耗尽信号（表现层/技能组合层消费）
+signal charge_stock_empty
+
 # 互斥状态灯映射：灯名 → 互斥规则
 # "block": 互斥灯存在时拒绝点此灯
 # "clear": 点此灯时清除互斥灯
@@ -1877,6 +1901,56 @@ func turn_on_light(status_name: String, duration: float, extra: Dictionary = {})
 func turn_off_light(status_name: String) -> void:
 	"""关灯（手动，如解控）"""
 	_status_lights.erase(status_name)
+
+
+## ==================== 波3 球员管道变体（09 工单，判定层）====================
+
+## #20 储存多段：查询剩余充能数
+func get_charge_stock() -> int:
+	if is_status_active("charge_stock"):
+		return int(_status_lights["charge_stock"].get("charges", 0))
+	return 0
+
+
+## #20 储存多段：消耗一格（返回 true=成功扣一格；扣到 0 → 灯灭+发信号；无灯/已空=false）
+func consume_charge() -> bool:
+	if not is_status_active("charge_stock"):
+		return false
+	var left: int = int(_status_lights["charge_stock"].get("charges", 0)) - 1
+	if left <= 0:
+		turn_off_light("charge_stock")
+		charge_stock_empty.emit()
+	else:
+		_status_lights["charge_stock"]["charges"] = left
+	return true
+
+
+## #19 能量分摊：本球员当前分摊比例（无灯=0；供 trigger._consume_energy 查询）
+func get_energy_share_pct() -> float:
+	if is_status_active("energy_share"):
+		return float(_status_lights["energy_share"].get("share_pct", 0.5))
+	return 0.0
+
+
+## #21 受击解除：给已在亮的指定状态打 break_on_hit 标记（statuses 空=全部控制类）
+func mark_lights_break_on_hit(statuses: Array) -> int:
+	var names: Array = statuses if not statuses.is_empty() else Array(_CC_STATUSES)
+	var marked: int = 0
+	for light_name in names:
+		if is_status_active(str(light_name)):
+			_status_lights[light_name]["break_on_hit"] = true
+			marked += 1
+	return marked
+
+
+## #21 受击解除：受实际伤害时熄灭全部带标记的灯（take_damage 内部调用）
+func _expire_lights_on_hit() -> void:
+	var to_off: PackedStringArray = []
+	for light_name in _status_lights:
+		if _status_lights[light_name].get("break_on_hit", false):
+			to_off.append(light_name)
+	for light_name in to_off:
+		turn_off_light(light_name)
 
 
 func turn_off_lights_by_type(light_names: PackedStringArray) -> void:
@@ -1963,8 +2037,8 @@ func _tick_all_timers(delta: float) -> void:
 		for sid in skill_cooldowns:
 			var cd: float = skill_cooldowns[sid] - delta
 			skill_cooldowns[sid] = cd if cd > 0.0 else 0.0
-	# 场上元灵能量每秒恢复1点
-	if spirit_energy < max_spirit_energy:
+	# 场上元灵能量每秒恢复1点（波3 #11 禁能：灯亮不回复）
+	if spirit_energy < max_spirit_energy and not is_status_active("energy_block"):
 		spirit_energy = minf(max_spirit_energy, spirit_energy + delta)
 	_tick_status_lights(delta)
 	_process_tick_effects(delta)
@@ -1982,7 +2056,9 @@ func _process_tick_effects(delta: float) -> void:
 
 		# 每帧执行
 		if etype == "regen":
-			stamina = minf(max_stamina, stamina + rate * delta)
+			# 波3 #11 禁疗：灯亮时持续回血无效（倒计时照跑）
+			if not is_status_active("heal_block"):
+				stamina = minf(max_stamina, stamina + rate * delta)
 		elif etype == "dot":
 			# 无敌灯亮时，不掉血（但倒计时照跑）
 			if not is_status_active("invincible"):

@@ -54,6 +54,10 @@ func _default_ball_mods() -> Dictionary:
 		"lock_straight": false, "spread_done": false,
 		"aoe_radius": 0.0, "aoe_damage_pct": 0.5,
 		"lockon_target": null,
+		"bounce_max": 0, "bounce_speed_mult": 1.0,   # 波4 #15 反弹增强（0=无限）
+		"sure_hit": false,                            # 波4 #22 必中
+		"size_scale": 1.0,                            # 波4 #23 球形态（碰撞半径倍率）
+		"hidden_from_enemies": false,                 # 波4 #7 球隐身
 	}
 
 ## 取/建该施法者的修饰符准备区
@@ -99,6 +103,11 @@ func _init_priority_table() -> void:
 	_tag_priority["ball_straight"] = 24
 	_tag_priority["ball_lockon"] = 25
 	_tag_priority["ball_spread"] = 26
+	# 波4 球类参数化（10 工单）
+	_tag_priority["ball_bounce_enhance"] = 27
+	_tag_priority["ball_sure_hit"] = 28
+	_tag_priority["ball_transform"] = 29
+	_tag_priority["ball_stealth"] = 30
 	# B-30 穿透/范围层
 	_tag_priority["ball_penetrate"] = 31
 	_tag_priority["ball_range_up"] = 32
@@ -108,6 +117,7 @@ func _init_priority_table() -> void:
 	# F-10 障碍层
 	_tag_priority["field_obs_add"] = 101
 	_tag_priority["field_obs_clear"] = 102
+	_tag_priority["player_shield_obstacle"] = 103
 	# F-20 地形层
 	_tag_priority["field_terra_change"] = 121
 	_tag_priority["field_terra_revert"] = 122
@@ -157,6 +167,15 @@ func _init_priority_table() -> void:
 	_tag_priority["player_vulnerable"] = 302
 	_tag_priority["player_stealth"] = 303
 	_tag_priority["player_reveal"] = 304
+	# 波3 球员管道变体（09 工单，命名对齐规划版）
+	_tag_priority["player_heal_block"] = 311
+	_tag_priority["player_energy_block"] = 312
+	_tag_priority["player_damage_reflect"] = 313
+	_tag_priority["player_element_immune"] = 314
+	_tag_priority["player_element_weak"] = 315
+	_tag_priority["player_energy_share"] = 316
+	_tag_priority["player_charge_stock"] = 317
+	_tag_priority["player_on_hit_expire"] = 361  # 排在状态/控制层后，标记已在亮的灯
 	# P-40 运动控制层
 	_tag_priority["player_move_slow"] = 401
 	_tag_priority["player_move_boost"] = 402
@@ -381,6 +400,19 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 			success = true
 		"ball_spread":
 			success = true  # 扩散在球碰撞时处理
+		# 波4 球类参数化（10 工单）
+		"ball_bounce_enhance":
+			_apply_ball_bounce_enhance(params, caster_id)
+			success = true
+		"ball_sure_hit":
+			_apply_ball_sure_hit(params, caster_id)
+			success = true
+		"ball_transform":
+			_apply_ball_transform(params, caster_id)
+			success = true
+		"ball_stealth":
+			_apply_ball_stealth(params, caster_id)
+			success = true
 		# 穿透/范围类 (15-17)
 		"ball_penetrate":
 			_apply_ball_penetrate(params, caster_id)
@@ -397,6 +429,9 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 			success = true
 		"field_obs_clear":
 			_apply_field_obs_clear(params)
+			success = true
+		"player_shield_obstacle":
+			_apply_player_shield_obstacle(params, caster_id)
 			success = true
 		# === 场地标签 - 区域效果(07-10) ===
 		"field_zone_boost":
@@ -473,6 +508,35 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 			success = true
 		"player_reveal":
 			_apply_player_reveal(params, caster_id)
+			success = true
+		# === 波3 球员管道变体（09 工单）===
+		"player_heal_block":
+			_apply_player_heal_block(params, caster_id)
+			success = true
+		"player_energy_block":
+			# 规划版命名：单禁能别名
+			_apply_player_heal_block({"duration": params.get("duration", 3.0), "block": "energy"}, caster_id)
+			success = true
+		"player_damage_reflect":
+			_apply_player_reflect(params, caster_id)
+			success = true
+		"player_element_immune":
+			_apply_player_element_shield(params, caster_id)
+			success = true
+		"player_element_weak":
+			# 规划版命名：弱点档（multiplier 默认 1.5）
+			var weak_params: Dictionary = params.duplicate()
+			weak_params["multiplier"] = params.get("multiplier", 1.5)
+			_apply_player_element_shield(weak_params, caster_id)
+			success = true
+		"player_energy_share":
+			_apply_player_energy_share(params, caster_id)
+			success = true
+		"player_charge_stock":
+			_apply_player_charge_stock(params, caster_id)
+			success = true
+		"player_on_hit_expire":
+			_apply_player_on_hit_expire(params, caster_id)
 			success = true
 		# === 球员标签 - 体力(21-26) ===
 		"player_hp_heal_pct":
@@ -639,6 +703,9 @@ func _process(delta: float) -> void:
 			expired_casters.append(cid)
 	for cid in expired_casters:
 		_ball_mods_by_caster.erase(cid)
+
+	# V1-3 落点区域 pending 过期清理（球被接住/未落地 30s 兜底）
+	_cleanup_expired_zone_spawns()
 
 	# 活跃效果倒计时
 	var to_remove: PackedStringArray = []
@@ -861,6 +928,38 @@ func _apply_ball_straight(params: Dictionary, caster_id: int) -> void:
 	print("[TagEffect] 直行: 启用，禁用追踪/回旋 (caster=%d)" % caster_id)
 
 
+## ==================== 波4 球类参数化（10 工单）====================
+
+## #15 反弹增强：撞墙反弹次数上限 + 每次反弹速度保持率（规划版命名）
+func _apply_ball_bounce_enhance(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
+	mods.bounce_max = maxi(0, int(params.get("max_bounces", params.get("bounce_max", 0))))
+	mods.bounce_speed_mult = maxf(0.1, float(params.get("speed_keep_pct", params.get("speed_mult", 1.0))))
+	_mark_expiry(mods, ["bounce_max", "bounce_speed_mult"], float(params.get("duration", 0)))
+	print("[TagEffect] 反弹增强: max=%d speed_keep=%.2f (caster=%d)" % [mods.bounce_max, mods.bounce_speed_mult, caster_id])
+
+## #22 必中：高度窗豁免 + 追踪目标隐身不丢（瞄准沿用 lockon 组合）
+func _apply_ball_sure_hit(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
+	mods.sure_hit = true
+	_mark_expiry(mods, ["sure_hit"], float(params.get("duration", 0)))
+	print("[TagEffect] 必中: 启用 (caster=%d)" % caster_id)
+
+## #23 球形态变换：碰撞判定半径倍率（视觉缩放=美术线消费 size_scale 查询）
+func _apply_ball_transform(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
+	mods.size_scale = clampf(float(params.get("size_scale", 1.0)), 0.25, 4.0)
+	_mark_expiry(mods, ["size_scale"], float(params.get("duration", 0)))
+	print("[TagEffect] 球形态: size_scale=%.2f (caster=%d)" % [mods.size_scale, caster_id])
+
+## #7 球隐身：球对敌方不可见（AI 躲球感知跳过；表现消费 is_stealthed() 接口）
+func _apply_ball_stealth(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
+	mods.hidden_from_enemies = true
+	_mark_expiry(mods, ["hidden_from_enemies"], float(params.get("duration", 0)))
+	print("[TagEffect] 球隐身: 启用 (caster=%d)" % caster_id)
+
+
 ## ==================== 对场地效果 (预留) ====================
 
 func _apply_field_obs_add(params: Dictionary) -> void:
@@ -909,6 +1008,31 @@ func _apply_field_obs_clear(params: Dictionary) -> void:
 		clear_count, mouse_ops
 	])
 	pass
+
+
+## V1-2 体外实体盾（05 文档）：贴身自动生成，不走鼠标放置
+## D1/D2 follow_mode=follow 跟随释放者/static 固定；D3 挡所有球；D4 durability_mode=uses|hp
+func _apply_player_shield_obstacle(params: Dictionary, caster_id: int) -> void:
+	var manager = _get_obstacle_manager()
+	if not manager:
+		push_error("[TagEffectHandler] 找不到 ObstacleManager")
+		return
+	var caster := _get_caster(caster_id)
+	if not caster:
+		print("[TagEffectHandler] 护盾: 找不到施法者")
+		return
+
+	var p: Dictionary = params.duplicate()
+	p["caster_id"] = caster_id
+	if not p.has("element_color"):
+		p["element_color"] = _get_element_color(str(params.get("_element", params.get("element", ""))))
+	if not p.has("source_skill"):
+		p["source_skill"] = str(params.get("_skill_id", params.get("skill_id", "")))
+
+	manager.create_player_shield(p, caster)
+	print("[TagEffectHandler] 生成护盾: caster=%d follow=%s durability=%s hp=%.0f uses=%d duration=%.1f" % [
+		caster_id, str(p.get("follow_mode", "follow")), str(p.get("durability_mode", "hp")),
+		float(p.get("hp", 50.0)), int(p.get("uses", 1)), float(p.get("duration", 10.0))])
 func _apply_field_obs_move(params: Dictionary) -> void:
 	pass
 func _apply_field_obs_lock(params: Dictionary) -> void:
@@ -922,35 +1046,21 @@ func _apply_field_zone_mark(params: Dictionary) -> void:
 func _apply_field_zone_clear(params: Dictionary) -> void:
 	pass
 func _apply_field_zone_effect(params: Dictionary, zone_type: int) -> void:
-	"""区域效果标签通用函数：进入鼠标放置模式
-	zone_type: 0=加速 1=减速 2=危险 3=安全"""
+	"""区域效果标签通用函数
+	zone_type: 0=加速 1=减速 2=危险 3=安全
+	V1-3（06 文档）：params.spawn_at="ball_land"|"ball_stop" → 登记落点 pending，球触地/停球时在落点生成；
+	缺省 = 鼠标放置路径（原行为不变，E4）"""
 	var manager = _get_field_zone_manager()
 	if not manager:
 		push_error("[TagEffectHandler] 找不到 FieldZoneManager")
 		return
 
-	# 构建区域参数
-	var zone_params: Dictionary = {}
-	zone_params["zone_type"] = zone_type
-	zone_params["width"] = float(params.get("width", 120.0))
-	zone_params["height"] = float(params.get("height", 120.0))
-	zone_params["duration"] = float(params.get("duration", 10.0))
+	var spawn_at: String = str(params.get("spawn_at", ""))
+	if spawn_at == "ball_land" or spawn_at == "ball_stop":
+		_register_pending_zone_spawn(params, zone_type, spawn_at)
+		return
 
-	# 效果值：加速/减速=倍率，危险=每秒伤害，安全=无
-	match zone_type:
-		0:  # 加速
-			zone_params["effect_value"] = float(params.get("boost_multiplier", 1.5))
-		1:  # 减速
-			zone_params["effect_value"] = float(params.get("slow_multiplier", 1.5))
-		2:  # 危险
-			zone_params["effect_value"] = float(params.get("damage_value", 10.0))
-		3:  # 安全
-			zone_params["effect_value"] = 0.0
-
-	# 补充来源技能
-	if not params.has("source_skill"):
-		zone_params["source_skill"] = params.get("skill_id", "")
-
+	var zone_params := _build_zone_params(params, zone_type)
 	var mouse_ops: int = int(params.get("mouse_ops", 1))
 	manager.start_placing(zone_params, mouse_ops)
 
@@ -960,6 +1070,101 @@ func _apply_field_zone_effect(params: Dictionary, zone_type: int) -> void:
 		zone_params["width"], zone_params["height"],
 		zone_params["duration"], mouse_ops
 	])
+
+
+## V1-3：构建区域参数（鼠标路径与落点路径共用；radius 兼容映射为方形尺寸）
+func _build_zone_params(params: Dictionary, zone_type: int) -> Dictionary:
+	var zone_params: Dictionary = {}
+	zone_params["zone_type"] = zone_type
+	var width: float = float(params.get("width", 0.0))
+	var height: float = float(params.get("height", 0.0))
+	if width <= 0.0 and height <= 0.0 and float(params.get("radius", 0.0)) > 0.0:
+		width = float(params.get("radius", 0.0)) * 2.0
+		height = width
+	zone_params["width"] = width if width > 0.0 else 120.0
+	zone_params["height"] = height if height > 0.0 else 120.0
+	zone_params["duration"] = float(params.get("duration", 10.0))
+	# 效果值：加速/减速=倍率，危险=每秒伤害，安全=无
+	match zone_type:
+		0:
+			zone_params["effect_value"] = float(params.get("boost_multiplier", 1.5))
+		1:
+			zone_params["effect_value"] = float(params.get("slow_multiplier", 1.5))
+		2:
+			zone_params["effect_value"] = float(params.get("damage_value", 10.0))
+		3:
+			zone_params["effect_value"] = 0.0
+	if not params.has("source_skill"):
+		zone_params["source_skill"] = params.get("_skill_id", params.get("skill_id", ""))
+	return zone_params
+
+
+## ==================== V1-3 落点区域 pending（06 文档）====================
+
+var _pending_zone_spawns: Array[Dictionary] = []  # [{zone_type, zone_params, spawn_at, expires_at}]
+var _ball_hooks_connected: bool = false
+
+
+func _register_pending_zone_spawn(params: Dictionary, zone_type: int, spawn_at: String) -> void:
+	_ensure_ball_landing_hooks()
+	_pending_zone_spawns.append({
+		"zone_type": zone_type,
+		"zone_params": _build_zone_params(params, zone_type),
+		"spawn_at": spawn_at,
+		"expires_at": _match_clock + 30.0,
+	})
+	print("[TagEffectHandler] 登记落点区域: type=%d spawn_at=%s pending=%d" % [zone_type, spawn_at, _pending_zone_spawns.size()])
+
+
+## 惰性连接球落点钩子（经 battle_manager 注入的 ball_node，与 spirit_system 既有引用链一致）
+func _ensure_ball_landing_hooks() -> void:
+	if _ball_hooks_connected:
+		return
+	var bm = battle_manager
+	if bm == null:
+		bm = get_node_or_null("/root/BattleManager")
+	if bm == null or bm.get("ball_node") == null:
+		return
+	var ball = bm.get("ball_node")
+	if ball.has_signal("ball_first_land") and not ball.ball_first_land.is_connected(_on_ball_first_land):
+		ball.ball_first_land.connect(_on_ball_first_land)
+	if ball.has_signal("ball_stopped") and not ball.ball_stopped.is_connected(_on_ball_stopped):
+		ball.ball_stopped.connect(_on_ball_stopped)
+	_ball_hooks_connected = true
+	print("[TagEffectHandler] 已连接球落点钩子")
+
+
+func _on_ball_first_land(pos: Vector2) -> void:
+	_consume_pending_zone_spawns("ball_land", pos)
+
+
+func _on_ball_stopped(pos: Vector2) -> void:
+	_consume_pending_zone_spawns("ball_stop", pos)
+
+
+func _consume_pending_zone_spawns(trigger: String, pos: Vector2) -> void:
+	var manager = _get_field_zone_manager()
+	if not manager:
+		return
+	var remaining: Array[Dictionary] = []
+	for item in _pending_zone_spawns:
+		if item["spawn_at"] == trigger:
+			manager.spawn_zone_at(int(item["zone_type"]), pos, item["zone_params"].duplicate())
+			print("[TagEffectHandler] 落点区域生成: type=%d at=%s" % [int(item["zone_type"]), str(pos.round())])
+		else:
+			remaining.append(item)
+	_pending_zone_spawns = remaining
+
+
+## pending 过期清理（球被接住/未落地 30s 兜底，防泄漏；06 断言4）
+func _cleanup_expired_zone_spawns() -> void:
+	var remaining: Array[Dictionary] = []
+	for item in _pending_zone_spawns:
+		if _match_clock < float(item["expires_at"]):
+			remaining.append(item)
+	_pending_zone_spawns = remaining
+
+
 func _apply_field_illusion_add(params: Dictionary) -> void:
 	"""幻象生成标签：进入鼠标放置模式
 	params: place_mode(any/near), count, stamina, duration, ai_mode, source_player"""
@@ -1093,8 +1298,12 @@ func _apply_player_stat_buff(params: Dictionary, caster_id: int, stat: String, m
 func _apply_player_status(params: Dictionary, caster_id: int, status: String) -> void:
 	var targets := _get_player_targets(params, caster_id)
 	var duration: float = float(params.get("duration", 3.0))
+	# 波3 #21 受击解除（参数式组合用法）：状态自带 break_on_hit:true → 受击即解
+	var extra: Dictionary = {}
+	if params.get("break_on_hit", false):
+		extra["break_on_hit"] = true
 	for target in targets:
-		var ok: bool = target.turn_on_light(status, duration)
+		var ok: bool = target.turn_on_light(status, duration, extra)
 		if not ok:
 			print("[TagEffect] %s 被免控挡住: target=%s" % [status, target.char_data.get("name", "?")])
 	print("[TagEffect] 状态: %s dur=%.1fs targets=%d" % [status, duration, targets.size()])
@@ -1124,11 +1333,75 @@ func _apply_player_reveal(params: Dictionary, caster_id: int) -> void:
 	print("[TagEffect] 显形: %d个隐身目标" % count)
 
 
+## ==================== 波3 球员管道变体（09 工单）====================
+
+## #11 禁疗/禁能：block="heal"/"energy"/"both"（默认 both，蝰蛇毒咬口径）
+func _apply_player_heal_block(params: Dictionary, caster_id: int) -> void:
+	var targets := _get_player_targets(params, caster_id)
+	var duration: float = float(params.get("duration", 3.0))
+	var block: String = str(params.get("block", "both"))
+	for target in targets:
+		if block == "heal" or block == "both":
+			target.turn_on_light("heal_block", duration)
+		if block == "energy" or block == "both":
+			target.turn_on_light("energy_block", duration)
+	print("[TagEffect] 禁疗/禁能: block=%s dur=%.1fs targets=%d" % [block, duration, targets.size()])
+
+## #5 反伤：攻击者受伤 = value 固定 + 实际伤害×pct
+func _apply_player_reflect(params: Dictionary, caster_id: int) -> void:
+	var targets := _get_player_targets(params, caster_id)
+	var duration: float = float(params.get("duration", 4.0))
+	var value: float = float(params.get("value", 0.0))
+	var pct: float = float(params.get("pct", 0.0))
+	for target in targets:
+		target.turn_on_light("reflect", duration, {"value": value, "pct": pct})
+	print("[TagEffect] 反伤: value=%.0f pct=%.2f dur=%.1fs targets=%d" % [value, pct, duration, targets.size()])
+
+## #16 元素免疫/弱点：对指定元素攻击 ×multiplier（0=免疫，1.5=弱点）
+func _apply_player_element_shield(params: Dictionary, caster_id: int) -> void:
+	var targets := _get_player_targets(params, caster_id)
+	var duration: float = float(params.get("duration", 4.0))
+	var elements: Array = params.get("elements", [])
+	var multiplier: float = float(params.get("multiplier", 0.0))
+	for target in targets:
+		target.turn_on_light("element_immune", duration, {"elements": elements, "multiplier": multiplier})
+	print("[TagEffect] 元素免疫/弱点: elements=%s mult=%.1f dur=%.1fs targets=%d" % [str(elements), multiplier, duration, targets.size()])
+
+## #19 能量分摊：队友替施法者分摊能耗（trigger._consume_energy 消费）
+func _apply_player_energy_share(params: Dictionary, caster_id: int) -> void:
+	var targets := _get_player_targets(params, caster_id)
+	var duration: float = float(params.get("duration", 5.0))
+	var share_pct: float = float(params.get("share_pct", 0.5))
+	for target in targets:
+		target.turn_on_light("energy_share", duration, {"share_pct": share_pct})
+	print("[TagEffect] 能量分摊: share=%.0f%% dur=%.1fs targets=%d" % [share_pct * 100.0, duration, targets.size()])
+
+## #20 储存多段：充能容器（消费时机由技能组合层定，本原语只造容器）
+func _apply_player_charge_stock(params: Dictionary, caster_id: int) -> void:
+	var targets := _get_player_targets(params, caster_id)
+	var duration: float = float(params.get("duration", 10.0))
+	var charges: int = maxi(1, int(params.get("charges", 1)))
+	for target in targets:
+		target.turn_on_light("charge_stock", duration, {"charges": charges})
+	print("[TagEffect] 充能容器: charges=%d dur=%.1fs targets=%d" % [charges, duration, targets.size()])
+
+## #21 受击解除：给目标已在亮的匹配状态打 break_on_hit 标记（statuses 空=全部控制类）
+func _apply_player_on_hit_expire(params: Dictionary, caster_id: int) -> void:
+	var targets := _get_player_targets(params, caster_id)
+	var statuses: Array = params.get("statuses", [])
+	var total: int = 0
+	for target in targets:
+		total += target.mark_lights_break_on_hit(statuses)
+	print("[TagEffect] 受击解除标记: statuses=%s marked=%d targets=%d" % [str(statuses), total, targets.size()])
+
+
 ## === 体力恢复/扣除(%) ===
 func _apply_player_hp_heal_pct(params: Dictionary, caster_id: int) -> void:
 	var targets := _get_player_targets(params, caster_id)
 	var pct: float = float(params.get("value", 20)) / 100.0
 	for target in targets:
+		if target.is_status_active("heal_block"):
+			continue  # 波3 #11 禁疗：灯亮治疗无效
 		var skill_mult: float = target.get_and_consume_next_skill_mult()
 		var heal: float = target.max_stamina * pct * skill_mult
 		target.stamina = min(target.max_stamina, target.stamina + heal)
@@ -1151,6 +1424,8 @@ func _apply_player_hp_heal_flat(params: Dictionary, caster_id: int) -> void:
 	var targets := _get_player_targets(params, caster_id)
 	var val: float = float(params.get("value", 30))
 	for target in targets:
+		if target.is_status_active("heal_block"):
+			continue  # 波3 #11 禁疗：灯亮治疗无效
 		var skill_mult: float = target.get_and_consume_next_skill_mult()
 		target.stamina = min(target.max_stamina, target.stamina + val * skill_mult)
 

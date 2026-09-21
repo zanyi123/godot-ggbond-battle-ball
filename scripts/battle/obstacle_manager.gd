@@ -29,13 +29,14 @@ func _ready() -> void:
 
 ## ==================== 创建障碍物 ====================
 
-func create_obstacle(params: Dictionary, position: Vector2, rotation: float = 0.0) -> StaticBody2D:
+func create_obstacle(params: Dictionary, position: Vector2, rotation: float = 0.0, script_path: String = "res://scripts/battle/obstacle.gd") -> StaticBody2D:
 	"""创建并放置障碍物
 
 	参数：
 	- params: 障碍物参数（shape, hp, attack_consume_rate, speed_consume_rate等）
 	- position: 放置位置（全局坐标）
 	- rotation: 旋转角度
+	- script_path: 障碍脚本（默认岩石墙；护盾等子类经此注入，V1-2）
 
 	返回：创建的障碍物节点
 	"""
@@ -57,7 +58,7 @@ func create_obstacle(params: Dictionary, position: Vector2, rotation: float = 0.
 
 	# 创建障碍物节点
 	var obstacle := StaticBody2D.new()
-	obstacle.set_script(load("res://scripts/battle/obstacle.gd"))
+	obstacle.set_script(load(script_path))
 	obstacle.name = "Obstacle_" + str(obstacles.size())
 	obstacle.global_position = position
 	obstacle.rotation = rotation
@@ -76,6 +77,28 @@ func create_obstacle(params: Dictionary, position: Vector2, rotation: float = 0.
 	print("[ObstacleManager] 创建障碍物: shape=" + str(params.get("shape", "rect")) + " hp=" + str(snapped(params.get("hp", 50.0), 1.0)) + " pos=(" + str(snapped(position.x, 1.0)) + "," + str(snapped(position.y, 1.0)) + ")")
 
 	return obstacle
+
+
+## ==================== 体外实体盾（V1-2，05 文档）====================
+
+## 生成随身护盾障碍（D1/D2 follow_mode=follow 跟随释放者 / static 固定；D3 挡所有球；D4 uses/hp 双耐久）
+func create_player_shield(params: Dictionary, caster: Node2D) -> StaticBody2D:
+	var pos: Vector2 = caster.global_position if caster and is_instance_valid(caster) else Vector2.ZERO
+	params["caster_id"] = caster.get_instance_id() if caster and is_instance_valid(caster) else -1
+	var shield := create_obstacle(params, pos, 0.0, "res://scripts/battle/player_shield.gd")
+	if shield and shield.has_method("setup_shield"):
+		shield.setup_shield(params, caster)
+	print("[ObstacleManager] 生成护盾: caster=%s mode=%s durability=%s hp=%.0f uses=%d" % [
+		str(caster.name) if caster else "?", str(params.get("follow_mode", "follow")),
+		str(params.get("durability_mode", "hp")), float(params.get("hp", 50.0)), int(params.get("uses", 1))])
+	return shield
+
+## 查询某释放者的随身穿戴盾（AI/球侧判断"该球员有盾"，05 对外接口）
+func get_player_shield(caster_id: int) -> StaticBody2D:
+	for obs in obstacles:
+		if is_instance_valid(obs) and obs.has_method("get_shield_hp") and int(obs.get("caster_id")) == caster_id:
+			return obs
+	return null
 
 
 ## ==================== 清除障碍物 ====================

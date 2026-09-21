@@ -20,6 +20,8 @@ var injected_skills: Array[Dictionary] = []
 var element_type: String = ""
 var trajectory_type: String = "straight"
 var bounced_by_resilience: bool = false  # 韧性弹飞球：落地球权回攻击者（防半场白送，2026-09-11）
+var _first_land_emitted: bool = false    # V1-3 首触地钩子：一次投球只发一次
+var wall_bounce_count: int = 0           # 波4 #15：本次飞行已撞墙反弹次数
 
 var stuck_on_obstacle: StaticBody2D = null  # 球卡在障碍物上时引用
 
@@ -55,6 +57,9 @@ func start_visual_fall() -> void:
 func _can_hit_target_at(target: Node) -> bool:
 	if target == null or not is_instance_valid(target):
 		return false
+	# 波4 #22 必中：高度窗豁免（跳跃也躲不开）
+	if ball_mods.get("sure_hit", false):
+		return true
 	if not target.has_method("get_hit_z_range"):
 		return true  # 无高度接口的对象按旧规则可命中
 	var r: Vector2 = target.get_hit_z_range()
@@ -95,6 +100,10 @@ const WALL_BOUNCE_E: float = 1.0  # 墙反弹恢复系数（1=完全反弹，与
 func _bounce_off_walls() -> void:
 	if not use_wall_bounce:
 		return
+	# 波4 #15 反弹增强：次数超限 → 不再反弹（球继续飞，出界兜底）
+	var bounce_max: int = int(ball_mods.get("bounce_max", 0))
+	if bounce_max > 0 and wall_bounce_count >= bounce_max:
+		return
 	var pos := global_position
 	var d := ball_direction
 	var hit_normal := Vector2.ZERO
@@ -118,8 +127,13 @@ func _bounce_off_walls() -> void:
 		ball_direction = d.normalized()
 		if WALL_BOUNCE_E < 1.0:
 			ball_speed *= WALL_BOUNCE_E  # e<1 时每次撞墙衰减
+		# 波4 #15：反弹速度倍率（>1=风暴弹珠加速型）
+		var bounce_mult: float = float(ball_mods.get("bounce_speed_mult", 1.0))
+		if bounce_mult != 1.0:
+			ball_speed *= bounce_mult
+		wall_bounce_count += 1
 		global_position = pos
-		print("[Ball] 撞蓝墙反弹! 法线%s 方向%s" % [hit_normal, ball_direction])
+		print("[Ball] 撞蓝墙反弹! 法线%s 方向%s 第%d次" % [hit_normal, ball_direction, wall_bounce_count])
 
 
 ## ==================== M1 弹道物理（水平场地弹跳，2026-09-12） ====================
@@ -176,6 +190,9 @@ const LOB_INITIAL_VZ: float = 300.0
 signal ball_caught(player: CharacterBody2D)
 signal ball_hit_player(player: CharacterBody2D, damage: float)
 signal ball_out_of_bounds()
+# V1-3 区域触发钩子（06 文档）：只读事件，供"球落点生成区域"类技能消费
+signal ball_first_land(pos: Vector2)   # 首次触地瞬时（弹道/lob 生效；恒高球不触发）
+signal ball_stopped(pos: Vector2)      # 球停止结算点（距离耗尽/内场停回手）
 
 
 ## 返回球视觉半径，用于技能轮廓渲染（2026-06-19）
@@ -232,6 +249,10 @@ func _physics_process(delta: float) -> void:
 		if ball_z <= 0.0:
 			ball_z = 0.0
 			visual_fall_left = 0.0
+			# V1-3：恒高球（弹道关）无弹道触地，视觉落地即首触地（ball_land 类技能的恒高兜底）
+			if not _first_land_emitted:
+				_first_land_emitted = true
+				ball_first_land.emit(global_position)
 	elif not is_active:
 		ball_z = 0.0
 	# M1 弹道 2D 表现：球精灵随 z 上移、影子留地变淡
@@ -266,13 +287,18 @@ func _physics_process(delta: float) -> void:
 	if is_tracking:
 		var target: Node = ball_mods.get("tracking_target")
 		if target and is_instance_valid(target) and not target.is_defeated:
-			# 目标隐身 → 丢失目标，转直飞
-			if target.has_method("is_status_active") and target.is_status_active("stealthed"):
+			# 目标隐身 → 丢失目标，转直飞（波4 #22 必中球豁免：隐身也躲不开）
+			if target.has_method("is_status_active") and target.is_status_active("stealthed") \
+					and not ball_mods.get("sure_hit", false):
 				ball_mods["tracking_target"] = null
 			else:
 				var desired_dir: Vector2 = (target.global_position - global_position).normalized()
 				var turn_speed: float = ball_mods.get("tracking_turn_speed", 0.0)
-				ball_direction = ball_direction.move_toward(desired_dir, turn_speed * delta).normalized()
+				# 波4 #22 必中：追踪转向无速率限制（每帧直接对准目标=必达）
+				if ball_mods.get("sure_hit", false):
+					ball_direction = desired_dir
+				else:
+					ball_direction = ball_direction.move_toward(desired_dir, turn_speed * delta).normalized()
 		else:
 			ball_mods["tracking_target"] = null
 
@@ -582,6 +608,8 @@ func _on_ball_stopped() -> void:
 	start_visual_fall()
 	is_active = false
 	_set_idle_visual()
+	# V1-3 停球钩子：落点/停点生成区域类技能消费（含首触地兜底）
+	_emit_stop_hooks()
 
 	# === 球落地前，检查附近60px内是否有球员 ===
 	var all_players := _get_all_players_array()
@@ -665,6 +693,8 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	flight_distance = 0.0
 	owner_player = null
 	bounced_by_resilience = false
+	_first_land_emitted = false
+	wall_bounce_count = 0
 	trajectory_type = "straight"
 	element_type = ""
 	_hit_player_ids = {}
@@ -720,6 +750,10 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 		if lockon_target and is_instance_valid(lockon_target) and not lockon_target.is_defeated:
 			ball_direction = (lockon_target.global_position - from).normalized()
 
+	# 波4 #23 球形态：视觉同步缩放（工单明确要求；判定半径在 _check_player_collision_distance 消费同一字段）
+	if ball_visual:
+		ball_visual.scale = Vector2.ONE * maxf(float(ball_mods.get("size_scale", 1.0)), 0.01)
+
 	var attack_style := StyleBoxFlat.new()
 	attack_style.bg_color = Color(1, 0.3, 0.3)
 	attack_style.set_corner_radius_all(11)
@@ -759,6 +793,10 @@ func _default_ball_mods() -> Dictionary:
 		"lock_straight": false, "spread_done": false,
 		"aoe_radius": 0.0, "aoe_damage_pct": 0.5,
 		"lockon_target": null,
+		"bounce_max": 0, "bounce_speed_mult": 1.0,   # 波4 #15 反弹增强（0=无限）
+		"sure_hit": false,                            # 波4 #22 必中
+		"size_scale": 1.0,                            # 波4 #23 球形态（碰撞半径倍率）
+		"hidden_from_enemies": false,                 # 波4 #7 球隐身
 	}
 
 
@@ -783,6 +821,8 @@ func reset() -> void:
 	ball_mods = _default_ball_mods()
 	_boomerang_triggered = false
 	_boomerang_return_dir = Vector2.ZERO
+	if ball_visual:
+		ball_visual.scale = Vector2.ONE  # 波4 #23：恢复原尺寸
 	ball_z = 0.0
 	ball_z_vel = 0.0
 	bounce_count = 0
@@ -964,6 +1004,10 @@ func _step_ballistic_z(delta: float) -> void:
 		if t_land <= remaining:
 			var vz_land: float = vz0 - GRAVITY_Z * t_land
 			ball_z = 0.0
+			# V1-3 首触地钩子：一次投球只发一次（E2 弹跳不重复）
+			if not _first_land_emitted:
+				_first_land_emitted = true
+				ball_first_land.emit(global_position)
 			var e: float = _get_effective_bounce_e()
 			var vz_next: float = -vz_land * e
 			if vz_next >= BOUNCE_SPEED_MIN:
@@ -1067,7 +1111,9 @@ func _check_player_collision_distance() -> void:
 
 	var delta_val: float = get_process_delta_time()
 	var step_len: float = ball_speed * delta_val  # 本帧移动距离
-	var detection_range: float = 42.0 + step_len  # 防止高速穿透
+	# 波4 #23 球形态：碰撞判定半径 ×size_scale（巨型雪球=2.0 易命中；视觉缩放=美术线消费）
+	var size_scale: float = float(ball_mods.get("size_scale", 1.0))
+	var detection_range: float = (42.0 + step_len) * size_scale
 
 	var all_players := _get_all_players_array()
 	var move_dir: Vector2 = ball_direction.normalized() if ball_direction.length_squared() > 0.001 else Vector2.ZERO
@@ -1122,6 +1168,9 @@ func _check_obstacle_collision() -> void:
 		if dist <= hit_radius:
 			# 球卡在障碍物上，开始逐帧消耗
 			stuck_on_obstacle = obs
+			# V1-2：通知盾实体"被撞一次"（uses 次数制盾在此扣次）
+			if obs.has_method("on_ball_hit"):
+				obs.on_ball_hit()
 			print("[Ball] 球撞上障碍物! 开始消耗 HP=" + str(snappedf(obs.obstacle_hp, 1.0)))
 			return
 
@@ -1173,8 +1222,18 @@ func _stop_and_return() -> void:
 	"""球停止飞行并回到攻击者"""
 	is_active = false
 	_set_idle_visual()
+	# V1-3 停球钩子（内场停止/耗尽路径；含首触地兜底）
+	_emit_stop_hooks()
 	if attacker_player and is_instance_valid(attacker_player):
 		return_to_player(attacker_player)
+
+
+## V1-3 停球钩子组：停球=球贴地，首触地未发时兜底补发（ball_land 类技能的最终保险）
+func _emit_stop_hooks() -> void:
+	if not _first_land_emitted:
+		_first_land_emitted = true
+		ball_first_land.emit(global_position)
+	ball_stopped.emit(global_position)
 
 
 func _get_all_players_array() -> Array:
@@ -1193,8 +1252,22 @@ func _get_all_players_array() -> Array:
 	return all_players
 
 
-## P0-2（2026-09-20）：AOE 目标筛选——数据源=权威名册；幻象维持"不吃 AOE"设计现状
-## （名册本无幻象，该过滤条为纯防御+设计意图声明）
+## 波4 #7 球隐身（10 工单）：该球员是否看得见本球（施法者同队可见，敌方不可见；表现层消费同一接口）
+func is_ball_visible_to(p: Node) -> bool:
+	if not ball_mods.get("hidden_from_enemies", false):
+		return true
+	if attacker_player and is_instance_valid(attacker_player) and p is CharacterBody2D \
+			and (p as CharacterBody2D).team == attacker_player.team:
+		return true
+	return false
+
+
+## 波4 #7 球隐身（规划版接口名）：球是否处于隐身态（表现层消费）
+func is_stealthed() -> bool:
+	return ball_mods.get("hidden_from_enemies", false)
+
+
+## P0-2（2026-09-20）：AOE 目标筛选——数据源=权威名册；幻象维持"不吃 AOE"设计现状## （名册本无幻象，该过滤条为纯防御+设计意图声明）
 ## source 缺省时内部取 _get_all_players_array()；测试可注入名册数组做纯筛选断言
 func _collect_aoe_targets(center_player: Node2D, enemy_team: String, radius: float, source: Array = []) -> Array:
 	var targets: Array = []

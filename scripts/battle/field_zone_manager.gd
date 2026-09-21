@@ -24,6 +24,13 @@ func _ready() -> void:
 
 ## ==================== 创建区域 ====================
 
+## V1-3（06 文档）：坐标直接生成区域——非鼠标路径，供"球落点生成区域"类技能消费
+## params 为 handler 构建好的完整 zone 参数（含 effect_value/duration 等）
+func spawn_zone_at(zone_type: int, pos: Vector2, params: Dictionary) -> Area2D:
+	params["zone_type"] = zone_type
+	return create_zone(params, pos)
+
+
 func create_zone(params: Dictionary, position: Vector2) -> Area2D:
 	"""创建并放置效果区域"""
 	zone_counter += 1
