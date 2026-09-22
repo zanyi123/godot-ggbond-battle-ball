@@ -285,7 +285,14 @@ func _process(delta: float) -> void:
 	
 	# 更新瞄准信息（始终发送，确保取消时能清除）
 	aim_info_updated.emit(get_aim_info())
-	
+
+	# 波6 #17 手动制导：主控球员的飞行球处于手动态时，球方向=球员朝向（鼠标/FP视线已折算）
+	if controlled_player.has_method("get") and controlled_player.get("ball_ref") != null:
+		var steer_ball = controlled_player.get("ball_ref")
+		if is_instance_valid(steer_ball) and steer_ball.is_active \
+				and steer_ball.get("_manual_active") == true and steer_ball.has_method("manual_steer"):
+			steer_ball.manual_steer(controlled_player.facing_direction)
+
 	# 更新鼠标圆环动画
 	cursor_ring_timer += delta * CURSOR_RING_ANIMATION_SPEED
 	if cursor_ring_timer >= PI * 2:

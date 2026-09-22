@@ -1362,12 +1362,17 @@ func _setup_obstacle_manager() -> void:
 
 ## 场地区域管理器
 func _setup_field_zone_manager() -> void:
-	"""创建场地区域管理器（加速/减速/危险/安全区）"""
+	"""创建场地区域管理器（加速/减速/危险/安全/治疗区）"""
 	var zm_script := load("res://scripts/battle/field_zone_manager.gd")
 	field_zone_manager = Node.new()
 	field_zone_manager.name = "FieldZoneManager"
 	field_zone_manager.set_script(zm_script)
 	add_child(field_zone_manager)
+	# 波5 #12：注入球引用 + 穿越信号连线（manager 聚合转发 → ball 消费，皮影原则）
+	if ball_node:
+		field_zone_manager.ball_ref = ball_node
+		if field_zone_manager.has_signal("zone_ball_passed") and ball_node.has_method("_on_zone_ball_passed"):
+			field_zone_manager.zone_ball_passed.connect(ball_node._on_zone_ball_passed)
 	print("[BattleManager] 场地区域管理器已创建")
 
 

@@ -1843,6 +1843,99 @@ const _CC_STATUSES: PackedStringArray = ["stunned", "silenced", "disarmed", "roo
 # 波3 #5 反伤递归守卫：反伤结算期间不再触发反伤
 var _reflecting: bool = false
 
+# 波5 #10 叠层印记：计数器（与 buff 分离——buff=属性乘区，marks=计数器）
+var _marks: Dictionary = {}  # {mark_id: {count, max_stacks, remaining}}
+# 波5 #13 toggle 维持型：开启中的 toggle 技能 {skill_id: {lights: [], energy_per_sec}}
+var active_toggles: Dictionary = {}
+
+## 波5 #10 印记层数变化信号（表现层：印记图标/层数显示消费）
+signal mark_changed(mark_id: String, count: int)
+## 波5 #13 toggle 充能耗尽自动关闭信号
+signal toggle_auto_closed(skill_id: String)
+
+## 波5 #10：施加/叠加印记（+1 封顶并刷新时长），返回当前层数
+func apply_mark(mark_id: String, max_stacks: int, duration: float) -> int:
+	var cur: Dictionary = _marks.get(mark_id, {"count": 0, "max_stacks": max_stacks, "remaining": 0.0})
+	var count: int = mini(int(cur["count"]) + 1, maxi(1, max_stacks))
+	_marks[mark_id] = {"count": count, "max_stacks": maxi(1, max_stacks), "remaining": duration}
+	mark_changed.emit(mark_id, count)
+	return count
+
+## 波5 #10：读取层数
+func get_mark_count(mark_id: String) -> int:
+	return int(_marks.get(mark_id, {}).get("count", 0))
+
+## 波5 #10：清除指定印记（阈值触发后按参数清层）
+func clear_mark(mark_id: String) -> void:
+	if _marks.erase(mark_id):
+		mark_changed.emit(mark_id, 0)
+
+## 波5 #10：印记倒计时（到期全清；_tick_all_timers 调用）
+func _tick_marks(delta: float) -> void:
+	var to_off: PackedStringArray = []
+	for mark_id in _marks:
+		var m: Dictionary = _marks[mark_id]
+		m["remaining"] = float(m.get("remaining", 0.0)) - delta
+		if float(m["remaining"]) <= 0.0:
+			to_off.append(mark_id)
+	for mark_id in to_off:
+		_marks.erase(mark_id)
+		mark_changed.emit(mark_id, 0)
+
+## 波5 #13：开启 toggle（点亮状态灯集合，开始每秒耗能）
+func open_toggle(skill_id: String, lights: Array, energy_per_sec: float) -> void:
+	if active_toggles.has(skill_id):
+		return
+	var lit: Array = []
+	for light_name in lights:
+		turn_on_light(str(light_name), 99999.0)
+		lit.append(str(light_name))
+	active_toggles[skill_id] = {"lights": lit, "energy_per_sec": energy_per_sec}
+	print("[Player] toggle 开: %s lights=%s 耗能=%.1f/s" % [skill_id, str(lit), energy_per_sec])
+
+## 波5 #13：关闭 toggle（效果全清）
+func close_toggle(skill_id: String) -> void:
+	var t: Dictionary = active_toggles.get(skill_id, {})
+	for light_name in t.get("lights", []):
+		turn_off_light(str(light_name))
+	if active_toggles.erase(skill_id):
+		print("[Player] toggle 关: %s" % skill_id)
+
+## 波5 #13：toggle 每秒耗能（能量尽自动关；_tick_all_timers 调用）
+func _process_toggles(delta: float) -> void:
+	for skill_id in active_toggles.keys():
+		var t: Dictionary = active_toggles[skill_id]
+		var cost: float = float(t.get("energy_per_sec", 0.0)) * delta
+		if spirit_energy >= cost:
+			spirit_energy -= cost
+		else:
+			spirit_energy = 0.0
+			close_toggle(skill_id)
+			toggle_auto_closed.emit(skill_id)
+			break  # 本帧不再继续扣（能量已尽）
+
+## 波6 #18 带人位移：被球命中后沿球方向被拖拽（免控 cc_immune 优先拒绝；球消失/出界/超时释放）
+var _carry_push: Dictionary = {}  # {dir, speed, remaining, source_ball}
+
+func begin_carry_push(dir: Vector2, pull_speed: float, max_duration: float, source_ball: Node) -> void:
+	if is_status_active("cc_immune") or is_defeated or pull_speed <= 0.0:
+		print("[Player] 拖拽被免控拦截")
+		return
+	_carry_push = {"dir": dir.normalized(), "speed": pull_speed, "remaining": max_duration, "source_ball": source_ball}
+
+func _process_carry_push(delta: float) -> void:
+	if _carry_push.is_empty():
+		return
+	var source_ball = _carry_push.get("source_ball", null)
+	# 球消失/停止 → 释放
+	if source_ball == null or not is_instance_valid(source_ball) or not source_ball.is_active:
+		_carry_push = {}
+		return
+	_carry_push["remaining"] = float(_carry_push.get("remaining", 0.0)) - delta
+	global_position += (Vector2(_carry_push["dir"]) * float(_carry_push["speed"]) * delta)
+	if float(_carry_push["remaining"]) <= 0.0:
+		_carry_push = {}
+
 ## 波3 #20 充能容器耗尽信号（表现层/技能组合层消费）
 signal charge_stock_empty
 
@@ -1904,6 +1997,32 @@ func turn_off_light(status_name: String) -> void:
 
 
 ## ==================== 波3 球员管道变体（09 工单，判定层）====================
+
+## P2-5（公开 getter，供 zone 等副系统读取防御抗力，替代直调 _get_effective_value）
+func get_defense_resist() -> float:
+	return _get_effective_value("defense", defense) * defense_factor
+
+
+## P2-5（公开治疗入口）：返回实际治疗量；禁疗灯亮（heal_block）或已败 = 0
+func heal(amount: float) -> float:
+	if is_defeated or is_status_active("heal_block"):
+		return 0.0
+	var before: float = stamina
+	stamina = minf(max_stamina, stamina + maxf(0.0, amount))
+	return stamina - before
+
+
+## P2-5（公开环境伤害入口）：区域持续伤害等环境扣血直扣（不走韧性/事件管道）；返回实际扣量
+## 无敌/已败 = 0；体力归 0 由此处触发击败（player 内部调用，无越权）
+func drain_stamina(amount: float) -> float:
+	if is_defeated or is_status_active("invincible"):
+		return 0.0
+	var applied: float = minf(stamina, maxf(0.0, amount))
+	stamina = maxf(0.0, stamina - applied)
+	if stamina <= 0.0 and not is_defeated:
+		_on_defeated()
+	return applied
+
 
 ## #20 储存多段：查询剩余充能数
 func get_charge_stock() -> int:
@@ -2044,6 +2163,9 @@ func _tick_all_timers(delta: float) -> void:
 	_process_tick_effects(delta)
 	_tick_buffs(delta)
 	_process_discount_cards(delta)
+	_tick_marks(delta)
+	_process_toggles(delta)
+	_process_carry_push(delta)
 
 
 func _process_tick_effects(delta: float) -> void:

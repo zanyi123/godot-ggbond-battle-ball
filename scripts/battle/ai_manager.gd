@@ -310,6 +310,11 @@ func _update_awareness(ap: Dictionary, delta: float) -> void:
 	ap.awareness_timer = 0.0
 
 	var my_pos: Vector2 = ap.player.global_position
+	# 波6 #9 视野迷雾：观察者站雾内 → 感知半径 ×perception_scale（判定层感知削弱）
+	var vision_range: float = profile.vision_range
+	var _zm = battle_manager.field_zone_manager if battle_manager != null else null
+	if _zm != null and _zm.has_method("get_perception_scale_at"):
+		vision_range *= float(_zm.get_perception_scale_at(my_pos))
 
 	# 遍历场上所有其他球员
 	for other_ap in ai_players:
@@ -324,7 +329,7 @@ func _update_awareness(ap: Dictionary, delta: float) -> void:
 		var is_teammate: bool = other.team == ap.team
 
 		# === 视野感知（高精度）===
-		if _is_in_field_of_view(ap, other_pos) and dist <= profile.vision_range:
+		if _is_in_field_of_view(ap, other_pos) and dist <= vision_range:
 			var noise_scale: float = (1.0 - profile.awareness_accuracy) * 40.0
 			var known_pos: Vector2 = other_pos + Vector2(
 				randf_range(-noise_scale, noise_scale),

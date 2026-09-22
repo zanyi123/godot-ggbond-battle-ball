@@ -22,6 +22,11 @@ var trajectory_type: String = "straight"
 var bounced_by_resilience: bool = false  # 韧性弹飞球：落地球权回攻击者（防半场白送，2026-09-11）
 var _first_land_emitted: bool = false    # V1-3 首触地钩子：一次投球只发一次
 var wall_bounce_count: int = 0           # 波4 #15：本次飞行已撞墙反弹次数
+var is_clone: bool = false               # 波6 #8：子球克隆标记（不再分裂、停止即消散）
+var mother_ref: Node = null              # 波6 #8：母球引用（子球被接时球权归还路径）
+var _spread_done: bool = false           # 波6 #8：本次飞行已分裂
+var _manual_active: bool = false         # 波6 #17：手动态
+var _manual_time_left: float = 0.0       # 波6 #17：手动态剩余时长
 
 var stuck_on_obstacle: StaticBody2D = null  # 球卡在障碍物上时引用
 
@@ -326,6 +331,23 @@ func _physics_process(delta: float) -> void:
 	var prev_x := position.x
 	position += move_vector
 	flight_distance += move_vector.length()
+
+	# 波6 #8 分裂：到达触发距离 → 分裂子球（母球存续；子球克隆不再分裂）
+	if not is_clone and not _spread_done:
+		var spread_count: int = int(ball_mods.get("spread_count", 0))
+		var trigger_pct: float = float(ball_mods.get("spread_trigger_dist_pct", 0.6))
+		if spread_count > 0 and flight_distance >= max_flight_distance * trigger_pct:
+			_spread_done = true
+			_spawn_clones(spread_count, float(ball_mods.get("spread_damage_ratio", 1.0)))
+
+	# 波6 #17 手动制导：方向由 input_manager 每帧注入（manual_steer）；超时/能量尽回直线
+	if _manual_active:
+		_manual_time_left -= delta
+		if attacker_player and is_instance_valid(attacker_player):
+			attacker_player.spirit_energy = maxf(0.0, attacker_player.spirit_energy - float(ball_mods.get("manual_energy_per_sec", 3.0)) * delta)
+		if _manual_time_left <= 0.0 or (attacker_player and is_instance_valid(attacker_player) and attacker_player.spirit_energy <= 0.0):
+			_manual_active = false
+			print("[Ball] 手动制导结束")
 	# E9 轨迹采样：跨越中线瞬间记录
 	if _traj_active and ((prev_x < 0.0 and position.x >= 0.0) or (prev_x > 0.0 and position.x <= 0.0)):
 		_traj_log.append("过中线@%s 已飞%.0f" % [str(position.round()), flight_distance])
@@ -479,6 +501,11 @@ func _on_body_entered(body: Node2D) -> void:
 	var actual_damage: int = result.get("damage", 0)
 	var effect: String = result.get("effect", "none")
 	ball_hit_player.emit(player, actual_damage)
+
+	# 波6 #18 带人位移：命中结算附加拖拽（免控目标在 player 侧拒绝）
+	var pull_speed: float = float(ball_mods.get("carry_pull_speed", 0.0))
+	if pull_speed > 0.0 and actual_damage > 0 and player.has_method("begin_carry_push"):
+		player.begin_carry_push(ball_direction, pull_speed, float(ball_mods.get("carry_max_duration", 1.0)), self)
 	
 	# 上报个人数据：待接球时被击中视为截球尝试
 	if player.is_ready_to_catch:
@@ -577,6 +604,13 @@ func _on_body_entered(body: Node2D) -> void:
 
 
 func _catch_ball(player: CharacterBody2D) -> void:
+	# 波6 #8 子球：被接=球权转移给接住者（母球回手），克隆消散（F1 同规则）
+	if is_clone:
+		print("[Ball] 子球被 %s 接住! 球权转移" % _pname(player))
+		if mother_ref and is_instance_valid(mother_ref) and mother_ref.has_method("return_to_player"):
+			mother_ref.return_to_player(player)
+		queue_free()
+		return
 	is_active = false
 	owner_player = player
 	player.set_carrying_ball(true)
@@ -695,6 +729,9 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	bounced_by_resilience = false
 	_first_land_emitted = false
 	wall_bounce_count = 0
+	_spread_done = false
+	if is_clone:
+		_manual_active = false  # 克隆继承保护（launch 重置兜底）
 	trajectory_type = "straight"
 	element_type = ""
 	_hit_player_ids = {}
@@ -754,6 +791,10 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	if ball_visual:
 		ball_visual.scale = Vector2.ONE * maxf(float(ball_mods.get("size_scale", 1.0)), 0.01)
 
+	# 波6 #17 手动制导：玩家路径进手动态（AI 退化为直线直飞）
+	if ball_mods.get("manual_steering", false) and attacker and attacker.is_player_controlled:
+		begin_manual_steering()
+
 	var attack_style := StyleBoxFlat.new()
 	attack_style.bg_color = Color(1, 0.3, 0.3)
 	attack_style.set_corner_radius_all(11)
@@ -797,6 +838,9 @@ func _default_ball_mods() -> Dictionary:
 		"sure_hit": false,                            # 波4 #22 必中
 		"size_scale": 1.0,                            # 波4 #23 球形态（碰撞半径倍率）
 		"hidden_from_enemies": false,                 # 波4 #7 球隐身
+		"spread_count": 0, "spread_damage_ratio": 1.0, "spread_trigger_dist_pct": 0.6,  # 波6 #8 分裂
+		"manual_steering": false,                     # 波6 #17 手动制导
+		"carry_pull_speed": 0.0, "carry_max_duration": 0.0,  # 波6 #18 带人位移
 	}
 
 
@@ -1220,6 +1264,10 @@ func _process_obstacle_stuck(delta: float) -> void:
 
 func _stop_and_return() -> void:
 	"""球停止飞行并回到攻击者"""
+	# 波6 #8 子球：不回手，直接消散（命中伤害已在命中点结算）
+	if is_clone:
+		queue_free()
+		return
 	is_active = false
 	_set_idle_visual()
 	# V1-3 停球钩子（内场停止/耗尽路径；含首触地兜底）
@@ -1265,6 +1313,72 @@ func is_ball_visible_to(p: Node) -> bool:
 ## 波4 #7 球隐身（规划版接口名）：球是否处于隐身态（表现层消费）
 func is_stealthed() -> bool:
 	return ball_mods.get("hidden_from_enemies", false)
+
+
+## 波5 #12：消费 zone 穿越信号——瞬时强化（快照 dmg/speed 乘区追加；zone 不直改球，皮影原则）
+func _on_zone_ball_passed(_zone_type: int, mods: Dictionary) -> void:
+	if not is_active:
+		return
+	var dmg_pct: float = float(mods.get("dmg_pct", 0.0))
+	var speed_pct: float = float(mods.get("speed_pct", 0.0))
+	if dmg_pct != 0.0:
+		ball_damage *= (1.0 + dmg_pct)
+	if speed_pct != 0.0:
+		ball_speed *= (1.0 + speed_pct)
+	print("[Ball] 穿越区域强化: 伤害%.1f 速度%.1f" % [ball_damage, ball_speed])
+
+
+## ==================== 波6 高难收官（12 工单）====================
+
+## #8 分裂：在当前位置扇形生成子球克隆（伤害×ratio；克隆 is_clone=true 不再分裂）
+func _spawn_clones(count: int, damage_ratio: float) -> void:
+	var spread_angle: float = deg_to_rad(25.0)
+	var empty_skills: Array[Dictionary] = []
+	for i in range(count):
+		var clone := Area2D.new()
+		clone.set_script(load("res://scripts/battle/ball.gd"))
+		clone.name = "BallClone_%d_%d" % [get_instance_id(), i]
+		var offset_dir: Vector2 = ball_direction.rotated(spread_angle * (i + 1.0) / (count + 1.0) * 2.0 - spread_angle)
+		get_parent().add_child(clone)
+		clone.is_clone = true
+		clone.mother_ref = self
+		clone.launch(global_position, offset_dir, ball_damage * damage_ratio, max_flight_distance - flight_distance, attacker_player, empty_skills)
+	print("[Ball] 分裂! %d 个子球 (伤害×%.2f)" % [count, damage_ratio])
+
+
+## #14 飞行中球操作：瞬时推进（伤害/速度乘区追加）
+func boost_in_flight(mods: Dictionary) -> void:
+	if not is_active:
+		return
+	ball_damage *= (1.0 + float(mods.get("dmg_pct", 0.0)))
+	ball_speed *= (1.0 + float(mods.get("speed_pct", 0.0)))
+	print("[Ball] 飞行推进: 伤害%.1f 速度%.1f" % [ball_damage, ball_speed])
+
+
+## #14 拉回：球朝投掷者转向（次数由调用方扣减）
+func recall_ball(_max_times: int = 1) -> void:
+	if not is_active:
+		return
+	if attacker_player and is_instance_valid(attacker_player):
+		ball_direction = (attacker_player.global_position - global_position).normalized()
+		print("[Ball] 拉回! 朝投掷者转向")
+
+
+## #17 手动制导：开启手动态（玩家路径；AI 的球 attacker.is_player_controlled=false 不进入=直线直飞）
+func begin_manual_steering() -> void:
+	if is_clone or not is_active:
+		return
+	if attacker_player and is_instance_valid(attacker_player) and not attacker_player.is_player_controlled:
+		return  # AI 无操控，退化为直线直飞
+	_manual_active = true
+	_manual_time_left = float(ball_mods.get("manual_max_duration", 3.0))
+	print("[Ball] 手动制导开启")
+
+
+## #17 手动制导：外部（input_manager）每帧注入方向
+func manual_steer(direction: Vector2) -> void:
+	if _manual_active and direction.length_squared() > 0.001:
+		ball_direction = direction.normalized()
 
 
 ## P0-2（2026-09-20）：AOE 目标筛选——数据源=权威名册；幻象维持"不吃 AOE"设计现状## （名册本无幻象，该过滤条为纯防御+设计意图声明）

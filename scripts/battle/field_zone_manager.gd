@@ -10,6 +10,9 @@ class_name FieldZoneManager
 var zones: Array[Area2D] = []
 var zone_counter: int = 0
 var placer: Node = null
+var ball_ref: Node2D = null  # 波5 #12：球引用（battle_manager 注入，转发给各 zone 做穿越感应）
+# 波5 #12：zone 穿越信号聚合转发（zone 动态创建，外部只需连 manager 一条线）
+signal zone_ball_passed(zone_type: int, mods: Dictionary)
 
 ## ==================== 初始化 ====================
 
@@ -49,6 +52,10 @@ func create_zone(params: Dictionary, position: Vector2) -> Area2D:
 				params["effect_value"] = float(params.get("damage_value", 10.0))
 			3:
 				params["effect_value"] = 1.0  # 安全区无数值
+			4:
+				params["effect_value"] = float(params.get("heal_per_sec", 5.0))  # 波5 #3 治疗区
+			5:
+				params["effect_value"] = 1.0  # 波6 #9 视野迷雾无数值（perception_scale 单独存）
 
 	var zone_script := load("res://scripts/battle/field_effect_zone.gd")
 	var zone := Area2D.new()
@@ -59,6 +66,9 @@ func create_zone(params: Dictionary, position: Vector2) -> Area2D:
 
 	add_child(zone)
 	zone.setup(params)
+	# 波5 #12：注入球引用（zone 穿越感应用）+ 转发穿越信号到 manager
+	zone.ball_ref = ball_ref
+	zone.zone_ball_passed.connect(_on_zone_ball_passed)
 
 	zone.zone_expired.connect(_on_zone_expired)
 	zones.append(zone)
@@ -72,6 +82,23 @@ func create_zone(params: Dictionary, position: Vector2) -> Area2D:
 	])
 
 	return zone
+
+
+func _on_zone_ball_passed(zone_type: int, mods: Dictionary) -> void:
+	zone_ball_passed.emit(zone_type, mods)
+
+
+## 波6 #9：查询某坐标处敌方感知倍率（站在视野迷雾内 <1；多重迷雾取最小）
+func get_perception_scale_at(pos: Vector2) -> float:
+	var scale: float = 1.0
+	for zone in zones:
+		if not is_instance_valid(zone) or int(zone.zone_type) != 5:  # ZoneType.VISION
+			continue
+		var half: Vector2 = zone.zone_size * 0.5
+		var local: Vector2 = pos - zone.global_position
+		if absf(local.x) <= half.x and absf(local.y) <= half.y:
+			scale = minf(scale, float(zone.perception_scale))
+	return scale
 
 
 ## ==================== 清除区域 ====================

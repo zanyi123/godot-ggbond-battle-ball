@@ -58,6 +58,9 @@ func _default_ball_mods() -> Dictionary:
 		"sure_hit": false,                            # 波4 #22 必中
 		"size_scale": 1.0,                            # 波4 #23 球形态（碰撞半径倍率）
 		"hidden_from_enemies": false,                 # 波4 #7 球隐身
+		"spread_count": 0, "spread_damage_ratio": 1.0, "spread_trigger_dist_pct": 0.6,  # 波6 #8 分裂
+		"manual_steering": false,                     # 波6 #17 手动制导
+		"carry_pull_speed": 0.0, "carry_max_duration": 0.0,  # 波6 #18 带人位移
 	}
 
 ## 取/建该施法者的修饰符准备区
@@ -108,6 +111,13 @@ func _init_priority_table() -> void:
 	_tag_priority["ball_sure_hit"] = 28
 	_tag_priority["ball_transform"] = 29
 	_tag_priority["ball_stealth"] = 30
+	# 波6 高难收官（12 工单）
+	_tag_priority["ball_spread"] = 31
+	_tag_priority["ball_in_flight_boost"] = 32
+	_tag_priority["ball_recall"] = 33
+	_tag_priority["ball_manual_steering"] = 34
+	_tag_priority["ball_carry_push"] = 35
+	_tag_priority["field_vision_block"] = 141  # FIELD 感知层
 	# B-30 穿透/范围层
 	_tag_priority["ball_penetrate"] = 31
 	_tag_priority["ball_range_up"] = 32
@@ -176,6 +186,8 @@ func _init_priority_table() -> void:
 	_tag_priority["player_energy_share"] = 316
 	_tag_priority["player_charge_stock"] = 317
 	_tag_priority["player_on_hit_expire"] = 361  # 排在状态/控制层后，标记已在亮的灯
+	# 波5 管道/zone 扩展（11 工单）
+	_tag_priority["player_mark_apply"] = 341
 	# P-40 运动控制层
 	_tag_priority["player_move_slow"] = 401
 	_tag_priority["player_move_boost"] = 402
@@ -399,7 +411,23 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 			_apply_ball_lockon(params, caster_id)
 			success = true
 		"ball_spread":
-			success = true  # 扩散在球碰撞时处理
+			_apply_ball_spread(params, caster_id)  # 波6 #8 空壳转正
+			success = true
+		"ball_in_flight_boost":
+			_apply_ball_in_flight_boost(params, caster_id)
+			success = true
+		"ball_recall":
+			_apply_ball_recall(params, caster_id)
+			success = true
+		"ball_manual_steering":
+			_apply_ball_manual_steering(params, caster_id)
+			success = true
+		"ball_carry_push":
+			_apply_ball_carry_push(params, caster_id)
+			success = true
+		"field_vision_block":
+			_apply_field_vision_block(params, caster_id)
+			success = true
 		# 波4 球类参数化（10 工单）
 		"ball_bounce_enhance":
 			_apply_ball_bounce_enhance(params, caster_id)
@@ -445,6 +473,9 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 			success = true
 		"field_zone_safe":
 			_apply_field_zone_effect(params, 3)
+			success = true
+		"field_zone_heal":
+			_apply_field_zone_effect(params, 4)  # 波5 #3 治疗区
 			success = true
 		# 对球员标签暂不实现（第1步只做buff堆栈）
 		# === 球员标签 - 属性(01-16) ===
@@ -537,6 +568,10 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 			success = true
 		"player_on_hit_expire":
 			_apply_player_on_hit_expire(params, caster_id)
+			success = true
+		# === 波5（11 工单）===
+		"player_mark_apply":
+			_apply_player_mark_apply(params, caster_id)
 			success = true
 		# === 球员标签 - 体力(21-26) ===
 		"player_hp_heal_pct":
@@ -706,6 +741,8 @@ func _process(delta: float) -> void:
 
 	# V1-3 落点区域 pending 过期清理（球被接住/未落地 30s 兜底）
 	_cleanup_expired_zone_spawns()
+	# 波6 #14 飞行球 pending 过期清理 + 订阅一次
+	_cleanup_pending_in_flight()
 
 	# 活跃效果倒计时
 	var to_remove: PackedStringArray = []
@@ -960,6 +997,86 @@ func _apply_ball_stealth(params: Dictionary, caster_id: int) -> void:
 	print("[TagEffect] 球隐身: 启用 (caster=%d)" % caster_id)
 
 
+## ==================== 波6 高难收官（12 工单）====================
+
+## #8 分裂（空壳转正）：母球在飞行距离比例点分裂 count 个子球（伤害×ratio）
+func _apply_ball_spread(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
+	mods.spread_count = maxi(0, int(params.get("split_count", 0)))
+	mods.spread_damage_ratio = clampf(float(params.get("split_damage_ratio", 1.0)), 0.1, 2.0)
+	mods.spread_trigger_dist_pct = clampf(float(params.get("trigger_dist_pct", 0.6)), 0.1, 1.0)
+	_mark_expiry(mods, ["spread_count", "spread_damage_ratio", "spread_trigger_dist_pct"], float(params.get("duration", 0)))
+	print("[TagEffect] 分裂: count=%d ratio=%.2f trigger@%.0f%% (caster=%d)" % [mods.spread_count, mods.spread_damage_ratio, mods.spread_trigger_dist_pct * 100, caster_id])
+
+## #14 飞行中球操作：场上本方飞行球直接作用；无则 pending（V1-3 桥同款，30s 过期）
+func _apply_ball_in_flight_boost(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = {}
+	mods["dmg_pct"] = float(params.get("dmg_pct", 0.0))
+	mods["speed_pct"] = float(params.get("speed_pct", 0.0))
+	if _apply_to_caster_ball(caster_id, mods):
+		return
+	_pending_in_flight[caster_id] = {"mods": mods, "expires_at": _match_clock + 30.0}
+	print("[TagEffect] 飞行球推进: 无在场球，登记 pending (caster=%d)" % caster_id)
+
+## #14 拉回：本方飞行球朝投掷者拉回（max_times 次数在 pending/直接作用中各扣一次）
+func _apply_ball_recall(params: Dictionary, caster_id: int) -> void:
+	var max_times: int = maxi(1, int(params.get("max_times", 1)))
+	var mods: Dictionary = {"recall": true, "max_times": max_times}
+	if _apply_to_caster_ball(caster_id, mods):
+		return
+	_pending_in_flight[caster_id] = {"mods": mods, "expires_at": _match_clock + 30.0}
+	print("[TagEffect] 拉回: 无在场球，登记 pending (caster=%d)" % caster_id)
+
+## 波6 #14/#17 内部：把操作作用到施法者当前飞行球（存在且本方=true）
+func _apply_to_caster_ball(caster_id: int, mods: Dictionary) -> bool:
+	var caster := _get_caster(caster_id)
+	var bm = battle_manager
+	if bm == null:
+		bm = get_node_or_null("/root/BattleManager")
+	if caster == null or bm == null or bm.get("ball_node") == null:
+		return false
+	var ball = bm.get("ball_node")
+	if not ball.is_active:
+		return false
+	if ball.attacker_player != caster:
+		return false  # 非本人飞行球不作用
+	if mods.has("recall"):
+		if ball.has_method("recall_ball"):
+			ball.recall_ball(int(mods.get("max_times", 1)))
+			print("[TagEffect] 拉回: 作用中 (caster=%d)" % caster_id)
+			return true
+		return false
+	if ball.has_method("boost_in_flight"):
+		ball.boost_in_flight(mods)
+		print("[TagEffect] 飞行球推进: dmg+%d%% speed+%d%% (caster=%d)" % [int(mods.get("dmg_pct", 0) * 100), int(mods.get("speed_pct", 0) * 100), caster_id])
+		return true
+	return false
+
+## #17 手动制导：投球进入手动态（AI 路径=直线直飞，球侧按 is_player_controlled 分流）
+func _apply_ball_manual_steering(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
+	mods.manual_steering = true
+	mods.manual_energy_per_sec = maxf(0.5, float(params.get("energy_per_sec", 3.0)))
+	mods.manual_max_duration = maxf(0.5, float(params.get("max_duration", 3.0)))
+	_mark_expiry(mods, ["manual_steering", "manual_energy_per_sec", "manual_max_duration"], float(params.get("duration", 0)))
+	print("[TagEffect] 手动制导: 耗能=%.1f/s max=%.1fs (caster=%d)" % [mods.manual_energy_per_sec, mods.manual_max_duration, caster_id])
+
+## #18 带人位移：命中后拖拽目标沿球方向位移
+func _apply_ball_carry_push(params: Dictionary, caster_id: int) -> void:
+	var mods: Dictionary = _ensure_ball_mods(caster_id)
+	mods.carry_pull_speed = maxf(0.0, float(params.get("pull_speed", 200.0)))
+	mods.carry_max_duration = maxf(0.1, float(params.get("max_duration", 1.0)))
+	_mark_expiry(mods, ["carry_pull_speed", "carry_max_duration"], float(params.get("duration", 0)))
+	print("[TagEffect] 带人位移: speed=%.0f max=%.1fs (caster=%d)" % [mods.carry_pull_speed, mods.carry_max_duration, caster_id])
+
+## #9 视野迷雾：区域标记（AI 感知削弱消费）；spawn_at 可选，缺省鼠标路径
+func _apply_field_vision_block(params: Dictionary, caster_id: int) -> void:
+	var p: Dictionary = params.duplicate()
+	p["zone_type"] = 5  # FieldEffectZone.ZoneType.VISION
+	_apply_field_zone_effect(p, 5)
+	print("[TagEffect] 视野迷雾: perception_scale=%.2f (caster=%d)" % [float(params.get("perception_scale", 0.5)), caster_id])
+
+
 ## ==================== 对场地效果 (预留) ====================
 
 func _apply_field_obs_add(params: Dictionary) -> void:
@@ -1094,6 +1211,11 @@ func _build_zone_params(params: Dictionary, zone_type: int) -> Dictionary:
 			zone_params["effect_value"] = float(params.get("damage_value", 10.0))
 		3:
 			zone_params["effect_value"] = 0.0
+		4:
+			zone_params["effect_value"] = float(params.get("heal_per_sec", 5.0))  # 波5 #3 治疗区
+	# 波5 #12 zone 作用于球：affect_ball 透传（可选）
+	if params.has("affect_ball"):
+		zone_params["affect_ball"] = params.get("affect_ball")
 	if not params.has("source_skill"):
 		zone_params["source_skill"] = params.get("_skill_id", params.get("skill_id", ""))
 	return zone_params
@@ -1103,6 +1225,9 @@ func _build_zone_params(params: Dictionary, zone_type: int) -> Dictionary:
 
 var _pending_zone_spawns: Array[Dictionary] = []  # [{zone_type, zone_params, spawn_at, expires_at}]
 var _ball_hooks_connected: bool = false
+# 波6 #14 飞行中球操作 pending {caster_id: {mods, expires_at}}（无在场球时登记，ATTACK_LAUNCHED 消费）
+var _pending_in_flight: Dictionary = {}
+var _in_flight_hooks_connected: bool = false
 
 
 func _register_pending_zone_spawn(params: Dictionary, zone_type: int, spawn_at: String) -> void:
@@ -1163,6 +1288,57 @@ func _cleanup_expired_zone_spawns() -> void:
 		if _match_clock < float(item["expires_at"]):
 			remaining.append(item)
 	_pending_zone_spawns = remaining
+
+
+## 波6 #14：飞行球 pending 过期清理 + ATTACK_LAUNCHED 订阅（一次）
+func _cleanup_pending_in_flight() -> void:
+	_ensure_in_flight_hooks()
+	var to_del: Array = []
+	for caster_id in _pending_in_flight:
+		if _match_clock >= float(_pending_in_flight[caster_id]["expires_at"]):
+			to_del.append(caster_id)
+	for c in to_del:
+		_pending_in_flight.erase(c)
+
+
+func _ensure_in_flight_hooks() -> void:
+	if _in_flight_hooks_connected:
+		return
+	var bus = get_tree().get_first_node_in_group("battle_event_bus") if is_inside_tree() else null
+	if bus == null:
+		return
+	bus.subscribe(BattleEventBus.GameEvent.ATTACK_LAUNCHED, _on_attack_launched)
+	_in_flight_hooks_connected = true
+
+
+## 波6 #14：本方球飞出 → 消费 pending（作用到刚出发的球）
+func _on_attack_launched(payload: Dictionary) -> void:
+	var attacker = payload.get("attacker", null)
+	if attacker == null:
+		return
+	var caster_id: int = attacker.get_instance_id()
+	if not _pending_in_flight.has(caster_id):
+		return
+	var mods: Dictionary = _pending_in_flight[caster_id]["mods"]
+	_pending_in_flight.erase(caster_id)
+	var ball = null
+	var bm = battle_manager
+	if bm == null:
+		bm = get_node_or_null("/root/BattleManager")
+	if bm != null and bm.get("ball_node") != null:
+		ball = bm.get("ball_node")
+	elif attacker.get("ball_ref") != null:
+		ball = attacker.get("ball_ref")
+	if ball == null:
+		return
+	if mods.has("recall"):
+		if ball.has_method("recall_ball"):
+			ball.recall_ball(int(mods.get("max_times", 1)))
+	else:
+		if ball.has_method("boost_in_flight"):
+			ball.boost_in_flight(mods)
+	# 连带清理过期项
+	_cleanup_pending_in_flight()
 
 
 func _apply_field_illusion_add(params: Dictionary) -> void:
@@ -1393,6 +1569,43 @@ func _apply_player_on_hit_expire(params: Dictionary, caster_id: int) -> void:
 	for target in targets:
 		total += target.mark_lights_break_on_hit(statuses)
 	print("[TagEffect] 受击解除标记: statuses=%s marked=%d targets=%d" % [str(statuses), total, targets.size()])
+
+
+## ==================== 波5（11 工单）====================
+
+## #10 叠层印记：命中目标 +1 层（封顶刷新）；达阈值触发引用标签；触发后按参数清层
+func _apply_player_mark_apply(params: Dictionary, caster_id: int) -> void:
+	var targets := _get_player_targets(params, caster_id)
+	var mark_id: String = str(params.get("mark_id", "mark"))
+	var max_stacks: int = maxi(1, int(params.get("max_stacks", 3)))
+	var duration: float = float(params.get("duration", 5.0))
+	var threshold_count: int = int(params.get("threshold_count", 0))
+	var threshold_tag: String = str(params.get("threshold_tag", ""))
+	var clear_on_trigger: bool = bool(params.get("clear_on_trigger", false))
+	var threshold_params: Dictionary = params.get("threshold_params", {})
+	for target in targets:
+		if not target.has_method("apply_mark"):
+			continue
+		var count: int = target.apply_mark(mark_id, max_stacks, duration)
+		print("[TagEffect] 印记: %s 第%d/%d层 target=%s" % [mark_id, count, max_stacks, target.char_data.get("name", "?")])
+		if threshold_count > 0 and count >= threshold_count and threshold_tag != "":
+			# 阈值触发：对带印记目标触发引用标签（递归走统一入口）
+			apply_tag_effect(threshold_tag, threshold_params.duplicate(), target.get_instance_id())
+			print("[TagEffect] 印记阈值触发: %s ×%d → %s" % [mark_id, count, threshold_tag])
+			if clear_on_trigger:
+				target.clear_mark(mark_id)
+
+## #13 toggle：状态标签 → 状态灯名映射（toggle 开关用；v1 仅支持状态灯类标签可精确撤销）
+const TOGGLE_STATUS_MAP: Dictionary = {
+	"player_stealth": "stealthed",
+	"player_invincible": "invincible",
+	"player_atk_up_pct": "atk_up_toggle",
+	"player_def_up_pct": "def_up_toggle",
+	"player_spd_up_pct": "spd_up_toggle",
+}
+
+
+## #3 治疗区：zone_type=4 由 _apply_field_zone_effect 构建映射消费（heal_per_sec）
 
 
 ## === 体力恢复/扣除(%) ===

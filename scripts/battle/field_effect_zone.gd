@@ -17,6 +17,8 @@ enum ZoneType {
 	SLOW,     # 减速区
 	DANGER,   # 危险区（持续伤害）
 	SAFE,     # 安全区（免疫伤害）
+	HEAL,     # 波5 #3 治疗区（持续回血）
+	VISION,   # 波6 #9 视野迷雾（敌方 AI 感知削弱；视觉迷雾归美术）
 }
 
 ## ==================== 配置 ====================
@@ -26,6 +28,8 @@ const ZONE_COLORS: Dictionary = {
 	ZoneType.SLOW: {"fill": Color(0.2, 0.2, 0.8, 0.25), "border": Color(0.3, 0.3, 1.0, 0.8)},
 	ZoneType.DANGER: {"fill": Color(0.8, 0.2, 0.2, 0.25), "border": Color(1.0, 0.3, 0.3, 0.8)},
 	ZoneType.SAFE: {"fill": Color(0.2, 0.8, 0.8, 0.25), "border": Color(0.3, 1.0, 1.0, 0.8)},
+	ZoneType.HEAL: {"fill": Color(0.4, 0.9, 0.4, 0.22), "border": Color(0.5, 1.0, 0.5, 0.8)},
+	ZoneType.VISION: {"fill": Color(0.15, 0.1, 0.25, 0.35), "border": Color(0.4, 0.3, 0.6, 0.8)},
 }
 
 const ZONE_NAMES: Dictionary = {
@@ -33,7 +37,12 @@ const ZONE_NAMES: Dictionary = {
 	ZoneType.SLOW: "减速区",
 	ZoneType.DANGER: "危险区",
 	ZoneType.SAFE: "安全区",
+	ZoneType.HEAL: "治疗区",
+	ZoneType.VISION: "视野迷雾",
 }
+
+# 波5 #12 zone 作用于球：穿越信号（皮影原则——zone 只发信号，球侧消费）
+signal zone_ball_passed(zone_type: int, mods: Dictionary)
 
 ## ==================== 状态 ====================
 
@@ -45,8 +54,13 @@ var zone_id: String = ""
 var source_skill: String = ""
 
 ## 效果参数
-var effect_value: float = 1.5    # 加速/减速倍率 或 每秒伤害值
+var effect_value: float = 1.5    # 加速/减速倍率 或 每秒伤害值 或 每秒治疗值
 var zone_active: bool = true
+# 波5 #12 zone 作用于球
+var affect_ball: Dictionary = {}         # {dmg_pct, speed_pct}（空=不作用于球）
+var ball_ref: Node2D = null              # 球引用（manager 注入）
+var _ball_inside: bool = false           # 球在区内状态（重复穿越判定）
+var perception_scale: float = 0.5        # 波6 #9：雾内敌方感知倍率
 
 ## 正在区域内的球员 → 挂载的效果数据
 var _players_inside: Dictionary = {}  # player_instance_id → {buff_id, ...}
@@ -70,6 +84,10 @@ func setup(params: Dictionary) -> void:
 	zone_id = str(params.get("zone_id", ""))
 	source_skill = str(params.get("source_skill", ""))
 	effect_value = float(params.get("effect_value", 1.5))
+	# 波5 #12 zone 作用于球：affect_ball={dmg_pct, speed_pct}（可选）
+	affect_ball = params.get("affect_ball", {}) if params.get("affect_ball", {}) is Dictionary else {}
+	# 波6 #9 视野迷雾：雾内感知倍率（<1 削弱）
+	perception_scale = float(params.get("perception_scale", 0.5))
 
 	# 碰撞设置：检测 layer 1 (球员)
 	collision_layer = 0
@@ -108,6 +126,11 @@ func _parse_zone_type(val) -> int:
 		"danger", "危险", "危险区":
 			return ZoneType.DANGER
 		"safe", "安全", "安全区":
+			return ZoneType.SAFE
+		"heal", "治疗", "治疗区":
+			return ZoneType.HEAL
+		"vision", "迷雾", "视野迷雾":
+			return ZoneType.VISION
 			return ZoneType.SAFE
 	return ZoneType.BOOST
 
@@ -188,6 +211,21 @@ func _process(delta: float) -> void:
 	# 危险区：每帧扣血
 	if zone_type == ZoneType.DANGER:
 		_process_danger_tick(delta)
+	# 波5 #3 治疗区：每帧回血（走 player 公开 heal，禁疗自动生效）
+	elif zone_type == ZoneType.HEAL:
+		_process_heal_tick(delta)
+
+	# 波5 #12 zone 作用于球：球穿越感应（一次性；离开后可重复触发）
+	if not affect_ball.is_empty() and ball_ref and is_instance_valid(ball_ref) and ball_ref.is_active:
+		var half: Vector2 = zone_size * 0.5
+		var local: Vector2 = ball_ref.global_position - global_position
+		var inside: bool = absf(local.x) <= half.x and absf(local.y) <= half.y
+		if inside and not _ball_inside:
+			_ball_inside = true
+			zone_ball_passed.emit(zone_type, affect_ball.duplicate())
+			print("[FieldZone] 球穿越区域! type=%d mods=%s" % [zone_type, str(affect_ball)])
+		elif not inside and _ball_inside:
+			_ball_inside = false
 
 	# 倒计时结束
 	if remaining <= 0.0:
@@ -195,7 +233,7 @@ func _process(delta: float) -> void:
 
 
 func _process_danger_tick(delta: float) -> void:
-	"""危险区：每秒对区域内球员造成伤害"""
+	"""危险区：每秒对区域内球员造成伤害（P2-5：走 player 公开接口，无越权直调）"""
 	var dps: float = effect_value
 	if _players_inside.is_empty():
 		return
@@ -203,15 +241,21 @@ func _process_danger_tick(delta: float) -> void:
 		var info: Dictionary = _players_inside[player_id]
 		var player: CharacterBody2D = info.get("player", null)
 		if player and is_instance_valid(player) and not player.is_defeated:
-			if player.is_status_active("invincible"):
-				continue
-			var dmg: float = dps * delta
-			var defense_resist: float = player._get_effective_value("defense", player.defense) * player.defense_factor
+			var defense_resist: float = player.get_defense_resist()
 			var reduction_rate: float = minf(defense_resist / 100.0, 0.8)
-			dmg *= (1.0 - reduction_rate)
-			player.stamina = maxf(0.0, player.stamina - dmg)
-			if player.stamina <= 0.0 and not player.is_defeated:
-				player._on_defeated()
+			var dmg: float = dps * delta * (1.0 - reduction_rate)
+			player.drain_stamina(dmg)
+
+
+## 波5 #3 治疗区：区域内球员每秒回血（走 player 公开 heal——禁疗灯/heal_block 自动生效）
+func _process_heal_tick(delta: float) -> void:
+	if _players_inside.is_empty():
+		return
+	for player_id in _players_inside:
+		var info: Dictionary = _players_inside[player_id]
+		var player: CharacterBody2D = info.get("player", null)
+		if player and is_instance_valid(player) and not player.is_defeated:
+			player.heal(effect_value * delta)
 
 
 ## ==================== 进出区域 ====================
@@ -222,7 +266,7 @@ func _on_body_entered(body: Node2D) -> void:
 		return
 	if not body is CharacterBody2D:
 		return
-	if not body.has_method("_get_effective_value"):
+	if not body.has_method("get_defense_resist"):
 		return
 	var player: CharacterBody2D = body
 	if player.is_defeated:
@@ -248,7 +292,7 @@ func _check_initial_overlaps() -> void:
 		return
 	var bodies: Array = get_overlapping_bodies()
 	for body in bodies:
-		if body is CharacterBody2D and body.has_method("_get_effective_value"):
+		if body is CharacterBody2D and body.has_method("get_defense_resist"):
 			_on_body_entered(body)
 	if bodies.size() > 0:
 		print("[FieldZone] 初始检测到%d个物体" % bodies.size())
@@ -311,8 +355,8 @@ func _remove_effect(player: CharacterBody2D, effect_data: Dictionary) -> void:
 	match zone_type:
 		ZoneType.BOOST, ZoneType.SLOW:
 			var buff_id: String = str(effect_data.get("buff_id", ""))
-			if buff_id != "" and player._buffs.has(buff_id):
-				player._buffs.erase(buff_id)
+			if buff_id != "":
+				player.remove_buff(buff_id)  # P2-5：走公开接口，不直删 _buffs
 
 		ZoneType.DANGER:
 			pass  # 逐帧扣血，离开自动停止

@@ -242,6 +242,10 @@ func trigger_skill(player_id: int, skill_id: String, target_data: Dictionary = {
 		print("[SpiritSkillTrigger] 被动技能不可主动释放: ", skill_id)
 		return false
 
+	# 波5 #13 toggle 维持型（11 工单）：开关语义，不走一次性 CD/费用
+	if str(skill_data.get("mode", "")) == "toggle":
+		return _toggle_skill(skill_data, player_id, skill_id)
+
 	# 波3 #20 方案A：充能门槛（带 charges 配置的技能，0 格拒放；放行扣 1 格，回充由 _process 计时）
 	if not _charges_cfg_of(skill_id).is_empty():
 		var left: int = get_skill_charges(player_id, skill_id)
@@ -370,6 +374,43 @@ func _build_tag_params(tag_data: Dictionary, skill_data: Dictionary, player_id: 
 	params["_target_data"] = target_data
 
 	return params
+
+## 波5 #13：toggle 技能开关（开=点亮状态灯+进入每秒耗能；再按/能量尽=关+效果全清）
+## v1 约束：toggle 技能的 tags 限状态灯类标签（TOGGLE_STATUS_MAP 内），保证关闭可精确撤销
+const TOGGLE_STATUS_MAP: Dictionary = {
+	"player_stealth": "stealthed",
+	"player_invincible": "invincible",
+	"player_atk_up_pct": "atk_up_toggle",
+	"player_def_up_pct": "def_up_toggle",
+	"player_spd_up_pct": "spd_up_toggle",
+}
+
+func _toggle_skill(skill_data: Dictionary, player_id: int, skill_id: String) -> bool:
+	var p := _get_player_by_id(player_id)
+	if p == null or not p.has_method("open_toggle"):
+		return false
+	# 已开 → 关闭（效果全清）
+	if p.active_toggles.has(skill_id):
+		p.close_toggle(skill_id)
+		return true
+	# 能量见底开不起来
+	if p.spirit_energy <= 0.0:
+		print("[SpiritSkillTrigger] toggle 开启失败: 能量耗尽 ", skill_id)
+		return false
+	# 解析状态灯集合（tags → TOGGLE_STATUS_MAP）
+	var lights: Array = []
+	for tag in skill_data.get("tags", []):
+		var light: String = str(TOGGLE_STATUS_MAP.get(str(tag), ""))
+		if light != "" and light not in lights:
+			lights.append(light)
+	if lights.is_empty():
+		print("[SpiritSkillTrigger] toggle 无可维持状态灯: ", skill_id)
+		return false
+	var energy_per_sec: float = 0.0
+	for tag_id in skill_data.get("tag_params", {}):
+		energy_per_sec += float(skill_data["tag_params"][tag_id].get("energy_per_sec", 0.0))
+	p.open_toggle(skill_id, lights, maxf(0.5, energy_per_sec))
+	return true
 
 ## 消耗能量（E3 接真：扣 player.spirit_energy；2026-09-17 起为全路径唯一扣费点）
 ## 费用 = (基础 + 标签附加) × 施法者消耗倍率（折扣/涨价卡挂在被施法者身上）
