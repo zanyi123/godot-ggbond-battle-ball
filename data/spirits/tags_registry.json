@@ -436,11 +436,14 @@
       "sub_category": "地形",
       "name": "地形改变",
       "reverse": "field_terra_revert",
-      "description": "改变场地摩擦力/弹性",
+      "description": "摩擦地形区（冰面滑动）：区内摩擦×friction_scale 到期自动恢复；radius=0 时全场生效（击退距离语义）（波7 #6a 转正）；bounciness 参数预留（弹性区无官方用例不实现）",
       "params": [
-        "friction",
+        "friction_scale",
         "bounciness",
-        "duration"
+        "duration",
+        "radius",
+        "pos",
+        "spawn_at"
       ],
       "target_type": "field",
       "energy_cost": 0
@@ -1513,6 +1516,55 @@
         "player_id"
       ],
       "target_type": "player",
+      "energy_cost": 0
+    },
+    {
+      "id": "skill_copy_last",
+      "code": "19b8",
+      "category": "PLAYER",
+      "sub_category": "复制",
+      "name": "复制最近技能",
+      "reverse": "",
+      "description": "复制最近一条敌方释放（能耗×cost_pct 折扣）；无快照则失败；触发 SKILL_COPIED 事件（反制钩子）",
+      "params": [
+        "cost_pct"
+      ],
+      "target_type": "player",
+      "energy_cost": 0
+    },
+    {
+      "id": "skill_share_copy",
+      "code": "19b9",
+      "category": "PLAYER",
+      "sub_category": "复制",
+      "name": "暗黑共享",
+      "reverse": "",
+      "description": "把最近敌方释放快照写入全队可复制槽 duration 秒（黑洞队共享体系）",
+      "params": [
+        "duration"
+      ],
+      "target_type": "player",
+      "energy_cost": 0
+    },
+    {
+      "id": "field_drain_wall",
+      "code": "12b",
+      "category": "FIELD",
+      "sub_category": "障碍",
+      "name": "削能墙",
+      "reverse": "",
+      "description": "吸力墙：捕获半径内球被吸向墙心并逐帧削攻击/球速；不做击穿；吸住超时释放继续飞；耗尽走既有停球球权",
+      "params": [
+        "duration",
+        "width",
+        "height",
+        "capture_radius",
+        "absorb_pull",
+        "drain_hold",
+        "attack_consume_rate",
+        "speed_consume_rate"
+      ],
+      "target_type": "field",
       "energy_cost": 0
     }
   ]

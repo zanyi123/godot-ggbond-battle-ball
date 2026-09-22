@@ -61,6 +61,7 @@ var affect_ball: Dictionary = {}         # {dmg_pct, speed_pct}（空=不作用�
 var ball_ref: Node2D = null              # 球引用（manager 注入）
 var _ball_inside: bool = false           # 球在区内状态（重复穿越判定）
 var perception_scale: float = 0.5        # 波6 #9：雾内敌方感知倍率
+var caster_team: String = ""             # 波6 #9 P1修正：施法者队伍（本方不受迷雾影响）
 
 ## 正在区域内的球员 → 挂载的效果数据
 var _players_inside: Dictionary = {}  # player_instance_id → {buff_id, ...}
@@ -88,6 +89,7 @@ func setup(params: Dictionary) -> void:
 	affect_ball = params.get("affect_ball", {}) if params.get("affect_ball", {}) is Dictionary else {}
 	# 波6 #9 视野迷雾：雾内感知倍率（<1 削弱）
 	perception_scale = float(params.get("perception_scale", 0.5))
+	caster_team = str(params.get("caster_team", ""))
 
 	# 碰撞设置：检测 layer 1 (球员)
 	collision_layer = 0

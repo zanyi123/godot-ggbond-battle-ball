@@ -31,6 +31,8 @@ enum GameEvent {
 	RESOURCE_COOLDOWN_READY,     ## 冷却结束 {player, skill_id}
 	RESOURCE_ENERGY_THRESHOLD,   ## 能量跨阈值 {player, threshold, energy}
 	RESOURCE_STAMINA_THRESHOLD,  ## 体力跨阈值 {player, threshold}
+	# Copy.* 复制类（波6 #1）
+	SKILL_COPIED,          ## 技能被复制 {copier, source_caster, source_skill_id}
 }
 
 ## 持久化开关：开启后事件流写入 _log（dump_log 取出；E6 接 sim_results 文件落盘）

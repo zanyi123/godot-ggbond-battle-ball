@@ -314,7 +314,7 @@ func _update_awareness(ap: Dictionary, delta: float) -> void:
 	var vision_range: float = profile.vision_range
 	var _zm = battle_manager.field_zone_manager if battle_manager != null else null
 	if _zm != null and _zm.has_method("get_perception_scale_at"):
-		vision_range *= float(_zm.get_perception_scale_at(my_pos))
+		vision_range *= float(_zm.get_perception_scale_at(my_pos, ap.team))
 
 	# 遍历场上所有其他球员
 	for other_ap in ai_players:

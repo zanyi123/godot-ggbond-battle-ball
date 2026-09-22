@@ -119,6 +119,52 @@ func _apply_player_on_hit_expire(params: Dictionary, caster_id: int) -> void:
 	print("[TagEffect] 受击解除标记: statuses=%s marked=%d targets=%d" % [str(statuses), total, targets.size()])
 
 
+
+## 波6 #1 复制系：复制最近一条敌方释放（cost_pct 折扣能耗）；无快照 fallback=失败
+func _apply_player_skill_copy_last(params: Dictionary, caster_id: int) -> void:
+	var trigger = _get_trigger()
+	if trigger == null or not trigger.has_method("get_last_enemy_cast"):
+		print("[TagEffect] 复制: 触发器不可达")
+		return
+	var caster := _get_caster(caster_id)
+	if caster == null:
+		return
+	var snap: Dictionary = trigger.get_last_enemy_cast(str(caster.team))
+	if snap.is_empty():
+		print("[TagEffect] 复制: 无敌方释放快照 (fallback 失败)")
+		return
+	var skill_data: Dictionary = snap["skill_data"].duplicate(true)
+	# 复制折扣：能耗 ×cost_pct
+	var pct: float = float(params.get("cost_pct", params.get("damage_pct", 1.0)))
+	skill_data["energy_cost"] = float(skill_data.get("energy_cost", 0)) * pct
+	var fire_ok: bool = trigger._fire_skill(skill_data, caster_id, str(snap["skill_id"]), {})
+	# 反制钩子：复制发生事件（梦幻束缚等订阅）
+	var bus = get_tree().get_first_node_in_group("battle_event_bus") if is_inside_tree() else null
+	if bus:
+		bus.emit_event(BattleEventBus.GameEvent.SKILL_COPIED, {"copier": caster, "source_caster_id": snap["caster_id"], "source_skill_id": str(snap["skill_id"])})
+	print("[TagEffect] 复制: %s ← %s (能耗×%.1f) 成功=%s" % [caster.char_data.get("name", "?"), str(snap["skill_id"]), pct, str(fire_ok)])
+
+## 波6 #1 暗黑共享：把最近敌方释放快照写入队友可复制槽（duration 秒内队友可复制）
+func _apply_player_skill_share_copy(params: Dictionary, caster_id: int) -> void:
+	var trigger = _get_trigger()
+	if trigger == null or not trigger.has_method("get_last_enemy_cast"):
+		return
+	var caster := _get_caster(caster_id)
+	if caster == null:
+		return
+	var snap: Dictionary = trigger.get_last_enemy_cast(str(caster.team))
+	if snap.is_empty():
+		print("[TagEffect] 暗黑共享: 无快照")
+		return
+	var duration: float = float(params.get("duration", 10.0))
+	var shared: int = 0
+	for p in players:
+		if p and is_instance_valid(p) and p.team == caster.team and not p.is_defeated:
+			trigger.put_shared_copy(p.get_instance_id(), snap["skill_data"], duration)
+			shared += 1
+	print("[TagEffect] 暗黑共享: 写入 %d 名队友可复制槽" % shared)
+
+
 ## ==================== 波5（11 工单）====================
 
 ## #10 叠层印记：命中目标 +1 层（封顶刷新）；达阈值触发引用标签；触发后按参数清层

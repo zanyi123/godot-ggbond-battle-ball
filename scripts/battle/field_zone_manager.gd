@@ -89,11 +89,14 @@ func _on_zone_ball_passed(zone_type: int, mods: Dictionary) -> void:
 
 
 ## 波6 #9：查询某坐标处敌方感知倍率（站在视野迷雾内 <1；多重迷雾取最小）
-func get_perception_scale_at(pos: Vector2) -> float:
+func get_perception_scale_at(pos: Vector2, viewer_team: String = "") -> float:
+	## 波6 #9（P1 修正）：viewer_team==施法者队伍 → 不受本方迷雾影响（返回 1.0）
 	var scale: float = 1.0
 	for zone in zones:
 		if not is_instance_valid(zone) or int(zone.zone_type) != 5:  # ZoneType.VISION
 			continue
+		if viewer_team != "" and str(zone.get("caster_team")) == viewer_team:
+			continue  # 本方迷雾不削弱本方
 		var half: Vector2 = zone.zone_size * 0.5
 		var local: Vector2 = pos - zone.global_position
 		if absf(local.x) <= half.x and absf(local.y) <= half.y:

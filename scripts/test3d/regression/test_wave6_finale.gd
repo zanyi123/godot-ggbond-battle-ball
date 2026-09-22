@@ -174,9 +174,12 @@ func _run() -> void:
 	var mgr = load("res://scripts/battle/field_zone_manager.gd").new()
 	root.add_child(mgr)
 	await process_frame
-	mgr.spawn_zone_at(5, Vector2(0, 0), {"zone_type": 5, "width": 200.0, "height": 200.0, "duration": 10.0, "perception_scale": 0.4})
-	_assert("迷雾: 雾内感知倍率 0.4", absf(float(mgr.get_perception_scale_at(Vector2(10, 10))) - 0.4) < 0.01)
-	_assert("迷雾: 雾外感知倍率 1.0", absf(float(mgr.get_perception_scale_at(Vector2(5000, 5000))) - 1.0) < 0.01)
+	# P1 修正用例：a 队施法 → a 队观察者不受影响、b 队被削弱
+	var fog_params := {"zone_type": 5, "width": 200.0, "height": 200.0, "duration": 10.0, "perception_scale": 0.4, "caster_team": "a"}
+	mgr.spawn_zone_at(5, Vector2(0, 0), fog_params)
+	_assert("迷雾: 雾内敌方感知倍率 0.4", absf(float(mgr.get_perception_scale_at(Vector2(10, 10), "b")) - 0.4) < 0.01)
+	_assert("迷雾: 雾内本方不受影响 (=1.0)", absf(float(mgr.get_perception_scale_at(Vector2(10, 10), "a")) - 1.0) < 0.01)
+	_assert("迷雾: 雾外感知倍率 1.0", absf(float(mgr.get_perception_scale_at(Vector2(5000, 5000), "b")) - 1.0) < 0.01)
 
 	print("\n========== 结果: %d/%d PASS ==========" % [_pass, _pass + _fail])
 	if _fail > 0:

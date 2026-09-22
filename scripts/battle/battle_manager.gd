@@ -1330,6 +1330,8 @@ func _setup_field_physics_manager() -> void:
 	field_physics.name = "FieldPhysicsManager"
 	field_physics.set_script(physics_script)
 	add_child(field_physics)
+	if ball_node:
+		field_physics.ball_ref = ball_node  # 波7 #6a：摩擦地形区按球位置分区查询
 	
 	# 连接信号（可选，用于调试/通知）
 	if field_physics.has_signal("friction_changed"):
@@ -1357,6 +1359,8 @@ func _setup_obstacle_manager() -> void:
 	obstacle_manager.name = "ObstacleManager"
 	obstacle_manager.set_script(obs_script)
 	add_child(obstacle_manager)
+	if ball_node:
+		obstacle_manager.ball_ref = ball_node  # 波7 #6b：削能墙感应用
 	print("[BattleManager] 障碍物管理器已创建")
 
 

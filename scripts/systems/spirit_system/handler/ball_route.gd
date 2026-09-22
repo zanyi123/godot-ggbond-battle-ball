@@ -277,6 +277,9 @@ func _apply_ball_carry_push(params: Dictionary, caster_id: int) -> void:
 func _apply_field_vision_block(params: Dictionary, caster_id: int) -> void:
 	var p: Dictionary = params.duplicate()
 	p["zone_type"] = 5  # FieldEffectZone.ZoneType.VISION
+	var caster := _get_caster(caster_id)
+	if caster:
+		p["caster_team"] = str(caster.team)  # 波6 P1 修正：本方不受迷雾影响
 	call("_apply_field_zone_effect", p, 5)  # 兄弟层调用走动态（运行时实例可解析）
 	print("[TagEffect] 视野迷雾: perception_scale=%.2f (caster=%d)" % [float(params.get("perception_scale", 0.5)), caster_id])
 

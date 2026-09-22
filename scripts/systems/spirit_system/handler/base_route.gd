@@ -248,6 +248,24 @@ func _get_nearest_enemy(caster: CharacterBody2D) -> CharacterBody2D:
 
 ## ==================== 辅助方法 ====================
 
+## 波6 #1 复制系：经 battle_manager→spirit_system→skill_trigger 链取触发器（拿不到=null）
+## trigger_ref：显式注入口（测试/特殊挂接用），优先于链式查找
+var trigger_ref: Node = null
+
+func _get_trigger() -> Node:
+	if trigger_ref != null and is_instance_valid(trigger_ref):
+		return trigger_ref
+	var bm = battle_manager
+	if bm == null:
+		bm = get_node_or_null("/root/BattleManager")
+	if bm == null:
+		return null
+	var ss = bm.get("spirit_system")
+	if ss != null and ss.get("skill_trigger") != null:
+		return ss.get("skill_trigger")
+	return null
+
+
 func _get_obstacle_manager() -> Node:
 	"""获取障碍物管理器"""
 	if battle_manager and battle_manager.has_node("ObstacleManager"):
@@ -267,6 +285,18 @@ func _get_field_zone_manager() -> Node:
 	var zm = get_tree().get_first_node_in_group("field_zone_managers")
 	if zm:
 		return zm
+	return null
+
+
+## 波7 #6a：场地区域物理管理器查找
+func _get_field_physics_manager() -> Node:
+	if battle_manager and battle_manager.has_node("FieldPhysicsManager"):
+		return battle_manager.get_node("FieldPhysicsManager")
+	var parent = get_parent()
+	while parent:
+		if parent.has_node("FieldPhysicsManager"):
+			return parent.get_node("FieldPhysicsManager")
+		parent = parent.get_parent()
 	return null
 
 
@@ -418,6 +448,13 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 		"field_vision_block":
 			call("_apply_field_vision_block", params, caster_id)
 			success = true
+		# 波7 补遗（16 工单）
+		"field_drain_wall":
+			call("_apply_field_drain_wall", params, caster_id)
+			success = true
+		"field_terra_change":
+			call("_apply_field_terra_change", params, caster_id)
+			success = true
 		# 波4 球类参数化（10 工单）
 		"ball_bounce_enhance":
 			call("_apply_ball_bounce_enhance", params, caster_id)
@@ -560,6 +597,12 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 			call("_apply_player_on_hit_expire", params, caster_id)
 			success = true
 		# === 波5（11 工单）===
+		"skill_copy_last":
+			call("_apply_player_skill_copy_last", params, caster_id)
+			success = true
+		"skill_share_copy":
+			call("_apply_player_skill_share_copy", params, caster_id)
+			success = true
 		"player_mark_apply":
 			call("_apply_player_mark_apply", params, caster_id)
 			success = true

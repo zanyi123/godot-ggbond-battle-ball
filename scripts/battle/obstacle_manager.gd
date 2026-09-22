@@ -9,6 +9,7 @@ class_name ObstacleManager
 
 ## 场上所有障碍物
 var obstacles: Array[StaticBody2D] = []
+var ball_ref: Node2D = null  # 波7 #6b：球引用（battle_manager 注入，转发给削能墙等子类做感应）
 
 ## 鼠标放置/清除系统
 var placer: Node = null
@@ -65,6 +66,7 @@ func create_obstacle(params: Dictionary, position: Vector2, rotation: float = 0.
 
 	# 添加到场景（必须在 setup 之前，否则 CollisionShape2D 无法正确注册）
 	add_child(obstacle)
+	obstacle.set("ball_ref", ball_ref)  # 波7：子类（削能墙）感应用；基类无此属性时静默
 
 	# 初始化参数（创建碰撞形状、视觉等）
 	obstacle.setup(params)

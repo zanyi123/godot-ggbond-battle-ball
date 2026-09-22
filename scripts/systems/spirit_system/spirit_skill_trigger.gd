@@ -284,6 +284,7 @@ func _fire_skill(skill_data: Dictionary, player_id: int, skill_id: String, targe
 	var cooldown = skill_data.get("cooldown", 0)
 	_set_skill_cooldown(player_id, skill_id, cooldown)
 
+	_record_cast(player_id, skill_id)  # 波6 #1：成功释放（主动/被动）入复制历史
 	return true
 
 ## 技能数据缓存
@@ -470,8 +471,53 @@ func _set_skill_cooldown(player_id: int, skill_id: String, cooldown: float) -> v
 		_skill_cd_totals[player_id] = {}
 	_skill_cd_totals[player_id][skill_id] = applied
 
+## ==================== 波6 #1 复制系（12 工单）====================
+
+## 技能释放历史环形缓冲（最近 CAST_HISTORY_MAX 条；本方敌方都记；复制系标签不入史防自噬）
+const CAST_HISTORY_MAX: int = 20
+var _cast_history: Array[Dictionary] = []      # [{caster_id, team, skill_id, skill_data}]
+var _shared_copies: Dictionary = {}            # 暗黑共享槽 {player_id: {skill_data, expires_at}}
+var _clock: float = 0.0                        # 触发器时钟（共享槽过期用）
+
+func _record_cast(caster_id: int, skill_id: String) -> void:
+	if skill_id.begins_with("skill_copy"):
+		return  # 复制系技能不入史（防自噬）
+	var caster := _get_player_by_id(caster_id)
+	if caster == null:
+		return
+	_cast_history.append({
+		"caster_id": caster_id,
+		"team": str(caster.team),
+		"skill_id": skill_id,
+		"skill_data": _get_skill_data(skill_id).duplicate(true),
+	})
+	while _cast_history.size() > CAST_HISTORY_MAX:
+		_cast_history.pop_front()
+
+## 取最近一条敌方释放快照（相对 viewer_team）
+func get_last_enemy_cast(viewer_team: String) -> Dictionary:
+	for i in range(_cast_history.size() - 1, -1, -1):
+		var item: Dictionary = _cast_history[i]
+		if str(item["team"]) != viewer_team:
+			return item
+	return {}
+
+## 暗黑共享：写队友可复制槽（expires 由 handler 传 duration）
+func put_shared_copy(player_id: int, snap: Dictionary, duration: float) -> void:
+	_shared_copies[player_id] = {"skill_data": snap, "expires_at": _clock + duration}
+
+func take_shared_copy(player_id: int) -> Dictionary:
+	if not _shared_copies.has(player_id):
+		return {}
+	var item: Dictionary = _shared_copies[player_id]
+	if _clock > float(item.get("expires_at", 0.0)):
+		_shared_copies.erase(player_id)
+		return {}
+	return item.get("skill_data", {})
+
 ## 更新冷却时间（每帧调用）
 func _process(delta: float) -> void:
+	_clock += delta
 	var bus = get_tree().get_first_node_in_group("battle_event_bus") if is_inside_tree() else null
 	for player_id in _skill_cooldowns.keys():
 		for skill_id in _skill_cooldowns[player_id].keys():

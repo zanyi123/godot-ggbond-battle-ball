@@ -39,6 +39,9 @@ var friction_end_time: float = 0.0
 
 ## 弹性系数修改来源
 var bounciness_source: String = "default"
+# 波7 #6a 地形改动：摩擦区域（区域内取区摩擦，区域外取全场值）
+var terra_zones: Array[Dictionary] = []   # [{pos, radius, mu, remaining}]
+var ball_ref: Node2D = null               # 球引用（battle_manager 注入，分区查询用）
 
 
 ## ==================== 信号 ====================
@@ -61,6 +64,7 @@ func _ready() -> void:
 	var timer = Timer.new()
 	timer.wait_time = 0.5
 	timer.timeout.connect(_check_friction_restore)
+	timer.timeout.connect(_cleanup_terra_zones)
 	add_child(timer)
 	timer.start()
 
@@ -112,6 +116,20 @@ func set_friction(mu: float, source: String = "unknown", duration: float = 0.0) 
 
 
 ## 获取当前摩擦系数
+## 波7 #6a：添加摩擦地形区（duration 到自动移除；field_terra_change 标签消费）
+func add_terra_zone(pos: Vector2, radius: float, mu: float, duration: float) -> void:
+	terra_zones.append({"pos": pos, "radius": radius, "mu": mu, "remaining": duration})
+	print("[FieldPhysics] 摩擦地形区: r=%.0f mu=%.1f dur=%.1fs" % [radius, mu, duration])
+
+## 波7 #6a：按位置取摩擦（区内=区摩擦，区外/无区=全场值；多重取最小=最滑优先）
+func get_friction_at(pos: Vector2) -> float:
+	var scale: float = get_friction()
+	for z in terra_zones:
+		if pos.distance_to(z["pos"]) <= float(z["radius"]):
+			scale = minf(scale, float(z["mu"]))
+	return scale
+
+
 func get_friction() -> float:
 	"""获取当前场地摩擦系数 μ
 	
@@ -232,6 +250,18 @@ func _check_friction_restore() -> void:
 		if current_time >= friction_end_time:
 			print("[FieldPhysicsManager] 定时器触发：恢复默认摩擦系数")
 			restore_friction()
+
+
+## 波7 #6a：terra 区到期清理
+func _cleanup_terra_zones() -> void:
+	var to_remove: Array[Dictionary] = []
+	for z in terra_zones:
+		z["remaining"] = float(z.get("remaining", 0.0)) - 0.5
+		if float(z["remaining"]) <= 0.0:
+			to_remove.append(z)
+	for z in to_remove:
+		terra_zones.erase(z)
+		print("[FieldPhysics] 摩擦地形区到期恢复")
 
 
 ## ==================== 调试方法 ====================
