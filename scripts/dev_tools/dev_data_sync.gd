@@ -438,14 +438,91 @@ static func save_growth_curves(data: Dictionary) -> bool:
 
 ## 刷新 DataManager 内存数据（角色/元灵/技能等修改后调用）
 static func _refresh_data_manager() -> void:
-	if DataManager and is_instance_valid(DataManager):
-		DataManager.reload_all()
+	# 波7 #6b 兼容：动态取单例（避免 -s headless 早期编译/运行时 autoload 不可见）
+	var ml = Engine.get_main_loop()
+	if ml == null or not (ml is SceneTree):
+		return
+	var dm = (ml as SceneTree).root.get_node_or_null("DataManager")
+	if dm != null and dm.has_method("reload_all"):
+		dm.reload_all()
 
 
 ## 刷新 InventoryManager 道具定义数据（装备/食物修改后调用）
 ## 同时刷新 NutritionManager 的食物缓存，确保备战界面能正确显示
 static func _refresh_inventory_manager() -> void:
-	if InventoryManager and is_instance_valid(InventoryManager):
-		InventoryManager.reload_item_defs()
-	if NutritionManager and is_instance_valid(NutritionManager):
-		NutritionManager.reload_foods_data()
+	var ml = Engine.get_main_loop()
+	if ml == null or not (ml is SceneTree):
+		return
+	var root_node: Node = (ml as SceneTree).root
+	var im = root_node.get_node_or_null("InventoryManager")
+	if im != null and im.has_method("reload_item_defs"):
+		im.reload_item_defs()
+	var nm = root_node.get_node_or_null("NutritionManager")
+	if nm != null and nm.has_method("reload_foods_data"):
+		nm.reload_foods_data()
+
+
+## 工单14 F5：技能数据合法性校验（静态纯逻辑，-s 测试可用；返回错误列表，空=通过）
+static func validate_skill_data(skill_data: Dictionary, existing: Array, exclude_id: String = "") -> Array[String]:
+	var errors: Array[String] = []
+	if str(skill_data.get("name", "")).strip_edges() == "":
+		errors.append("技能名字不能为空")
+	var sid := str(skill_data.get("id", ""))
+	for s in existing:
+		if str(s.get("id", "")) == sid and sid != exclude_id:
+			errors.append("技能 id 与现有技能重复: %s" % sid)
+			break
+	var registry_ids: Array = []
+	for t in load_tags():
+		registry_ids.append(str(t.get("id", "")))
+	for tag in skill_data.get("tags", []):
+		if not (str(tag) in registry_ids):
+			errors.append("标签不存在于标签库: %s" % str(tag))
+	if str(skill_data.get("type", "active")) == "passive":
+		var trig: Dictionary = skill_data.get("trigger", {})
+		var ev := str(trig.get("event", ""))
+		if ev == "":
+			errors.append("被动技能缺少 trigger.event 配置")
+		else:
+			var parts := ev.split(".")
+			var valid := false
+			if parts.size() == 2:
+				var pfx := parts[0].to_lower()
+				var sfx := parts[1].to_lower()
+				for key in BattleEventBus.GameEvent.keys():
+					var k := str(key).to_lower()
+					if k.begins_with(pfx) and k.ends_with(sfx):
+						valid = true
+						break
+			if not valid:
+				errors.append("未知触发事件: %s（需形如 Hit.TAKEN）" % ev)
+	if float(skill_data.get("cooldown", 0)) < 0.0:
+		errors.append("冷却不能为负数")
+	if float(skill_data.get("energy_cost", 0)) < 0.0:
+		errors.append("能量消耗不能为负数")
+	var registry_params: Dictionary = {}
+	for t in load_tags():
+		registry_params[str(t.get("id", ""))] = t.get("params", [])
+	for tag_id in skill_data.get("tag_params", {}):
+		var known: Array = registry_params.get(tag_id, [])
+		for pkey in skill_data["tag_params"][tag_id]:
+			if known.size() > 0 and not (str(pkey) in known):
+				print("[DevSync] 警告: %s 的参数 %s 不在 registry params 列表（保留，向后兼容）" % [tag_id, str(pkey)])
+	# 工单14/操1：operator 字段校验（操控规划/04 大点1）
+	var operator := str(skill_data.get("operator", "OP_AUTO"))
+	var operators := ["OP_AUTO", "OP_AIM", "OP_POINT", "OP_MARK", "OP_STEER", "OP_MIDFLY", "OP_TOGGLE", "OP_KEY_JUMP", "OP_PLACE", "OP_SUMMON", "OP_FP", "OP_COMBO"]
+	if not (operator in operators):
+		errors.append("未知操作方式 operator: %s（12 枚举之外）" % operator)
+	elif str(skill_data.get("type", "active")) == "passive" and operator != "OP_AUTO":
+		errors.append("被动技能只允许 operator=OP_AUTO（当前 %s）" % operator)
+	elif operator == "OP_MIDFLY":
+		var has_midfly := false
+		for tag_id in skill_data.get("tag_params", {}):
+			if tag_id in ["ball_recall", "ball_in_flight_boost"]:
+				has_midfly = true
+		if not has_midfly:
+			errors.append("operator=OP_MIDFLY 需要对应 params：tag_params 含 ball_recall(带 max_times) 或 ball_in_flight_boost")
+	elif operator == "OP_TOGGLE":
+		if str(skill_data.get("mode", "")) != "toggle":
+			errors.append("operator=OP_TOGGLE 需要技能 mode=toggle（维持耗能开关）")
+	return errors

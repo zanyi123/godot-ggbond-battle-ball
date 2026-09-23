@@ -41,7 +41,9 @@
 			"icon_path": "",
 			"id": "skill_金刚_1",
 			"name": "猛虎攻击",
-			"tag_params": {},
+			"tag_params": {
+
+			},
 			"tags": [
 				"ball_dmg_up_pct",
 				"ball_range_up"
@@ -170,7 +172,9 @@
 			"icon_path": "",
 			"id": "skill_草木_2",
 			"name": "荆棘庇佑",
-			"tag_params": {},
+			"tag_params": {
+
+			},
 			"tags": [
 				"field_obs_add"
 			],
@@ -184,7 +188,7 @@
 			"description": "岩灵注入元灵能量到球员身体，形成抗性\n该技能防御+固定值（持续3秒）",
 			"detail": "技能详细说明",
 			"element": "大地",
-			"energy_cost": 10,
+			"energy_cost": 10.0,
 			"icon_color": "#FFFFFF",
 			"icon_path": "",
 			"id": "skill_大地_2",
@@ -198,35 +202,39 @@
 			"tags": [
 				"player_def_up_flat"
 			],
-			"type": "passive",
-			"unlock_cost": 0,
-			"unlock_level": 1,
 			"trigger": {
-				"event": "Defend.BOUNCED",
-				"condition": {}
-			}
+				"condition": {
+
+				},
+				"event": "Defend.BOUNCED"
+			},
+			"type": "passive",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
 		},
 		{
+			"cooldown": 8.0,
+			"description": "测试流程化：受击时全队防+6",
+			"element": "草木",
+			"energy_cost": 5.0,
 			"id": "skill_草木_passive_test",
 			"name": "荆棘反甲",
-			"type": "passive",
-			"element": "草木",
-			"trigger": {
-				"event": "Hit.HIT_TAKEN",
-				"condition": {}
-			},
-			"cooldown": 8.0,
-			"energy_cost": 5,
-			"tags": [
-				"player_def_up_flat"
-			],
 			"tag_params": {
 				"player_def_up_flat": {
 					"duration": 5.0,
-					"value": 6
+					"value": 6.0
 				}
 			},
-			"description": "测试流程化：受击时全队防+6"
+			"tags": [
+				"player_def_up_flat"
+			],
+			"trigger": {
+				"condition": {
+
+				},
+				"event": "Hit.HIT_TAKEN"
+			},
+			"type": "passive"
 		}
 	]
 }

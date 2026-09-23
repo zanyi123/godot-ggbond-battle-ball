@@ -5,6 +5,9 @@ extends Control
 
 signal closed()
 
+# 工单14 F5：技能编辑弹窗校验错误提示
+var skill_error_label: Label = null
+
 const ELEMENT_COLORS: Dictionary = {
 	"金刚": Color(0.85, 0.75, 0.3),
 	"大地": Color(0.7, 0.55, 0.35),
@@ -719,6 +722,14 @@ func _open_skill_edit_panel(skill_id: String) -> void:
 	popup_title.custom_minimum_size = Vector2(0, 35)
 	popup_vbox.add_child(popup_title)
 
+	# 工单14 F5：校验失败红字提示（不静默）
+	skill_error_label = Label.new()
+	skill_error_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.3))
+	skill_error_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	skill_error_label.custom_minimum_size = Vector2(0, 0)
+	skill_error_label.visible = false
+	popup_vbox.add_child(skill_error_label)
+
 	# 技能名称
 	var name_row := HBoxContainer.new()
 	name_row.custom_minimum_size = Vector2(0, 32)
@@ -1277,6 +1288,22 @@ func _get_param_hint(tag_id: String, param_name: String) -> String:
 	return ""
 
 
+## 工单14 F5：技能数据合法性校验（委托 DevDataSync 静态实现；返回错误列表，空=通过）
+func _validate_skill_data(skill_data: Dictionary, exclude_id: String = "") -> Array[String]:
+	return DevDataSync.validate_skill_data(skill_data, all_skills, exclude_id)
+
+
+## 工单14 F3：扫描技能被引用情况（角色终极技能按技能名匹配），返回警告文案（空=无引用）
+func _get_skill_reference_warning(skill_id: String, skill_name: String) -> String:
+	var refs: Array[String] = []
+	for c in DataManager.characters:
+		if str(c.get("ultimate_skill", "")) == skill_name:
+			refs.append(str(c.get("name", "?")))
+	if refs.is_empty():
+		return ""
+	return "⚠ 注意：该技能（%s）被角色 %s 的终极技能引用，删除后这些角色的大招将失效！" % [skill_name, "、".join(refs)]
+
+
 func _on_skill_confirm(
 	original_data: Dictionary,
 	is_new: bool,
@@ -1372,9 +1399,12 @@ func _on_skill_confirm(
 		else:
 			skill_data[key] = int(skill_sliders[key].value)
 
-	# 验证
-	if skill_data.get("name", "").strip_edges() == "":
-		print("[DevSpiritPanel] 错误：技能名字不能为空")
+	# 工单14 F5 合法性校验（失败红字阻断，不静默）
+	var exclude_id: String = "" if is_new else str(original_data.get("id", ""))
+	var errors: Array[String] = _validate_skill_data(skill_data, exclude_id)
+	if not errors.is_empty():
+		_show_skill_error("
+".join(errors))
 		return
 
 	if is_new:
@@ -1487,6 +1517,16 @@ func _on_delete_skill_confirm(skill_id: String, skill_name: String) -> void:
 	title_lbl.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
 	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	container.add_child(title_lbl)
+
+	# 工单14 F3 引用警告：被角色终极技能引用时明示后果（允许删除）
+	var ref_warning: String = _get_skill_reference_warning(skill_id, skill_name)
+	if ref_warning != "":
+		var warn_lbl := Label.new()
+		warn_lbl.text = ref_warning
+		warn_lbl.add_theme_color_override("font_color", Color(1.0, 0.75, 0.2))
+		warn_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		warn_lbl.custom_minimum_size = Vector2(380, 0)
+		container.add_child(warn_lbl)
 
 	# 技能名
 	var name_lbl := Label.new()
