@@ -73,10 +73,12 @@ const MODEL_MAP: Dictionary = {
 		"pbr_prefix": ASSET_BASE + "player5_base_texture_pbr_20250901",
 	},
 	"char_003": {
-		# 战术D：FBX直载验证（low_gu_v2骨骼数据经GLB管线→Godot章鱼；FBX管线走ufbx可能正常）
-		"mesh_fbx": ASSET_BASE + "player2_low_gu_v2.fbx",
-		"model_glb": ASSET_BASE + "player2_low_gu_v2_cup.glb",  # GLB版备用（FBX验证失败回退用）
+		# 已验收版本（回退恢复）：base_cup 球贴手实证完美
+		"model_glb": ASSET_BASE + "player2_base_cup.glb",
 		"pbr_prefix": ASSET_BASE + "player2_base_texture_pbr_20250901",
+		# low_gu_v2 实验配置（未验收，禁止启用——待 Blender 目检+独立场景验证通过后由主人拍板）
+		# "mesh_fbx": ASSET_BASE + "player2_low_gu_v2.fbx",       # 战术D：FBX直载（未验证）
+		# "model_glb": ASSET_BASE + "player2_low_gu_v2_cup.glb",  # 战术C：GLB（Godot端章鱼）
 	},
 	"char_004": {
 		# "model_glb(FBX动作,隔离期停用)": ASSET_BASE + "player3动作/...fbx",

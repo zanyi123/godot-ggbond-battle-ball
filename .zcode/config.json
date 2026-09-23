@@ -1,0 +1,37 @@
+{
+  "mcp": {
+    "servers": {
+      "godot-ai": {
+        "command": "C:\\Users\\Lenovo\\AppData\\Local\\Programs\\Python\\Python312/pythonw.exe",
+        "args": [
+          "-c",
+          "import subprocess,sys; raise SystemExit(subprocess.call(sys.argv[1:], stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr, creationflags=0x08000000))",
+          "C:\\Users\\Lenovo/.local/bin/uvx.exe",
+          "--link-mode",
+          "copy",
+          "--from",
+          "godot-ai==3.1.5",
+          "godot-ai",
+          "attach",
+          "--port",
+          "8000",
+          "--ws-port",
+          "9500"
+        ]
+      },
+      "blender-mcp": {
+        "command": "uv",
+        "args": [
+          "run",
+          "--directory",
+          "D:/MCP/blender-mcp",
+          "blender-mcp"
+        ],
+        "env": {
+          "BLENDER_MCP_HOST": "localhost",
+          "BLENDER_MCP_PORT": "9879"
+        }
+      }
+    }
+  }
+}
