@@ -8,6 +8,26 @@ signal closed()
 # 工单14 F5：技能编辑弹窗校验错误提示
 var skill_error_label: Label = null
 
+# 操2：操作方式 12 枚举显示简称（枚举单一来源=skill_state_manager.OPERATORS，见 get_operator_list）
+const OPERATOR_LABELS: Dictionary = {
+	"OP_AUTO": "自动",
+	"OP_AIM": "瞄准",
+	"OP_POINT": "点选",
+	"OP_MARK": "标记",
+	"OP_STEER": "操控",
+	"OP_MIDFLY": "干预",
+	"OP_TOGGLE": "开关",
+	"OP_KEY_JUMP": "跳跃",
+	"OP_PLACE": "放置",
+	"OP_SUMMON": "召唤",
+	"OP_FP": "FP",
+	"OP_COMBO": "合技",
+}
+
+## 操2：12 类操作枚举列表（读 skill_state_manager 常量，避免双处维护）
+static func get_operator_list() -> Array:
+	return load("res://scripts/systems/spirit_system/skill_state_manager.gd").OPERATORS
+
 const ELEMENT_COLORS: Dictionary = {
 	"金刚": Color(0.85, 0.75, 0.3),
 	"大地": Color(0.7, 0.55, 0.35),
@@ -452,6 +472,16 @@ func _refresh_skill_list(spirit_data: Dictionary) -> void:
 		name_lbl.custom_minimum_size = Vector2(200, 28)
 		row.add_child(name_lbl)
 
+		# 操2：操作方式徽标（AUTO 缺省不显示；一眼区分操作类型）
+		var op_val: String = str(skill_data.get("operator", "OP_AUTO"))
+		if op_val != "OP_AUTO":
+			var op_badge := Label.new()
+			op_badge.text = "[%s]" % str(OPERATOR_LABELS.get(op_val, op_val))
+			op_badge.add_theme_font_size_override("font_size", 12)
+			op_badge.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
+			op_badge.custom_minimum_size = Vector2(0, 28)
+			row.add_child(op_badge)
+
 		# 标签列表
 		var tags: Array = skill_data.get("tags", [])
 		var tags_text: String = ""
@@ -790,6 +820,25 @@ func _open_skill_edit_panel(skill_id: String) -> void:
 	type_row.add_child(type_option)
 	popup_vbox.add_child(type_row)
 
+	# 操2：操作方式选择（12 选项，缺省 AUTO；非法存量值回落 AUTO 显示）
+	var op_row := HBoxContainer.new()
+	op_row.custom_minimum_size = Vector2(0, 32)
+	var op_lbl := Label.new()
+	op_lbl.text = "操作方式:"
+	op_lbl.custom_minimum_size = Vector2(80, 28)
+	op_lbl.add_theme_font_size_override("font_size", 14)
+	op_row.add_child(op_lbl)
+	var op_option := OptionButton.new()
+	var op_names: Array = get_operator_list()
+	var cur_op := str(skill_data.get("operator", "OP_AUTO"))
+	if not (cur_op in op_names):
+		cur_op = "OP_AUTO"
+	for op_name in op_names:
+		op_option.add_item("%s (%s)" % [str(OPERATOR_LABELS.get(str(op_name), str(op_name))), str(op_name)])
+	op_option.selected = op_names.find(cur_op)
+	op_row.add_child(op_option)
+	popup_vbox.add_child(op_row)
+
 	# 数值滑块
 	var numeric_fields := [
 		{"key": "unlock_level", "label": "解锁等级", "min": 1, "max": 10, "step": 1},
@@ -997,7 +1046,8 @@ func _open_skill_edit_panel(skill_id: String) -> void:
 	confirm_btn.add_theme_color_override("font_color", Color(0.3, 0.9, 0.5))
 	confirm_btn.pressed.connect(_on_skill_confirm.bind(
 		skill_data, is_new, name_edit, desc_edit, detail_edit,
-		type_option, skill_sliders, ic_edit, icon_path_edit, selected_tags, tag_params_data
+		type_option, skill_sliders, ic_edit, icon_path_edit, selected_tags, tag_params_data,
+		op_option
 	))
 	confirm_row.add_child(confirm_btn)
 
@@ -1293,6 +1343,14 @@ func _validate_skill_data(skill_data: Dictionary, exclude_id: String = "") -> Ar
 	return DevDataSync.validate_skill_data(skill_data, all_skills, exclude_id)
 
 
+## 工单14 F5：弹窗红字提示（校验失败阻断并明示原因，不静默）
+func _show_skill_error(msg: String) -> void:
+	if skill_error_label and is_instance_valid(skill_error_label):
+		skill_error_label.text = msg
+		skill_error_label.visible = true
+	print("[DevSpiritPanel] 校验失败: ", msg.replace("\n", " / "))
+
+
 ## 工单14 F3：扫描技能被引用情况（角色终极技能按技能名匹配），返回警告文案（空=无引用）
 func _get_skill_reference_warning(skill_id: String, skill_name: String) -> String:
 	var refs: Array[String] = []
@@ -1315,7 +1373,8 @@ func _on_skill_confirm(
 	ic_edit: LineEdit,
 	icon_path_edit: LineEdit,
 	selected_tags: Array,
-	tag_params_data: Dictionary
+	tag_params_data: Dictionary,
+	op_option: OptionButton
 ) -> void:
 	# 收集数据
 	var skill_data: Dictionary = original_data.duplicate(true)
@@ -1325,6 +1384,11 @@ func _on_skill_confirm(
 	skill_data["type"] = "active" if type_option.selected == 0 else "passive"
 	skill_data["icon_color"] = ic_edit.text
 	skill_data["tags"] = selected_tags.duplicate()
+
+	# 操2：操作方式落盘（表单选择 → operator 字段，经 14 保存链路校验+落盘）
+	var ops: Array = get_operator_list()
+	var op_sel: int = op_option.selected
+	skill_data["operator"] = str(ops[op_sel]) if op_sel >= 0 and op_sel < ops.size() else "OP_AUTO"
 
 	# 处理图标图片：若用户选了新图片，复制到项目目录；若清空则置空
 	var icon_src := icon_path_edit.text.strip_edges()
@@ -1403,8 +1467,7 @@ func _on_skill_confirm(
 	var exclude_id: String = "" if is_new else str(original_data.get("id", ""))
 	var errors: Array[String] = _validate_skill_data(skill_data, exclude_id)
 	if not errors.is_empty():
-		_show_skill_error("
-".join(errors))
+		_show_skill_error("\n".join(errors))
 		return
 
 	if is_new:
