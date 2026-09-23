@@ -33,6 +33,8 @@ enum GameEvent {
 	RESOURCE_STAMINA_THRESHOLD,  ## 体力跨阈值 {player, threshold}
 	# Copy.* 复制类（波6 #1）
 	SKILL_COPIED,          ## 技能被复制 {copier, source_caster, source_skill_id}
+	# Action.* 操作类（操控规划操1）
+	ACTION_JUMPED,         ## 玩家跳跃 {player}
 }
 
 ## 持久化开关：开启后事件流写入 _log（dump_log 取出；E6 接 sim_results 文件落盘）

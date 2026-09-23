@@ -50,6 +50,13 @@ func setup(mgr: Node2D) -> void:
 	_setup_fx_adapter()
 	_setup_parity_check()
 	_spawn_aim_cursor()
+	# 操1 大点5：操作交互反馈 3D 载体（AIM 预览/目标圈；入组供 input_manager 查找）
+	var ofb_script: GDScript = load("res://scripts/battle3d/visual/operator_feedback_3d.gd")
+	if ofb_script != null:
+		var ofb: Node3D = Node3D.new()
+		ofb.set_script(ofb_script)
+		ofb.name = "OperatorFeedback3D"
+		add_child(ofb)
 	print("[Bridge3D] ✅ 3D 场景层构建完成 (players=%d)" % _player_proxies.size())
 
 ## P1 场地投影落点光标：贴地环（黄=瞄准中，红=路径标中球员），显示在鼠标地面投影处

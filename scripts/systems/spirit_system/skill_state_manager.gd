@@ -34,6 +34,68 @@ var _mouse_required_tags: Array[String] = [
 # 当前每个玩家的激活技能（用于UI显示）{player_id: active_skill_data}
 var _active_player_skills: Dictionary = {}
 
+## ==================== 操1（操控规划/04）：operator 子态扩展 ====================
+
+## 12 类操作枚举（schema "operator" 字段合法值；OP_COMBO 仅保留枚举随 S1）
+const OPERATORS: Array[String] = [
+	"OP_AUTO", "OP_AIM", "OP_POINT", "OP_MARK", "OP_STEER", "OP_MIDFLY",
+	"OP_TOGGLE", "OP_KEY_JUMP", "OP_PLACE", "OP_SUMMON", "OP_FP", "OP_COMBO",
+]
+
+## 激活后的操作子态
+enum OperatorSubState { NONE, AIMING, SELECTING, MARKING, STEERING, TOGGLED }
+
+## operator → 激活期子态映射（AUTO/PLACE/KEY_JUMP/SUMMON/FP/MIDFLY/COMBO 激活期无子态）
+const OPERATOR_SUBSTATE: Dictionary = {
+	"OP_AIM": OperatorSubState.AIMING,
+	"OP_POINT": OperatorSubState.SELECTING,
+	"OP_MARK": OperatorSubState.MARKING,
+	"OP_TOGGLE": OperatorSubState.TOGGLED,
+}
+
+# 每玩家当前操作上下文 {player_id: {operator, substate, skill_id, slot, midfly_left}}
+var _operator_context: Dictionary = {}
+var test_ball: Node = null  # 测试注入口（MIDFLY 干预目标球；生产走 controlled_player.ball_ref 链）
+
+## 读技能 operator（缺省 OP_AUTO；非法值回落 AUTO）
+func get_operator(skill_id: String) -> String:
+	var op := str(_get_skill_data(skill_id).get("operator", "OP_AUTO"))
+	return op if op in OPERATORS else "OP_AUTO"
+
+## 当前操作子态名（无激活=""/NONE）
+func get_operator_substate(player_id: int) -> String:
+	if not _operator_context.has(player_id):
+		return ""
+	var sub: int = _operator_context[player_id].get("substate", 0)
+	if sub == OperatorSubState.NONE:
+		return ""
+	for key in OperatorSubState.keys():
+		if OperatorSubState[key] == sub:
+			return key
+	return ""
+
+## 当前激活技能的 operator 名（无激活=""）
+func get_active_operator(player_id: int) -> String:
+	if _operator_context.has(player_id):
+		return str(_operator_context[player_id].get("operator", "OP_AUTO"))
+	return ""
+
+## 左键确认（AIMING/SELECTING/MARKING 子态的左键推进）：释放技能走既有链
+func confirm_substate(player_id: int) -> bool:
+	if not _operator_context.has(player_id):
+		return false
+	var ctx: Dictionary = _operator_context[player_id]
+	var sub: int = int(ctx.get("substate", 0))
+	if sub in [OperatorSubState.AIMING, OperatorSubState.SELECTING, OperatorSubState.MARKING]:
+		_release_skill(player_id, int(ctx["slot"]))
+		_operator_context.erase(player_id)
+		return true
+	return false
+
+## 取消（C/再按）：清操作上下文
+func _clear_operator_context(player_id: int) -> void:
+	_operator_context.erase(player_id)
+
 
 func _ready() -> void:
 	pass
@@ -73,6 +135,10 @@ func on_skill_key_pressed(player_id: int, slot: int) -> bool:
 		print("[SkillState] 技能冷却中: %s" % skill_id)
 		return false
 
+	# 操1 OP_MIDFLY：飞行中（RELEASING 态=球已投出）再按同键 → 干预（拉回/推进），次数受限
+	if skill_info.state == SkillState.RELEASING and get_operator(skill_id) == "OP_MIDFLY":
+		return _trigger_midfly(player_id, skill_id)
+
 	# 检测双击
 	if _last_press_times[player_id].has(slot):
 		var last_press = _last_press_times[player_id][slot]
@@ -96,6 +162,12 @@ func on_skill_key_pressed(player_id: int, slot: int) -> bool:
 
 	# 如果已激活，再次按下表示取消
 	if skill_info.state == SkillState.ACTIVATED:
+		# 操1 OP_TOGGLE：TOGGLED 态再按 = 切换/关闭（对齐波5 #13 toggle 语义，不复写）
+		if _operator_context.get(player_id, {}).get("substate", 0) == OperatorSubState.TOGGLED:
+			print("[SkillState] toggle 关闭: skill=%s" % skill_id)
+			_release_skill(player_id, slot)
+			_operator_context.erase(player_id)
+			return false
 		print("[SkillState] 取消激活: skill=%s" % skill_id)
 		_cancel_active_skill(player_id)
 		return false
@@ -104,6 +176,36 @@ func on_skill_key_pressed(player_id: int, slot: int) -> bool:
 	print("[SkillState] 激活技能: skill=%s" % skill_id)
 	_activate_skill(player_id, slot)
 	return false  # 不自动释放
+
+
+## 波操1 OP_MIDFLY：飞行中干预（调 ball 既有 recall_ball/boost_in_flight；次数=midfly_left）
+func _trigger_midfly(player_id: int, skill_id: String) -> bool:
+	var ctx: Dictionary = _operator_context.get(player_id, {})
+	var left: int = int(ctx.get("midfly_left", 0))
+	if left <= 0:
+		print("[SkillState] MIDFLY 次数耗尽: %s" % skill_id)
+		return false
+	_operator_context[player_id]["midfly_left"] = left - 1
+	# 球引用：经 input_manager(父) 的 controlled_player.ball_ref（P1-1 注入）或 battle_manager.ball_node
+	var ball = test_ball  # 测试注入口优先
+	var parent = get_parent()
+	if parent != null:
+		var cp = parent.get("controlled_player")
+		if cp != null and is_instance_valid(cp) and cp.get("ball_ref") != null:
+			ball = cp.get("ball_ref")
+	if ball == null:
+		var bm = parent.get("battle_manager") if parent != null else null
+		if bm != null:
+			ball = bm.get("ball_node")
+	if ball == null or not is_instance_valid(ball) or not ball.is_active:
+		print("[SkillState] MIDFLY: 球不在飞行中")
+		return false
+	if ball.has_method("recall_ball"):
+		ball.recall_ball(1)
+	elif ball.has_method("boost_in_flight"):
+		ball.boost_in_flight({})
+	print("[SkillState] MIDFLY 干预: %s 剩余次数 %d" % [skill_id, left - 1])
+	return true
 
 
 ## 取消当前激活的技能（C键）
@@ -132,8 +234,24 @@ func _activate_skill(player_id: int, slot: int) -> void:
 		"activation_time": skill_info.activation_time
 	}
 
+	# 操1 大点2：按 operator 进入激活期子态
+	var operator: String = get_operator(skill_info.skill_id)
+	var substate: int = OperatorSubState.NONE
+	if OPERATOR_SUBSTATE.has(operator):
+		substate = OPERATOR_SUBSTATE[operator]
+	var ctx: Dictionary = {"operator": operator, "substate": substate, "skill_id": skill_info.skill_id, "slot": slot}
+	# OP_MIDFLY：初始化干预次数（tag_params.ball_recall.max_times）
+	if operator == "OP_MIDFLY":
+		var midfly_left := 0
+		var sd: Dictionary = _get_skill_data(skill_info.skill_id)
+		for tag_id in sd.get("tag_params", {}):
+			if tag_id == "ball_recall" or tag_id == "ball_in_flight_boost":
+				midfly_left = maxi(midfly_left, int(sd["tag_params"][tag_id].get("max_times", 0)))
+		ctx["midfly_left"] = midfly_left
+	_operator_context[player_id] = ctx
+
 	skill_activated.emit(skill_info.skill_id, player_id)
-	print("[SkillState] 技能已激活: %s (玩家:%d, 位置:%d)" % [skill_info.skill_id, player_id, slot])
+	print("[SkillState] 技能已激活: %s (玩家:%d, 位置:%d, op=%s)" % [skill_info.skill_id, player_id, slot, operator])
 
 
 ## 取消激活技能
@@ -148,6 +266,7 @@ func _cancel_active_skill(player_id: int) -> void:
 	# 清除激活状态
 	_player_skills[player_id][slot].state = SkillState.IDLE
 	_active_player_skills.erase(player_id)
+	_clear_operator_context(player_id)
 
 	skill_cancelled.emit(skill_id, player_id)
 	print("[SkillState] 技能已取消: %s (玩家:%d)" % [skill_id, player_id])
@@ -163,6 +282,9 @@ func _release_skill(player_id: int, slot: int) -> void:
 
 	# 清除激活记录
 	_active_player_skills.erase(player_id)
+	# 操1 OP_MIDFLY：保留操作上下文（飞行中再按干预需 midfly_left；球结算时经 _release 时清）
+	if get_operator(skill_id) != "OP_MIDFLY":
+		_clear_operator_context(player_id)
 
 	skill_released.emit(skill_id, player_id)
 	print("[SkillState] 技能已释放: %s (玩家:%d)" % [skill_id, player_id])

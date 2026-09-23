@@ -135,6 +135,13 @@ func _on_left_click_press() -> void:
 	if controlled_player == null:
 		return
 
+	# 操1 大点3 输入路由器：激活技能处于点选/标记/瞄准子态时，左键=确认（不走发球）
+	if skill_state_manager != null and controlled_player != null:
+		var sub: String = skill_state_manager.get_operator_substate(controlled_player.get_instance_id())
+		if sub in ["AIMING", "SELECTING", "MARKING"]:
+			skill_state_manager.confirm_substate(controlled_player.get_instance_id())
+			return
+
 	if controlled_player.is_carrying_ball:
 		# 持球：进入瞄准状态
 		is_aiming = true
@@ -282,6 +289,21 @@ func _process(delta: float) -> void:
 	else:
 		controlled_player.facing_direction = (mouse_world_pos - controlled_player.global_position).normalized()
 	player_facing_updated.emit(controlled_player, controlled_player.facing_direction)
+
+	# 操1 大点5：AIMING 子态 → 3D 世界空间 AIM 预览跟随（2D 模式/无载体时静默=2D 兜底）
+	var _ofb = get_tree().get_first_node_in_group("operator_feedback_3d") if is_inside_tree() else null
+	if _ofb != null and skill_state_manager != null and controlled_player != null:
+		var sub: String = skill_state_manager.get_operator_substate(controlled_player.get_instance_id())
+		var op: String = skill_state_manager.get_active_operator(controlled_player.get_instance_id())
+		if sub == "AIMING" and op == "OP_AIM":
+			if not _ofb.has_meta("aim_shown"):
+				_ofb.set_meta("aim_shown", true)
+				_ofb.show_aim_preview(controlled_player.global_position, controlled_player.facing_direction)
+			else:
+				_ofb.update_aim_preview_dir(controlled_player.facing_direction)
+		elif _ofb.has_meta("aim_shown"):
+			_ofb.remove_meta("aim_shown")
+			_ofb.hide_aim_preview()
 	
 	# 更新瞄准信息（始终发送，确保取消时能清除）
 	aim_info_updated.emit(get_aim_info())

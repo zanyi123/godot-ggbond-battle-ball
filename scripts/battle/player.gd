@@ -1055,6 +1055,10 @@ func try_jump() -> bool:
 	print("[Player] %s 起跳! 跳高≈%.0fpx 耐力-%.0f 剩余%.0f" % [
 		char_data.get("name", "?"), JUMP_INITIAL_VZ * JUMP_INITIAL_VZ / (2.0 * JUMP_GRAVITY_Z),
 		JUMP_ENDURANCE_COST, endurance])
+	# 操1 OP_KEY_JUMP：跳跃入事件总线（operator=KEY_JUMP 的技能订阅触发）
+	var _jump_bus = get_tree().get_first_node_in_group("battle_event_bus") if is_inside_tree() else null
+	if _jump_bus:
+		_jump_bus.emit_event(BattleEventBus.GameEvent.ACTION_JUMPED, {"player": self})
 	return true
 
 
