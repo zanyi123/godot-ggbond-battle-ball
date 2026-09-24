@@ -114,6 +114,7 @@ func _run() -> void:
 		["光明护盾", {"player_shield_obstacle": {"shape": "rect", "width": 120.0, "height": 24.0, "hp": 280.0, "duration": 10.0}}],
 		["光明飞弹", {"ball_dmg_up_pct": {"value": 25.0}, "ball_speed_up_pct": {"multiplier": 1.25}}],
 		["必中机制(队伍特性)", {"ball_sure_hit": {}}],
+		["风之屏障(接线补遗后)", {"field_drain_wall": {"duration": 8.0, "width": 140.0, "height": 26.0, "capture_radius": 60.0, "absorb_pull": 300.0, "drain_hold": 2.0}}],
 		["爆裂轰击", {"ball_speed_up_pct": {"multiplier": 2.0}}],
 		["慢悠悠光线(⚠分效备案)", {"player_charge_stock": {"duration": 20.0, "charges": 6}}],
 		["钢铁皮肤(⚠击退免疫备案)", {"player_def_up_pct": {"value": 50.0, "duration": 8.0}}],
@@ -139,12 +140,23 @@ func _run() -> void:
 		_assert("组合可执行: " + skill_name, all_ok)
 
 	# ===== 特殊点核验 =====
-	# ⓪ 削能墙标签接线核验（风之屏障，18 表原标 ✅(波7后)）：障碍层已落地（test_wave7_finale 直测
-	#    create_obstacle+setup_drain），但 handler 标签分发 _apply_field_drain_wall 无实现
-	#    （base_route.gd 派发 call() 落空静默返回空）——复核缺口，按 R3 上报不顺手修
+	# ⓪ 削能墙标签接线核验（风之屏障；2026-09-24 小工单主人批准后接线）：
+	#    分发 _apply_field_drain_wall 已实现（field_route，放置流同 obs_add）；
+	#    create_obstacle 统一注入 drain 参数（setup_drain 钩子，无需手动二次调用）
 	var drain_result: Dictionary = handler._do_apply_tag("field_drain_wall", {"duration": 8.0}, p1.get_instance_id())
-	_assert("削能墙接线缺口钉住: field_drain_wall 当前未接线(返回空/不成功)", drain_result.is_empty() or not bool(drain_result.get("success", false)))
-	_issues.append("上报(R3): 风之屏障 18 表 ✅(波7后) 应修正为 ⚠——field_drain_wall 标签分发 _apply_field_drain_wall 未实现（base_route.gd:453 派发落空静默返回空，生产配技同样无效），波7 障碍层已落地仅差管道接线，需小工单补")
+	_assert("削能墙接线: 标签分发返回 success", bool(drain_result.get("success", false)))
+	var drain_mgr = load("res://scripts/battle/obstacle_manager.gd").new()
+	root.add_child(drain_mgr)
+	drain_mgr.ball_ref = null
+	await process_frame
+	var p_wall := {"shape": "rect", "width": 140.0, "height": 26.0, "hp": 9999.0, "duration": 8.0,
+		"capture_radius": 60.0, "absorb_pull": 300.0, "drain_hold": 2.0}
+	var wall = drain_mgr.create_obstacle(p_wall.duplicate(), Vector2(120, 0), 0.0, "res://scripts/battle/drain_wall.gd")
+	await process_frame
+	_assert("削能墙接线: create_obstacle 钩子注入 drain 参数", is_instance_valid(wall) \
+		and absf(float(wall.capture_radius) - 60.0) < 0.01 \
+		and absf(float(wall.absorb_pull) - 300.0) < 0.01 \
+		and absf(float(wall.drain_hold) - 2.0) < 0.01)
 
 	# ① 能量强化（芬尼队）：18 表标 ✅（next_skill_mult 管道已有）——管道在 player.gd，registry 无标签条目
 	var has_tag := false

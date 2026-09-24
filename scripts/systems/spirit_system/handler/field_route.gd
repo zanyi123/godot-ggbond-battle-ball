@@ -34,6 +34,33 @@ func _apply_field_obs_add(params: Dictionary) -> void:
 	])
 
 
+## 波7 #6b 管道接线（2026-09-24 小工单，主人批准）：削能墙标签 → drain_wall.gd 障碍
+## 交互=放置态（同 field_obs_add：鼠移预览→左键生成，01 检验单"风之屏障"行）
+## 障碍生成与 drain 参数注入由 obstacle_manager.create_obstacle 统一完成（obstacle_script 覆盖+setup_drain 钩子）
+func _apply_field_drain_wall(params: Dictionary, caster_id: int) -> void:
+	var manager = _get_obstacle_manager()
+	if not manager:
+		push_error("[TagEffectHandler] 找不到 ObstacleManager")
+		return
+
+	if not params.has("element_color"):
+		params["element_color"] = _get_element_color(str(params.get("element", "")))
+	if not params.has("source_skill"):
+		params["source_skill"] = str(params.get("skill_id", ""))
+	var caster_node = _get_caster(caster_id)
+	if caster_node:
+		params["caster_position"] = caster_node.global_position
+	params["obstacle_script"] = "res://scripts/battle/drain_wall.gd"
+
+	var mouse_ops: int = int(params.get("mouse_ops", 1))
+	manager.start_placing(params, mouse_ops)
+	print("[TagEffectHandler] 削能墙: capture=%.0f pull=%.0f hold=%.1fs dur=%.0fs mouse_ops=%d" % [
+		float(params.get("capture_radius", 90.0)), float(params.get("absorb_pull", 240.0)),
+		float(params.get("drain_hold", 2.0)), float(params.get("duration", 10.0)),
+		mouse_ops
+	])
+
+
 func _apply_field_obs_clear(params: Dictionary) -> void:
 	"""清除障碍标签：进入鼠标清除模式"""
 	var manager = _get_obstacle_manager()

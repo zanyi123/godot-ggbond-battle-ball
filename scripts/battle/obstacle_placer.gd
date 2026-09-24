@@ -240,7 +240,9 @@ func _place_obstacle() -> void:
 			var dir: Vector2 = (mouse_pos - caster_pos).normalized()
 			rotation = dir.angle()
 
-	manager.create_obstacle(place_params, mouse_pos, rotation)
+	# 削能墙等子类经 params.obstacle_script 覆盖障碍脚本（波7 接线补遗）
+	var obs_script: String = str(place_params.get("obstacle_script", "res://scripts/battle/obstacle.gd"))
+	manager.create_obstacle(place_params, mouse_pos, rotation, obs_script)
 	remaining_ops -= 1
 
 	print("[ObstaclePlacer] 放置障碍物 pos=(" + str(snapped(mouse_pos.x, 1.0)) + "," + str(snapped(mouse_pos.y, 1.0)) + ") 剩余操作=" + str(remaining_ops))

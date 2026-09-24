@@ -71,6 +71,10 @@ func create_obstacle(params: Dictionary, position: Vector2, rotation: float = 0.
 	# 初始化参数（创建碰撞形状、视觉等）
 	obstacle.setup(params)
 
+	# 波7 接线补遗：削能墙子类 drain 参数经 create_obstacle 统一注入（放置流程/直建路径都覆盖）
+	if obstacle.has_method("setup_drain"):
+		obstacle.setup_drain(params)
+
 	# 连接信号
 	obstacle.obstacle_destroyed.connect(_on_obstacle_destroyed)
 	obstacle.obstacle_expired.connect(_on_obstacle_expired)
