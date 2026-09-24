@@ -125,7 +125,29 @@ func _run() -> void:
 			all_enum_ok = false
 	_assert("校验: 12 枚举合法值全部不报 operator 错", all_enum_ok)
 
-	# ===== ⑤ 落盘清洁：删除临时技+还原原文 =====
+	# ===== ⑤ 操2 大点1.5：操作维度总开关（关闭=全按 OP_AUTO；不改接口签名）=====
+	var sm: Node = sm_script.new()
+	root.add_child(sm)
+	_assert("总开关: 默认开启", bool(sm.operator_system_enabled) == true)
+	# 临时写入一个 OP_AIM 技能（读盘路径，备份在先）
+	var sm_backup: String = FileAccess.get_file_as_string("res://data/spirits/skills.json")
+	var sm_skills: Array = DevDataSync.load_skills()
+	sm_skills.append({"id": "test_op_toggle", "name": "临时开关测试技", "type": "active", "element": "雷火",
+		"tags": [], "tag_params": {}, "operator": "OP_AIM", "description": "t"})
+	DevDataSync.save_skills(sm_skills)
+	await process_frame
+	_assert("总开关: 开启时 OP_AIM 技能读出 OP_AIM", str(sm.get_operator("test_op_toggle")) == "OP_AIM")
+	sm.operator_system_enabled = false
+	_assert("总开关: 关闭时同一技能回落 OP_AUTO", str(sm.get_operator("test_op_toggle")) == "OP_AUTO")
+	sm.operator_system_enabled = true
+	_assert("总开关: 重新开启恢复 OP_AIM", str(sm.get_operator("test_op_toggle")) == "OP_AIM")
+	# 还原数据（R1 落盘清洁）
+	var wf2 := FileAccess.open("res://data/spirits/skills.json", FileAccess.WRITE)
+	wf2.store_string(sm_backup)
+	wf2.close()
+	_assert("总开关: 测试后 skills.json 还原一致", FileAccess.get_file_as_string("res://data/spirits/skills.json") == sm_backup)
+
+	# ===== ⑥ 落盘清洁：删除临时技+还原原文 =====
 	var wf := FileAccess.open("res://data/spirits/skills.json", FileAccess.WRITE)
 	wf.store_string(_raw_backup)
 	wf.close()

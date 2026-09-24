@@ -57,8 +57,15 @@ const OPERATOR_SUBSTATE: Dictionary = {
 var _operator_context: Dictionary = {}
 var test_ball: Node = null  # 测试注入口（MIDFLY 干预目标球；生产走 controlled_player.ball_ref 链）
 
-## 读技能 operator（缺省 OP_AUTO；非法值回落 AUTO）
+# 操2 大点1.5（2026-09-24 规划追加）：操作维度总开关（副系统"可开关"规范）
+# 关闭时 get_operator 一律返回 OP_AUTO（子态/干预/跳跃/标记路由全旁路，行为=无此系统）；
+# 不改任何接口签名；默认开启
+var operator_system_enabled: bool = true
+
+## 读技能 operator（缺省 OP_AUTO；非法值回落 AUTO；总开关关闭时强制 AUTO）
 func get_operator(skill_id: String) -> String:
+	if not operator_system_enabled:
+		return "OP_AUTO"
 	var op := str(_get_skill_data(skill_id).get("operator", "OP_AUTO"))
 	return op if op in OPERATORS else "OP_AUTO"
 
