@@ -31,7 +31,8 @@ fi
 
 # 健康检查阈值（与 baseline.json 的 hard_rules 对应，写死避免 JSON 解析）
 HARD_STUCK_MAX=0
-HARD_CATCHRATE_MIN=0.8
+HARD_CATCHRATE_MIN=50    # 传球率硬危险线（百分口径；P4 附带发现修正：原 0.8 分数与百分数比较恒通过，2026-09-25 主人批）
+WARN_CATCHRATE_MIN=80    # 传球率警告线（50~80=对抗波动提示人工看）
 HARD_HIT_MIN=1
 WARN_STATE_MIN=30
 WARN_STATE_MAX=130
@@ -88,9 +89,14 @@ for ((i=0; i<COUNT; i++)); do
   if [ "$STUCK" -gt "$HARD_STUCK_MAX" ]; then
     DANGER="$DANGER 卡死$STUCK次"; RATING="✗"; TOTAL_DANGER=$((TOTAL_DANGER+1))
   fi
-  RATE_OK=$(awk "BEGIN{print ($CATCH_RATE>=$HARD_CATCHRATE_MIN)?1:0}")
-  if [ "$RATE_OK" = "0" ]; then
+  RATE_DANGER=$(awk "BEGIN{print ($CATCH_RATE<$HARD_CATCHRATE_MIN)?1:0}")
+  RATE_WARN=$(awk "BEGIN{print ($CATCH_RATE>=$HARD_CATCHRATE_MIN && $CATCH_RATE<$WARN_CATCHRATE_MIN)?1:0}")
+  if [ "$RATE_DANGER" = "1" ]; then
     DANGER="$DANGER 传球率${CATCH_RATE}%"; RATING="✗"; TOTAL_DANGER=$((TOTAL_DANGER+1))
+  elif [ "$RATE_WARN" = "1" ]; then
+    WARNINGS="$WARNINGS 传球率偏低(${CATCH_RATE}%,对抗波动/敌方拦截强)"
+    if [ "$RATING" != "✗" ]; then RATING="⚠"; fi
+    TOTAL_WARN=$((TOTAL_WARN+1))
   fi
   if [ "$HIT" -lt "$HARD_HIT_MIN" ]; then
     DANGER="$DANGER 零击中"; RATING="✗"; TOTAL_DANGER=$((TOTAL_DANGER+1))
