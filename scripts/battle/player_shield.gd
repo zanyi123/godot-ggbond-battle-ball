@@ -44,6 +44,8 @@ func _follow_caster() -> void:
 	var facing = caster_node.get("facing_direction")
 	var dir: Vector2 = facing if facing is Vector2 and facing.length() > 0.1 else Vector2.RIGHT
 	global_position = caster_node.global_position + dir.normalized() * follow_offset
+	# 项5（操控规划/05 §3.5）第一视角技能跟随：盾体朝向持续跟随释放者面向（鼠移/FP 视线已折算到 facing_direction）
+	rotation = dir.angle()
 
 
 ## 对外只读接口（05 §二）

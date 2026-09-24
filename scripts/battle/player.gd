@@ -1013,9 +1013,21 @@ func _physics_process(delta: float) -> void:
 		var im: Node = get_parent().get_node_or_null("InputManager") if get_parent() else null
 		if im and im.get("fp_mode") == true:
 			var ax := Input.get_axis("move_left", "move_right")
+			# 项1（操控规划/05 §1）：技能操控期左右键迁移为视角偏转（A/D 不再横移）
+			if im and im.has_method("is_skill_control_active") and im.is_skill_control_active():
+				ax = 0.0
 			var ay := Input.get_axis("move_up", "move_down")
 			var fp_move: Vector2 = im.compute_fp_move(ax, ay)
 			velocity = fp_move * move_speed if fp_move != Vector2.ZERO else Vector2.ZERO
+			move_and_slide()
+			_clamp_to_field()
+			return
+
+	# 项1（操控规划/05 §1）：技能操控窗口（大相机）——WASD/SPC 控制权迁移到技能，球员本尊冻结
+	if is_player_controlled:
+		var im2: Node = get_parent().get_node_or_null("InputManager") if get_parent() else null
+		if im2 and im2.has_method("is_skill_control_active") and im2.is_skill_control_active():
+			velocity = Vector2.ZERO
 			move_and_slide()
 			_clamp_to_field()
 			return

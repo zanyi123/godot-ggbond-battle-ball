@@ -43,14 +43,15 @@ const OPERATORS: Array[String] = [
 ]
 
 ## 激活后的操作子态
-enum OperatorSubState { NONE, AIMING, SELECTING, MARKING, STEERING, TOGGLED }
+enum OperatorSubState { NONE, AIMING, SELECTING, MARKING, STEERING, TOGGLED, SUMMONING }
 
-## operator → 激活期子态映射（AUTO/PLACE/KEY_JUMP/SUMMON/FP/MIDFLY/COMBO 激活期无子态）
+## operator → 激活期子态映射（AUTO/PLACE/KEY_JUMP/FP/MIDFLY/COMBO 激活期无子态）
 const OPERATOR_SUBSTATE: Dictionary = {
 	"OP_AIM": OperatorSubState.AIMING,
 	"OP_POINT": OperatorSubState.SELECTING,
 	"OP_MARK": OperatorSubState.MARKING,
 	"OP_TOGGLE": OperatorSubState.TOGGLED,
+	"OP_SUMMON": OperatorSubState.SUMMONING,
 }
 
 # 每玩家当前操作上下文 {player_id: {operator, substate, skill_id, slot, midfly_left}}
@@ -87,17 +88,152 @@ func get_active_operator(player_id: int) -> String:
 		return str(_operator_context[player_id].get("operator", "OP_AUTO"))
 	return ""
 
-## 左键确认（AIMING/SELECTING/MARKING 子态的左键推进）：释放技能走既有链
+## 左键确认（既有入口，兼容）：普通子态直接释放；再击/召唤走 confirm_substate_at
 func confirm_substate(player_id: int) -> bool:
+	return confirm_substate_at(player_id, Vector2.ZERO) != ""
+
+## 操1 增补（操控规划/05）：带世界坐标的左键推进（再击两段/三段、召唤、普通确认）
+## 返回动作名："released"=真释放 / "selected"=再击第一段仅选中 / "summoned"=召唤指令 / ""=无上下文不消费
+## last_confirm_info 留存最近一次推进详情（测试/上层可读）
+var last_confirm_info: Dictionary = {}
+
+func confirm_substate_at(player_id: int, world_pos: Vector2) -> String:
+	last_confirm_info = {}
+	if not _operator_context.has(player_id):
+		return ""
+	var ctx: Dictionary = _operator_context[player_id]
+	var sub: int = int(ctx.get("substate", 0))
+
+	# 项7 SUMMON 基础版：左键地面 = 召唤体移动/出现到指定位置（v1 点击式；无召唤体告警不崩溃）
+	if sub == OperatorSubState.SUMMONING:
+		ctx["summon_order"] = {"position": world_pos}
+		_release_skill(player_id, int(ctx["slot"]))
+		_notify_summon_order(player_id, world_pos)
+		last_confirm_info = {"action": "summoned", "position": world_pos}
+		_operator_context.erase(player_id)
+		return "summoned"
+
+	# 项2 左键再击（05 §3.2）：stage1=选中对象不生效；stage2=真释放（direction 型由选中点→当前鼠标定向）
+	var stage: int = int(ctx.get("reclick_stage", 0))
+	if stage == 1:
+		ctx["selected"] = {"position": world_pos}
+		ctx["reclick_stage"] = 2
+		last_confirm_info = {"action": "selected", "position": world_pos}
+		return "selected"
+	if stage == 2:
+		var sel: Dictionary = ctx.get("selected", {})
+		var aim_dir: Vector2 = (world_pos - sel.get("position", world_pos)).normalized()
+		if str(ctx.get("reclick_mode", "")) == "direction" and aim_dir.length_squared() > 0.0001:
+			sel["direction"] = aim_dir
+			ctx["selected"] = sel
+		_release_skill(player_id, int(ctx["slot"]))
+		last_confirm_info = {"action": "released", "position": world_pos, "selected": sel.duplicate(true)}
+		_operator_context.erase(player_id)
+		return "released"
+
+	# 普通子态：直接释放（既有行为）
+	if sub in [OperatorSubState.AIMING, OperatorSubState.SELECTING, OperatorSubState.MARKING]:
+		_release_skill(player_id, int(ctx["slot"]))
+		last_confirm_info = {"action": "released", "position": world_pos}
+		_operator_context.erase(player_id)
+		return "released"
+	return ""
+
+## 项3 拖长击（05 §3.3）：松开时 a 对 b 作用——选中记录 a/b 两端后释放（v1 目标写入 selected 供效果链消费）
+func confirm_drag(player_id: int, a_pos: Vector2, b_node: Node2D, b_pos: Vector2) -> bool:
 	if not _operator_context.has(player_id):
 		return false
 	var ctx: Dictionary = _operator_context[player_id]
-	var sub: int = int(ctx.get("substate", 0))
-	if sub in [OperatorSubState.AIMING, OperatorSubState.SELECTING, OperatorSubState.MARKING]:
-		_release_skill(player_id, int(ctx["slot"]))
-		_operator_context.erase(player_id)
+	ctx["selected"] = {"position": b_pos, "source_position": a_pos, "drag_target": b_node}
+	_release_skill(player_id, int(ctx["slot"]))
+	last_confirm_info = {"action": "released", "drag": true, "source_position": a_pos, "position": b_pos}
+	_operator_context.erase(player_id)
+	return true
+
+## 项4 右键=取消选中（05 §3.4）：清选中/重置再击段数，子态保留可重选（不整段取消激活）
+func clear_substate_selection(player_id: int) -> bool:
+	if not _operator_context.has(player_id):
+		return false
+	var ctx: Dictionary = _operator_context[player_id]
+	if not ctx.has("reclick_stage") and not ctx.has("selected"):
+		return false
+	ctx.erase("selected")
+	if ctx.has("reclick_stage"):
+		ctx["reclick_stage"] = 1
+	return true
+
+## 项1 按键迁移窗口（05 §1）：STEER 类激活期（操1 设计：STEER 无激活子态，激活即窗口）+ STEERING 子态（前瞻兼容）
+## 投出后飞行段由 input_manager 依球 _manual_active 补判；MIDFLY 为按键干预型无向量语义，不进迁移窗口（上报备注）
+func is_key_migration_active(player_id: int) -> bool:
+	if not operator_system_enabled:
+		return false
+	if not _operator_context.has(player_id):
+		return false
+	var ctx: Dictionary = _operator_context[player_id]
+	if str(ctx.get("operator", "")) == "OP_STEER":
 		return true
+	return int(ctx.get("substate", 0)) == OperatorSubState.STEERING
+
+## 项3 拖长击参数：snap 吸附半径（skill params.snap_radius，缺省 80）
+func get_drag_snap_radius(player_id: int) -> float:
+	if not _operator_context.has(player_id):
+		return 80.0
+	var sd: Dictionary = _get_skill_data(str(_operator_context[player_id].get("skill_id", "")))
+	var p: Dictionary = sd.get("params", {})
+	if p.has("snap_radius"):
+		return float(p["snap_radius"])
+	for tag_id in sd.get("tag_params", {}):
+		var tp: Dictionary = sd["tag_params"][tag_id]
+		if tp.has("snap_radius"):
+			return float(tp["snap_radius"])
+	return 80.0
+
+## 项7 召唤指令下发（v1：无召唤体登记时告警不崩溃；实体登记随 S5）
+func _notify_summon_order(player_id: int, world_pos: Vector2) -> void:
+	var summons: Array = []
+	var parent = get_parent()
+	if parent != null:
+		var cp = parent.get("controlled_player")
+		if cp != null and is_instance_valid(cp):
+			var s = cp.get("summons")
+			if s is Array:
+				summons = s
+	if summons.is_empty():
+		print("[SkillState] SUMMON: 无召唤体可指挥（v1 点击式，实体登记随 S5） pos=%s" % str(world_pos))
+		return
+	for s in summons:
+		if is_instance_valid(s) and s.has_method("order_move_to"):
+			s.order_move_to(world_pos)
+
+## 项2 reclick 标记读取：skill params.reclick 或任一 tag_params.reclick（true=两段式；"direction"=三段式定弧口）
+func _skill_reclick_mode(skill_id: String) -> String:
+	var sd: Dictionary = _get_skill_data(skill_id)
+	var p: Dictionary = sd.get("params", {})
+	if p.has("reclick"):
+		var rv := str(p["reclick"])
+		return "true" if rv == "true" else rv
+	for tag_id in sd.get("tag_params", {}):
+		var tp: Dictionary = sd["tag_params"][tag_id]
+		if tp.has("reclick"):
+			var tv := str(tp["reclick"])
+			return "true" if tv == "true" else tv
+	return ""
+
+## 项3 drag 标记读取：skill params.drag 或任一 tag_params.drag == true（str 比较防 JSON 布尔/字符串混型）
+func _skill_drag_enabled(skill_id: String) -> bool:
+	var sd: Dictionary = _get_skill_data(skill_id)
+	if str(sd.get("params", {}).get("drag", "false")) == "true":
+		return true
+	for tag_id in sd.get("tag_params", {}):
+		if str(sd["tag_params"][tag_id].get("drag", "false")) == "true":
+			return true
 	return false
+
+## 项3：当前激活技能是否启用拖长击（input_manager 路由查询口）
+func is_drag_skill(player_id: int) -> bool:
+	if not _operator_context.has(player_id):
+		return false
+	return _skill_drag_enabled(str(_operator_context[player_id].get("skill_id", "")))
 
 ## 取消（C/再按）：清操作上下文
 func _clear_operator_context(player_id: int) -> void:
@@ -255,6 +391,11 @@ func _activate_skill(player_id: int, slot: int) -> void:
 			if tag_id == "ball_recall" or tag_id == "ball_in_flight_boost":
 				midfly_left = maxi(midfly_left, int(sd["tag_params"][tag_id].get("max_times", 0)))
 		ctx["midfly_left"] = midfly_left
+	# 项2 左键再击（05 §3.2）：reclick 技能第一段左键=选中（不生效），第二段=真释放；"direction"=三段式定弧口
+	var reclick_mode := _skill_reclick_mode(skill_info.skill_id)
+	if reclick_mode != "":
+		ctx["reclick_mode"] = reclick_mode
+		ctx["reclick_stage"] = 1
 	_operator_context[player_id] = ctx
 
 	skill_activated.emit(skill_info.skill_id, player_id)

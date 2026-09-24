@@ -28,6 +28,12 @@ const FP_PITCH_MIN: float = deg_to_rad(-60.0)
 const FP_PITCH_MAX: float = deg_to_rad(30.0)
 const FP_MOUSE_SENS: float = 0.003   # 鼠标灵敏度（弧度/像素）
 
+# 操1 增补（操控规划/05）：项1 按键迁移偏航增量 + 项3 拖长击状态
+const STEER_KEY_TURN_SPEED: float = 2.6   # A/D 朝向偏转速率（弧度/秒，≈150°/s）
+var _skill_control_yaw: float = 0.0       # 本帧按键偏转增量（注入方向=facing 旋转此值）
+var _drag_state: Dictionary = {"active": false, "a_pos": Vector2.ZERO, "b": null}
+var _drag_ring_on: bool = false           # 拖动吸附高亮圈开关（功能性显示）
+
 # 鼠标光标圆环动画
 var cursor_ring_timer: float = 0.0
 const CURSOR_RING_MAX_RADIUS: float = 25.0  # 直径50像素 = 半径25像素
@@ -77,9 +83,10 @@ func _input(event: InputEvent) -> void:
 			quick_command_requested.emit(1)  # 传球给我
 		elif event.keycode == 57:   # KEY_9
 			quick_command_requested.emit(2)  # 别传球
-		# Tab切换球员
+		# Tab（项6 操控规划/05 §4）：激活/子态期=技能状态切换；无激活=既有切换球员（上下文分流）
 		elif event.keycode == KEY_TAB:
-			_cycle_player()
+			if not _tab_skill_state_switch():
+				_cycle_player()
 		# P2 E键：第一人称进出（独立按键，不涉既有鼠标操作）
 		elif event.keycode == KEY_E:
 			toggle_fp_mode()
@@ -135,11 +142,21 @@ func _on_left_click_press() -> void:
 	if controlled_player == null:
 		return
 
-	# 操1 大点3 输入路由器：激活技能处于点选/标记/瞄准子态时，左键=确认（不走发球）
-	if skill_state_manager != null and controlled_player != null:
+	# 项3（操控规划/05 §3.3）拖长击：drag 技能激活期左键按下=选 a（拖动吸附检测，松开作用；大相机限定）
+	if not _drag_state.active and not fp_mode and skill_state_manager != null:
+		var player_id = controlled_player.get_instance_id()
+		var sub: String = skill_state_manager.get_operator_substate(player_id)
+		if sub != "" and skill_state_manager.is_drag_skill(player_id):
+			_drag_state = {"active": true, "a_pos": controlled_player.global_position, "b": null}
+			return
+
+	# 操1 大点3 输入路由器（增补：带坐标推进=再击两段/三段、召唤指定点；不走发球）
+	# drag 技能排除：其确认由"按下-拖动-松开"手势完成，press 不做普通确认（FP 下拖动不可用=该技无操作）
+	if skill_state_manager != null:
 		var sub: String = skill_state_manager.get_operator_substate(controlled_player.get_instance_id())
-		if sub in ["AIMING", "SELECTING", "MARKING"]:
-			skill_state_manager.confirm_substate(controlled_player.get_instance_id())
+		if sub != "" and not skill_state_manager.is_drag_skill(controlled_player.get_instance_id()) \
+				and sub in ["AIMING", "SELECTING", "MARKING", "SUMMONING"]:
+			skill_state_manager.confirm_substate_at(controlled_player.get_instance_id(), mouse_world_pos)
 			return
 
 	if controlled_player.is_carrying_ball:
@@ -152,6 +169,18 @@ func _on_left_click_press() -> void:
 
 func _on_left_click_release() -> void:
 	if controlled_player == null:
+		return
+
+	# 项3 拖长击：松开=a 对 b 作用（有吸附对象）或取消选中（无 b，子态保留可重选）
+	if _drag_state.active:
+		var b = _drag_state.b
+		var a_pos: Vector2 = _drag_state.a_pos
+		_drag_state = {"active": false, "a_pos": Vector2.ZERO, "b": null}
+		_set_drag_ring(null)
+		if b != null and skill_state_manager != null:
+			skill_state_manager.confirm_drag(controlled_player.get_instance_id(), a_pos, b, b.global_position)
+		elif skill_state_manager != null:
+			skill_state_manager.clear_substate_selection(controlled_player.get_instance_id())
 		return
 
 	# 缴械检查：灯亮则不能投球
@@ -205,7 +234,14 @@ func _on_left_click_release() -> void:
 func _on_right_click_press() -> void:
 	if controlled_player == null:
 		return
-	
+
+	# 项4（操控规划/05 §3.4）右键=取消选中：SELECTING/MARKING 子态清选中（子态保留可重选），不整段取消激活
+	if skill_state_manager != null:
+		var sub: String = skill_state_manager.get_operator_substate(controlled_player.get_instance_id())
+		if sub in ["SELECTING", "MARKING"]:
+			skill_state_manager.clear_substate_selection(controlled_player.get_instance_id())
+			return
+
 	if is_aiming:
 		# 预发球中右键取消
 		is_aiming = false
@@ -235,6 +271,85 @@ func _cycle_player() -> void:
 	var current_idx := all_team_players.find(controlled_player)
 	var next_idx := (current_idx + 1) % all_team_players.size()
 	player_switch_requested.emit(next_idx)
+
+
+## 项6（操控规划/05 §4）Tab 多重技能状态切换：激活/子态期消费 Tab，返回是否消费
+## TOGGLED=再按同键语义（切换/关闭，复用既有按键路径）；其它子态=保留（v1 无多状态档）；无激活=false→切球员
+func _tab_skill_state_switch() -> bool:
+	if skill_state_manager == null or controlled_player == null:
+		return false
+	var player_id = controlled_player.get_instance_id()
+	var sub: String = skill_state_manager.get_operator_substate(player_id)
+	if sub == "":
+		return false
+	if sub == "TOGGLED":
+		var active = skill_state_manager.get_active_skill(player_id)
+		if not active.is_empty():
+			skill_state_manager.on_skill_key_pressed(player_id, active.slot)
+		return true
+	print("[InputManager] Tab: 子态 %s 期保留（无多状态档切换，v1）" % sub)
+	return true
+
+
+## 项1（操控规划/05 §1）技能操控窗口：STEER 类激活期 或 球飞行手动态（波6 #17）——WASD/SPC 控制权在技能
+func is_skill_control_active() -> bool:
+	if skill_state_manager != null and controlled_player != null:
+		if skill_state_manager.is_key_migration_active(controlled_player.get_instance_id()):
+			return true
+		var b = controlled_player.get("ball_ref")
+		if b != null and is_instance_valid(b) and b.get("_manual_active") == true:
+			return true
+	return false
+
+
+## 项3 拖长击吸附检测：鼠标附近 snap 半径内最近敌方=可作用对象 b（名册优先，组兜底）
+func _find_drag_candidate() -> Node2D:
+	if controlled_player == null:
+		return null
+	var snap_radius: float = 80.0
+	if skill_state_manager != null:
+		snap_radius = skill_state_manager.get_drag_snap_radius(controlled_player.get_instance_id())
+	var my_team: String = str(controlled_player.get("team"))
+	var candidates: Array = []
+	var bm = get_parent().get("battle_manager") if get_parent() else null
+	if bm != null:
+		var enemy_team: Array = bm.get("team_b_players") if my_team == "a" else bm.get("team_a_players")
+		if enemy_team is Array:
+			candidates = enemy_team
+	if candidates.is_empty() and is_inside_tree():
+		for n in get_tree().get_nodes_in_group("players"):
+			if n != controlled_player and str(n.get("team")) != my_team:
+				candidates.append(n)
+	var best: Node2D = null
+	var best_d := snap_radius
+	for c in candidates:
+		if c == null or not is_instance_valid(c) or c.get("is_defeated") == true:
+			continue
+		var d: float = (c as Node2D).global_position.distance_to(mouse_world_pos)
+		if d <= best_d:
+			best_d = d
+			best = c
+	return best
+
+
+## 项3 拖动吸附高亮（功能性显示：3D 目标圈；无 3D 载体时静默）
+func _set_drag_ring(candidate: Node2D) -> void:
+	var _ofb = get_tree().get_first_node_in_group("operator_feedback_3d") if is_inside_tree() else null
+	if _ofb == null:
+		return
+	if candidate != null:
+		_ofb.show_target_ring((candidate as Node2D).global_position)
+		_drag_ring_on = true
+	elif _drag_ring_on:
+		_ofb.clear_target_ring()
+		_drag_ring_on = false
+
+
+## 项1 双源合成（纯函数可测）：基础朝向（鼠标/FP 折算）+ 按键偏转增量
+func compose_steer_direction(base_dir: Vector2, key_yaw: float) -> Vector2:
+	if absf(key_yaw) < 0.0001:
+		return base_dir
+	return base_dir.rotated(key_yaw)
 
 
 func set_controlled_player(player: CharacterBody2D) -> void:
@@ -308,12 +423,31 @@ func _process(delta: float) -> void:
 	# 更新瞄准信息（始终发送，确保取消时能清除）
 	aim_info_updated.emit(get_aim_info())
 
-	# 波6 #17 手动制导：主控球员的飞行球处于手动态时，球方向=球员朝向（鼠标/FP视线已折算）
+	# 项1（操控规划/05 §1）按键迁移：技能操控窗口内 A/D=朝向偏转增量（FP 下=视角偏转），注入方向双源叠加
+	_skill_control_yaw = 0.0
+	var migration := is_skill_control_active()
+	if migration:
+		var key_yaw := 0.0
+		if Input.is_key_pressed(KEY_A):
+			key_yaw += 1.0
+		if Input.is_key_pressed(KEY_D):
+			key_yaw -= 1.0
+		_skill_control_yaw = key_yaw * STEER_KEY_TURN_SPEED * delta
+		if fp_mode and key_yaw != 0.0:
+			fp_yaw = fposmod(fp_yaw + key_yaw * STEER_KEY_TURN_SPEED * delta, TAU)
+
+	# 波6 #17 手动制导（项1 双源）：方向=球员朝向（鼠标/FP 折算）+ A/D 偏转增量叠加
 	if controlled_player.has_method("get") and controlled_player.get("ball_ref") != null:
 		var steer_ball = controlled_player.get("ball_ref")
 		if is_instance_valid(steer_ball) and steer_ball.is_active \
 				and steer_ball.get("_manual_active") == true and steer_ball.has_method("manual_steer"):
-			steer_ball.manual_steer(controlled_player.facing_direction)
+			var steer_dir: Vector2 = compose_steer_direction(controlled_player.facing_direction, _skill_control_yaw)
+			steer_ball.manual_steer(steer_dir)
+
+	# 项3 拖长击：拖动中吸附检测（附近敌方=可作用对象 b；大相机限定），目标圈高亮为功能性显示
+	if _drag_state.active and not fp_mode:
+		_drag_state.b = _find_drag_candidate()
+		_set_drag_ring(_drag_state.b)
 
 	# 更新鼠标圆环动画
 	cursor_ring_timer += delta * CURSOR_RING_ANIMATION_SPEED
