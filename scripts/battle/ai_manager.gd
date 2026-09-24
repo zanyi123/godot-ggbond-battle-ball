@@ -1795,8 +1795,7 @@ func _move(ap: Dictionary, delta: float) -> void:
 				ap.stuck_timer = 0.0
 
 			if ap.get("stuck_timer", 0.0) > 1.0:
-				if match_stats:
-					match_stats.record_stuck(ap.team)  # P1方案A：卡死指标采集
+				_report_stuck(ap, p, "带球")  # P4 口径修正：单次被堵=正常避障不计，反复才计
 				print("[AI] %s 卡住,改变策略" % _pname(p))
 				var fwd: Vector2 = Vector2(1, 0) if ap.team == "a" else Vector2(-1, 0)
 				var midline_x: float = -10.0 if ap.team == "a" else 10.0
@@ -1884,8 +1883,7 @@ func _move(ap: Dictionary, delta: float) -> void:
 			else:
 				ap.stuck_timer = 0.0
 			if ap.get("stuck_timer", 0.0) > 1.0:
-				if match_stats:
-					match_stats.record_stuck(ap.team)  # P1方案A：卡死指标采集
+				_report_stuck(ap, p, "外场")  # P4 口径修正：单次被堵=正常避障不计，反复才计
 				# 外场卡住→切换到 y 镜像待机位（避开当前阻挡物）
 				var hold_x: float = 430.0 if ap.team == "a" else -430.0
 				var mirror_y: float = -pm_current_pos.y
@@ -1925,6 +1923,34 @@ func _move(ap: Dictionary, delta: float) -> void:
 					p.exit_catch_state()
 
 	_clamp_player_position(p)
+
+
+## P4 存量卡死口径修正（docs/待修问题提示词.md P4·假设C，2026-09-24 主人授权"验证并保证通过"）：
+## 取证 51 场：卡死触发 100% 为"外场被堵 1s 切镜像位/带球被堵换策略"的单次正常避障（全部正常打完）。
+## 新口径：同一球员 10s 内【首次】被堵=正常避障只打印；【10s 内反复触发】=僵持倾向才计入卡死硬指标
+## （真僵死会 1s+ 间隔连续触发→第 2 次即被计入，硬规则仍能抓住）。
+func _report_stuck(ap: Dictionary, p: CharacterBody2D, kind: String) -> void:
+	var now: float = Time.get_ticks_msec() / 1000.0
+	var last: float = float(ap.get("last_stuck_report_time", -1.0e9))
+	var last_pos: Vector2 = ap.get("last_stuck_report_pos", Vector2.INF)
+	var pos: Vector2 = p.global_position
+	var repeat := is_repeat_stuck(last, now, last_pos, pos)
+	ap["last_stuck_report_time"] = now
+	ap["last_stuck_report_pos"] = pos
+	if repeat and match_stats:
+		match_stats.record_stuck(ap.team)
+		print("[AI] %s %s卡住(10s内同位反复,僵持倾向)→计入卡死指标" % [_pname(p), kind])
+
+
+## 纯函数（可单测）：真僵死判定=10s 内反复触发（真僵死≈每 1.0~1.2s 重复，10s 窗口 10 倍裕量）
+## 且卡在原地点附近（<40px——换了位置的被堵=流动性对抗，极端团灭乱战实证：seed2 39s/256 击中局
+## 与 seed2/seed7 高干扰局均为跨位置再堵，非原地楔死）
+static func is_repeat_stuck(last_time: float, now: float, last_pos: Vector2, pos: Vector2) -> bool:
+	if last_time <= -1.0e8 or (now - last_time) > 10.0:
+		return false
+	if last_pos == Vector2.INF:
+		return false
+	return last_pos.distance_to(pos) < 40.0
 
 
 # ==============================

@@ -248,6 +248,14 @@ func _run() -> void:
 	_assert("空格迁移: STEER 激活期迁移窗口开启（player 跳跃闸门条件）", bool(im.is_skill_control_active()) == true)
 	issm.cancel_active_skill(cpid)
 
+	# ===== P4 卡死口径：is_repeat_stuck 纯函数（docs/待修问题提示词.md P4·假设C 落地）=====
+	var aim_script: GDScript = load("res://scripts/battle/ai_manager.gd")
+	_assert("P4: 首次卡住不计反复", bool(aim_script.is_repeat_stuck(-1.0e9, 100.0, Vector2.INF, Vector2(5, 5))) == false)
+	_assert("P4: 10s内同位反复计入(真僵死1.1s间隔)", bool(aim_script.is_repeat_stuck(100.0, 105.0, Vector2(5, 5), Vector2(8, 6))) == true)
+	_assert("P4: 10s边界+同位计入", bool(aim_script.is_repeat_stuck(100.0, 110.0, Vector2.ZERO, Vector2(39, 0))) == true)
+	_assert("P4: 超10s窗口不计", bool(aim_script.is_repeat_stuck(100.0, 112.0, Vector2.ZERO, Vector2.ZERO)) == false)
+	_assert("P4: 10s内但换位>40px不计(流动性对抗)", bool(aim_script.is_repeat_stuck(100.0, 105.0, Vector2(0, 0), Vector2(100, 0))) == false)
+
 	# ===== 落盘清洁 =====
 	var wf := FileAccess.open("res://data/spirits/skills.json", FileAccess.WRITE)
 	wf.store_string(_raw_backup)
