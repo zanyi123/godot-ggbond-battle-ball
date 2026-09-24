@@ -28,8 +28,11 @@ class StubBall extends Node:
 	var is_active: bool = true
 	var _manual_active: bool = false
 	var last_dir: Vector2 = Vector2.ZERO
+	var last_space_mode: String = ""
 	func manual_steer(d: Vector2) -> void:
 		last_dir = d
+	func steer_space_action(mode: String) -> void:
+		last_space_mode = mode
 
 
 class StubArena extends Node:
@@ -209,6 +212,41 @@ func _run() -> void:
 	shield._follow_caster()
 	var rot_b: float = float(shield.rotation)
 	_assert("项5: 盾体朝向跟随释放者面向（右0°→下90°）", absf(angle_difference(rot_a, 0.0)) < 0.01 and absf(angle_difference(rot_b, PI / 2.0)) < 0.01)
+
+	# ===== 项1 空格迁移双语义（主人裁决 2026-09-24：贴地=跳跃/飞行=上升增量；W/S 维持现状不加速减速）=====
+	var ball_real: Node = load("res://scripts/battle/ball.gd").new()
+	root.add_child(ball_real)
+	ball_real._manual_active = true
+	ball_real.steer_space_action("jump")
+	_assert("空格迁移: 贴地跳跃=垂直冲量+滞空", absf(float(ball_real.ball_z_vel) - float(ball_real.STEER_JUMP_VEL)) < 0.01 and bool(ball_real._steer_jump_airborne) == true)
+	ball_real.steer_space_action("rise")
+	ball_real.steer_space_action("rise")
+	_assert("空格迁移: 飞行上升增量=每击+step", absf(float(ball_real.ball_z) - 2.0 * float(ball_real.STEER_RISE_STEP)) < 0.01)
+	ball_real.ball_z = float(ball_real.STEER_RISE_MAX) + 500.0
+	ball_real.steer_space_action("rise")
+	_assert("空格迁移: 上升有上限 clamp", absf(float(ball_real.ball_z) - float(ball_real.STEER_RISE_MAX)) < 0.01)
+	# 语义解析：缺省 jump / params.space_mode="rise"
+	ssm.setup_player_skills(pid, ["t_op1_steer"] as Array[String])
+	ssm._activate_skill(pid, 0)
+	_assert("空格迁移: 缺省语义=jump（贴地类）", str(ssm.get_space_mode(pid)) == "jump")
+	var skills2: Array = DevDataSync.load_skills()
+	skills2.append({"id": "t_op1_fly", "name": "t", "type": "active", "element": "雷火", "tags": ["ball_manual_steering"], "tag_params": {}, "params": {"space_mode": "rise"}, "operator": "OP_STEER", "description": "t"})
+	DevDataSync.save_skills(skills2)
+	await process_frame
+	ssm.setup_player_skills(pid, ["t_op1_fly"] as Array[String])
+	ssm._activate_skill(pid, 0)
+	_assert("空格迁移: params.space_mode=rise→飞行语义", str(ssm.get_space_mode(pid)) == "rise")
+	ssm.cancel_active_skill(pid)
+	# 路由：im 迁移窗口+球手动态 → steer_space_action 收到语义（缺省 jump）
+	ball.last_space_mode = ""
+	ball._manual_active = true
+	issm.setup_player_skills(cpid, ["t_op1_steer"] as Array[String])
+	issm._activate_skill(cpid, 0)
+	im._route_space_to_skill()
+	_assert("空格迁移: im 路由→球收到动作语义", ball.last_space_mode == "jump")
+	# 拦截闸门：迁移期 is_skill_control_active=true（player 侧据此抑制跳跃；物理抑制由 sim 回归覆盖）
+	_assert("空格迁移: STEER 激活期迁移窗口开启（player 跳跃闸门条件）", bool(im.is_skill_control_active()) == true)
+	issm.cancel_active_skill(cpid)
 
 	# ===== 落盘清洁 =====
 	var wf := FileAccess.open("res://data/spirits/skills.json", FileAccess.WRITE)

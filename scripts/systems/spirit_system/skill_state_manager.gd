@@ -235,6 +235,20 @@ func is_drag_skill(player_id: int) -> bool:
 		return false
 	return _skill_drag_enabled(str(_operator_context[player_id].get("skill_id", "")))
 
+## 项1 空格迁移语义（05 §1 主人裁决 2026-09-24）：params.space_mode="rise"=飞行类上升增量；缺省=贴地奔跑类跳跃
+func get_space_mode(player_id: int) -> String:
+	if not _operator_context.has(player_id):
+		return "jump"
+	var sd: Dictionary = _get_skill_data(str(_operator_context[player_id].get("skill_id", "")))
+	var p: Dictionary = sd.get("params", {})
+	if p.has("space_mode"):
+		return str(p["space_mode"])
+	for tag_id in sd.get("tag_params", {}):
+		var tp: Dictionary = sd["tag_params"][tag_id]
+		if tp.has("space_mode"):
+			return str(tp["space_mode"])
+	return "jump"
+
 ## 取消（C/再按）：清操作上下文
 func _clear_operator_context(player_id: int) -> void:
 	_operator_context.erase(player_id)

@@ -147,6 +147,13 @@ func _bounce_off_walls() -> void:
 var use_ballistic_physics: bool = false  # 总开关（默认关：飞行球暂不落地恒高飞行=旧观感；弹跳框架保留可随时开）
 var ball_z: float = 0.0                  # 球离地高度（像素，向上为正）
 var ball_z_vel: float = 0.0              # 垂直速度（px/s）
+
+# 项1 空格迁移（操控规划/05 §1 主人裁决 2026-09-24）：手动态球高度双语义
+# 贴地奔跑类=跳跃（冲量+重力回落）/ 飞行类=上升增量（无重力维持，params.space_mode="rise"）
+const STEER_JUMP_VEL: float = 300.0      # 跳跃冲量 px/s
+const STEER_RISE_STEP: float = 40.0      # 每次上升增量 px
+const STEER_RISE_MAX: float = 240.0      # 上升上限 px
+var _steer_jump_airborne: bool = false   # 跳跃滞空标志（走重力回落）
 ## E9 轨迹全记录（主人复测工具）：每次发球记录出手/途径/终止全链
 var _traj_active: bool = false
 var _traj_log: Array = []
@@ -247,6 +254,15 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	# a方案 耗尽下坠表现：球权已即时分配（is_active=false），高度继续短抛物线落回 0
+	if _manual_active and (ball_z > 0.0 or _steer_jump_airborne):
+		# 项1 空格迁移：跳跃滞空走重力回落；上升增量高度无重力维持（飞行类贴语义）
+		if _steer_jump_airborne:
+			ball_z += ball_z_vel * delta
+			ball_z_vel -= GRAVITY_Z * delta
+			if ball_z <= 0.0:
+				ball_z = 0.0
+				ball_z_vel = 0.0
+				_steer_jump_airborne = false
 	if visual_fall_left > 0.0:
 		visual_fall_left -= delta
 		ball_z += ball_z_vel * delta
@@ -1379,6 +1395,15 @@ func begin_manual_steering() -> void:
 func manual_steer(direction: Vector2) -> void:
 	if _manual_active and direction.length_squared() > 0.001:
 		ball_direction = direction.normalized()
+
+
+## 项1 空格迁移（操控规划/05 §1 主人裁决）：贴地奔跑类=跳跃冲量 / 飞行类=上升增量
+func steer_space_action(mode: String) -> void:
+	if mode == "rise":
+		ball_z = minf(ball_z + STEER_RISE_STEP, STEER_RISE_MAX)
+	else:
+		ball_z_vel = STEER_JUMP_VEL
+		_steer_jump_airborne = true
 
 
 ## P0-2（2026-09-20）：AOE 目标筛选——数据源=权威名册；幻象维持"不吃 AOE"设计现状## （名册本无幻象，该过滤条为纯防御+设计意图声明）

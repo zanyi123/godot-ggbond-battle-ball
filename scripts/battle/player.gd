@@ -1003,7 +1003,12 @@ func _physics_process(delta: float) -> void:
 		move_speed += SPRINT_SPEED_BONUS
 
 	# 跳跃输入（M3：空格边沿触发；AI/技能走 try_jump() 接口，M5 接入）
-	var jump_pressed: bool = Input.is_key_pressed(KEY_SPACE)
+	# 项1 空格迁移（操控规划/05 §1 主人裁决 2026-09-24）：技能操控迁移期空格归技能体，球员本尊不跳
+	var _space_migrated: bool = false
+	if is_player_controlled:
+		var im_j: Node = get_parent().get_node_or_null("InputManager") if get_parent() else null
+		_space_migrated = im_j != null and im_j.has_method("is_skill_control_active") and im_j.is_skill_control_active()
+	var jump_pressed: bool = Input.is_key_pressed(KEY_SPACE) and not _space_migrated
 	if jump_pressed and not _jump_key_was_pressed:
 		try_jump()
 	_jump_key_was_pressed = jump_pressed

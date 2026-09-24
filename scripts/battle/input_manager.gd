@@ -87,6 +87,11 @@ func _input(event: InputEvent) -> void:
 		elif event.keycode == KEY_TAB:
 			if not _tab_skill_state_switch():
 				_cycle_player()
+		# 项1 空格迁移（05 §1 主人裁决 2026-09-24）：迁移期空格归技能体——贴地=跳跃/飞行=上升增量；
+		# 球员侧跳跃由 player.gd 闸门同步抑制（迁移期不跳）
+		elif event.keycode == KEY_SPACE:
+			if is_skill_control_active():
+				_route_space_to_skill()
 		# P2 E键：第一人称进出（独立按键，不涉既有鼠标操作）
 		elif event.keycode == KEY_E:
 			toggle_fp_mode()
@@ -350,6 +355,16 @@ func compose_steer_direction(base_dir: Vector2, key_yaw: float) -> Vector2:
 	if absf(key_yaw) < 0.0001:
 		return base_dir
 	return base_dir.rotated(key_yaw)
+
+
+## 项1 空格迁移路由：语义由技能 params.space_mode 定（rise=飞行上升增量/缺省 jump=贴地跳跃），作用于手动态球
+func _route_space_to_skill() -> void:
+	if skill_state_manager == null or controlled_player == null:
+		return
+	var mode: String = skill_state_manager.get_space_mode(controlled_player.get_instance_id())
+	var b = controlled_player.get("ball_ref")
+	if b != null and is_instance_valid(b) and b.get("_manual_active") == true and b.has_method("steer_space_action"):
+		b.steer_space_action(mode)
 
 
 func set_controlled_player(player: CharacterBody2D) -> void:
