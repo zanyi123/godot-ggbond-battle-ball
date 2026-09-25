@@ -28,17 +28,18 @@ func _run() -> void:
 	# ========== 1. 找到元灵"试灵"（开发系统创建的） ==========
 	var spirit: Dictionary = {}
 	for s in DataManager.spirits:
-		if s.get("name") == "试灵":
+		if s.get("name") == "玲珑":
 			spirit = s
-	_check(not spirit.is_empty(), "元灵'试灵'存在于正式数据链（DataManager.spirits）")
+	_check(not spirit.is_empty(), "元灵'玲珑'(雷火·飞火/火凤归属)存在于正式数据链（DataManager.spirits）")
 	if spirit.is_empty():
-		_finish("FAIL: 无试灵")
+		_finish("FAIL: 无玲珑")
 		return
 
 	# ========== 2. 装备到 A 队控球球员（正式链路 player.equip_spirit） ==========
+	# 20 工单主人裁定：按原作技能归属挂元灵——飞火流星/火凤燎原=玲珑(雷火)、蔓藤缠绕=小圣(草木)
 	var pa: CharacterBody2D = bm.team_a_players[0]
 	pa.equip_spirit(spirit)
-	_check(pa.equipped_skills.size() == 3, "球员装备元灵: equipped_skills=%s" % str(pa.equipped_skills))
+	_check(pa.equipped_skills.size() == 3 and "skill_雷火_2" in pa.equipped_skills and "skill_雷火_4" in pa.equipped_skills, "球员装备元灵'玲珑'(原技+飞火+火凤): equipped_skills=%s" % str(pa.equipped_skills))
 	# 正式链路同款：装备变化后重注册名册（battle_manager 元灵切换处同款调用）
 	var ss_early = bm.spirit_system
 	if ss_early and ss_early.skill_trigger:
@@ -72,24 +73,7 @@ func _run() -> void:
 	var ok_cd: bool = ss.use_skill(pa.get_instance_id(), sid_ball)
 	_check(not ok_cd, "正式链路 CD 拦截第二次释放")
 
-	# ========== 5. 蔓藤缠绕(测) root 生效（正式链路 on-hit 或直接命中语义） ==========
-	var ok_root: bool = ss.use_skill(pa.get_instance_id(), sid_root)
-	await _wait(0.2)
-	# target=enemies：B 队任一球员被定身
-	# 20 工单口径差上报：registry 的 player_root 无 target 参数（工单"target=enemies"进不了面板参数框）
-	# → 落盘缺 target → _get_player_targets 默认 self。断言改"任一方 rooted"验证挂载链路真实可达
-	var rooted := false
-	var rooted_on: String = ""
-	for pb in bm.team_b_players:
-		if pb and is_instance_valid(pb) and pb.is_status_active("rooted"):
-			rooted = true
-			rooted_on = "B:" + str(pb.char_data.get("name", "?"))
-	if not rooted and pa.is_status_active("rooted"):
-		rooted = true
-		rooted_on = "A:self(registry 无 target 参数默认)"
-	_check(ok_root and rooted, "正式链路 蔓藤缠绕: root 灯挂载 (%s)" % rooted_on)
-
-	# ========== 6. 火凤燎原(测) zone 生成（spawn_at=ball_land：pending 登记→投球→落点生成，走完整语义链） ==========
+	# ========== 5. 火凤燎原(测) zone 生成（spawn_at=ball_land：pending 登记→投球→落点生成，走完整语义链） ==========
 	var zmg = get_tree().get_first_node_in_group("field_zone_managers")
 	var ok_zone: bool = ss.use_skill(pa.get_instance_id(), sid_zone)   # 登记落点 pending
 	await _wait(0.2)
@@ -108,6 +92,32 @@ func _run() -> void:
 	print("[MatchE2E] DEBUG pending=", handler._pending_zone_spawns.size() if handler and "_pending_zone_spawns" in handler else "?")
 	var zones_after: int = zmg.zones.size() if zmg and "zones" in zmg else 0
 	_check(ok_zone and zones_after > zones_before, "正式链路 火凤燎原: 投球落点生成 zone (%d→%d)" % [zones_before, zones_after])
+
+	# ========== 6. 蔓藤缠绕(测) root 生效（换装小圣——主人真实换元灵操作同款） ==========
+	var spirit_caomu: Dictionary = {}
+	for s in DataManager.spirits:
+		if s.get("name") == "小圣":
+			spirit_caomu = s
+	_check(not spirit_caomu.is_empty(), "元灵'小圣'(草木·蔓藤归属)存在于正式数据链")
+	pa.equip_spirit(spirit_caomu)
+	if ss_early and ss_early.skill_trigger:
+		ss_early.skill_trigger.set_player_skills(pa.get_instance_id(), pa.get_equipped_skills())
+	await _wait(0.2)
+	var ok_root: bool = ss.use_skill(pa.get_instance_id(), sid_root)
+	await _wait(0.2)
+	# target=enemies：B 队任一球员被定身
+	# 20 工单口径差上报：registry 的 player_root 无 target 参数（工单"target=enemies"进不了面板参数框）
+	# → 落盘缺 target → _get_player_targets 默认 self。断言改"任一方 rooted"验证挂载链路真实可达
+	var rooted := false
+	var rooted_on: String = ""
+	for pb in bm.team_b_players:
+		if pb and is_instance_valid(pb) and pb.is_status_active("rooted"):
+			rooted = true
+			rooted_on = "B:" + str(pb.char_data.get("name", "?"))
+	if not rooted and pa.is_status_active("rooted"):
+		rooted = true
+		rooted_on = "A:self(registry 无 target 参数默认)"
+	_check(ok_root and rooted, "正式链路 蔓藤缠绕: root 灯挂载 (%s)" % rooted_on)
 
 	# ========== 7. 屏幕截图（有窗口时） ==========
 	await _shot("match_e2e")
