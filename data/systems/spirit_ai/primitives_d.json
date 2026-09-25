@@ -1,0 +1,78 @@
+{
+	"schema_version": 3,
+	"wave": "D",
+	"updated": "2026-09-26",
+	"_说明": "波D场地族10标签描述符。schema基座照06规约v1（冻结字段原样）；schema_version=3=波B family扩展(Q1)+波D扩展(Q4，登记于进度看板问题区待批)：①target_mode新增field_position②family新增field_area/field_obstacle③描述符新增position_intent字段(纯分类元数据，契约三函数不消费，仅供select_field_position分发)。timing_gate全部使用06§三现有12键零扩展。计价口径：compute_value=params[value_param]×value_unit后clamp[value_min,value_cap]，value_param逐一核对tags_registry.json params数组。position_intent语义：goal_ball_line=球门-球连线(精化_select_wall_position防守支0.6系数cap80)；enemy_carrier_path=敌持球路径(精化进攻支0.4系数cap60)；enemy_cluster=敌集群(精化_select_aoe_position，defense=最近敌/其余=最残血敌)；shoot_line_block=挡射手视线(球门→持球敌连线0.5系数cap100，敌人朝向信息从ctx取)；advance_lane=己方推进道(自位朝敌门60px)；defensive_anchor=己方球门前锚点(精化_select_area_position防守支+20y)；none=无放置语义(回落自站位)。缺ctx键一律fail-closed回落施法者自站位。",
+	"descriptors": {
+		"field_vision_block": {
+			"family": "field_area", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "duration", "value_unit": 6.0, "value_min": 15.0, "value_cap": 55.0,
+			"intent": "control", "intent_strength": 0.6, "target_mode": "field_position",
+			"position_intent": "shoot_line_block",
+			"notes": "视野迷雾：敌可见时在射门线挡视线，区域内敌方AI感知半径×perception_scale(registry)"
+		},
+		"field_zone_boost": {
+			"family": "field_area", "direction": "self", "timing_gate": "ball_hold",
+			"value_param": "duration", "value_unit": 6.0, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "support", "intent_strength": 0.6, "target_mode": "field_position",
+			"position_intent": "advance_lane",
+			"notes": "加速区：持球推进期朝敌门铺加速道"
+		},
+		"field_zone_slow": {
+			"family": "field_area", "direction": "enemy", "timing_gate": "enemy_carrying_visible",
+			"value_param": "duration", "value_unit": 6.0, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "control", "intent_strength": 0.7, "target_mode": "field_position",
+			"position_intent": "enemy_carrier_path",
+			"notes": "减速区：敌持球可见时铺在其回攻路径上"
+		},
+		"field_zone_danger": {
+			"family": "field_area", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "damage_value", "value_unit": 0.6, "value_min": 15.0, "value_cap": 70.0,
+			"intent": "attack", "intent_strength": 0.7, "target_mode": "field_position",
+			"position_intent": "enemy_cluster",
+			"notes": "危险区：敌可见时放敌集群/最残血敌脚下"
+		},
+		"field_zone_safe": {
+			"family": "field_area", "direction": "self", "timing_gate": "self_threatened",
+			"value_param": "duration", "value_unit": 7.0, "value_min": 15.0, "value_cap": 70.0,
+			"intent": "defense", "intent_strength": 0.7, "target_mode": "field_position",
+			"position_intent": "defensive_anchor",
+			"notes": "安全区：受威胁时在己方球门前放免疫区供回撤"
+		},
+		"field_zone_heal": {
+			"family": "field_area", "direction": "self", "timing_gate": "self_injured",
+			"value_param": "heal_per_sec", "value_unit": 4.0, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "support", "intent_strength": 0.7, "target_mode": "field_position",
+			"position_intent": "defensive_anchor",
+			"notes": "治疗区：残血时在己方回防锚点放回血区(registry：走公开heal，禁疗自动生效)"
+		},
+		"field_obs_add": {
+			"family": "field_obstacle", "direction": "enemy", "timing_gate": "enemy_carrying_visible",
+			"value_param": "duration", "value_unit": 5.0, "value_min": 15.0, "value_cap": 55.0,
+			"intent": "control", "intent_strength": 0.6, "target_mode": "field_position",
+			"position_intent": "goal_ball_line",
+			"notes": "创造障碍：敌持球可见时挡其射门/传球线，球卡住逐帧消耗攻击球速(registry)"
+		},
+		"field_obs_clear": {
+			"family": "field_obstacle", "direction": "self", "timing_gate": "ball_hold",
+			"value_param": "clear_count", "value_unit": 12.0, "value_min": 15.0, "value_cap": 45.0,
+			"intent": "support", "intent_strength": 0.5, "target_mode": "field_position",
+			"position_intent": "none",
+			"notes": "清除障碍：持球期清障开路，无放置语义"
+		},
+		"player_shield_obstacle": {
+			"family": "field_obstacle", "direction": "self", "timing_gate": "self_threatened",
+			"value_param": "hp", "value_unit": 0.1, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "defense", "intent_strength": 0.8, "target_mode": "field_position",
+			"position_intent": "goal_ball_line",
+			"notes": "护盾：registry target_type=player，但AI按放置语义走field_position；follow模式缺ball ctx时由select_field_position回落自站位"
+		},
+		"field_drain_wall": {
+			"family": "field_obstacle", "direction": "enemy", "timing_gate": "enemy_carrying_visible",
+			"value_param": "duration", "value_unit": 6.0, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "control", "intent_strength": 0.7, "target_mode": "field_position",
+			"position_intent": "enemy_carrier_path",
+			"notes": "削能墙：敌持球路径布吸力墙；对齐09-24放置流接线(16工单：施法者身前生成，AI侧精化为敌持球路径点)"
+		}
+	}
+}
