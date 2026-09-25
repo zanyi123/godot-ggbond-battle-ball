@@ -386,12 +386,29 @@ const TOGGLE_STATUS_MAP: Dictionary = {
 	"player_spd_up_pct": "spd_up_toggle",
 }
 
+## 操3 盾 toggle：取 form1（基础）盾参数
+func _toggle_shield_base_params(skill_data: Dictionary) -> Dictionary:
+	return skill_data.get("tag_params", {}).get("player_shield_obstacle", {})
+
+
 func _toggle_skill(skill_data: Dictionary, player_id: int, skill_id: String) -> bool:
 	var p := _get_player_by_id(player_id)
 	if p == null or not p.has_method("open_toggle"):
 		return false
-	# 已开 → 关闭（效果全清）
+	# 已开 → 切形态（有 alt 参数组）或关闭（效果全清+撤盾）
 	if p.active_toggles.has(skill_id):
+		var t: Dictionary = p.active_toggles[skill_id]
+		var alt: Dictionary = t.get("shield_alt", {})
+		var form: int = int(t.get("shield_form", 1))
+		# 三态循环（操控规划/06 坚果盾矩阵）：开(form1)→再按切(form2)→三按关闭→再按重开(form1)
+		if alt is Dictionary and not alt.is_empty() and form == 1:
+			if _effect_handler != null:
+				_effect_handler.apply_toggle_shield(player_id, alt)
+			t["shield_form"] = 2
+			print("[SpiritSkillTrigger] toggle 切形态: %s → alt(小型加固)" % skill_id)
+			return true
+		if t.has("shield_form") and _effect_handler != null:
+			_effect_handler.remove_toggle_shield(player_id)
 		p.close_toggle(skill_id)
 		return true
 	# 能量见底开不起来
@@ -404,14 +421,38 @@ func _toggle_skill(skill_data: Dictionary, player_id: int, skill_id: String) -> 
 		var light: String = str(TOGGLE_STATUS_MAP.get(str(tag), ""))
 		if light != "" and light not in lights:
 			lights.append(light)
-	if lights.is_empty():
+	# 操3 坚果盾 toggle（操控规划/06 矩阵修复）：player_shield_obstacle 纳入 toggle 生命周期
+	# （开=造盾 form1 / 开态再按=切 alt 形态或无 alt 则关 / 关=撤盾；无状态灯也允许——盾本体即可视锚点）
+	var shield_params: Dictionary = {}
+	var shield_alt: Dictionary = {}
+	var tag_params: Dictionary = skill_data.get("tag_params", {})
+	if tag_params.has("player_shield_obstacle"):
+		shield_params = tag_params["player_shield_obstacle"]
+	if tag_params.has("player_shield_obstacle_alt"):
+		shield_alt = tag_params["player_shield_obstacle_alt"]
+	if lights.is_empty() and shield_params.is_empty():
 		print("[SpiritSkillTrigger] toggle 无可维持状态灯: ", skill_id)
 		return false
 	var energy_per_sec: float = 0.0
-	for tag_id in skill_data.get("tag_params", {}):
-		energy_per_sec += float(skill_data["tag_params"][tag_id].get("energy_per_sec", 0.0))
+	for tag_id in tag_params:
+		energy_per_sec += float(tag_params[tag_id].get("energy_per_sec", 0.0))
+	if not shield_params.is_empty() and _effect_handler != null:
+		if not _effect_handler.apply_toggle_shield(player_id, shield_params):
+			print("[SpiritSkillTrigger] toggle 盾创建失败: ", skill_id)
+			return false
 	p.open_toggle(skill_id, lights, maxf(0.5, energy_per_sec))
+	if not shield_params.is_empty():
+		p.active_toggles[skill_id]["shield_form"] = 1
+		p.active_toggles[skill_id]["shield_alt"] = shield_alt
+		if not p.toggle_auto_closed.is_connected(_on_shield_toggle_auto_closed):
+			p.toggle_auto_closed.connect(_on_shield_toggle_auto_closed.bind(p))
 	return true
+
+
+## 操3 盾 toggle：能量尽自动关也撤盾（手动路径在 _toggle_skill 已撤；v1 一施法者一盾）
+func _on_shield_toggle_auto_closed(skill_id: String, p) -> void:
+	if _effect_handler != null and p != null and is_instance_valid(p):
+		_effect_handler.remove_toggle_shield(p.get_instance_id())
 
 ## 消耗能量（E3 接真：扣 player.spirit_energy；2026-09-17 起为全路径唯一扣费点）
 ## 费用 = (基础 + 标签附加) × 施法者消耗倍率（折扣/涨价卡挂在被施法者身上）

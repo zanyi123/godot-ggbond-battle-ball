@@ -106,7 +106,7 @@ func _apply_player_charge_stock(params: Dictionary, caster_id: int) -> void:
 	var duration: float = float(params.get("duration", 10.0))
 	var charges: int = maxi(1, int(params.get("charges", 1)))
 	for target in targets:
-		target.turn_on_light("charge_stock", duration, {"charges": charges})
+		target.turn_on_light("charge_stock", duration, {"charges": charges, "charges_max": charges})  # 13-D 充能点 N/M
 	print("[TagEffect] 充能容器: charges=%d dur=%.1fs targets=%d" % [charges, duration, targets.size()])
 
 ## #21 受击解除：给目标已在亮的匹配状态打 break_on_hit 标记（statuses 空=全部控制类）

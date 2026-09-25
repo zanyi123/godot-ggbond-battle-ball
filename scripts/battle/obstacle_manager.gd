@@ -88,6 +88,10 @@ func create_obstacle(params: Dictionary, position: Vector2, rotation: float = 0.
 ## ==================== 体外实体盾（V1-2，05 文档）====================
 
 ## 生成随身护盾障碍（D1/D2 follow_mode=follow 跟随释放者 / static 固定；D3 挡所有球；D4 uses/hp 双耐久）
+## 13-C 基础 UI：盾生成信号（可视层只读消费——2D 弧贴身/3D 盾体代理挂载锚点）
+signal player_shield_spawned(shield: StaticBody2D)
+
+
 func create_player_shield(params: Dictionary, caster: Node2D) -> StaticBody2D:
 	var pos: Vector2 = caster.global_position if caster and is_instance_valid(caster) else Vector2.ZERO
 	params["caster_id"] = caster.get_instance_id() if caster and is_instance_valid(caster) else -1
@@ -97,6 +101,7 @@ func create_player_shield(params: Dictionary, caster: Node2D) -> StaticBody2D:
 	print("[ObstacleManager] 生成护盾: caster=%s mode=%s durability=%s hp=%.0f uses=%d" % [
 		str(caster.name) if caster else "?", str(params.get("follow_mode", "follow")),
 		str(params.get("durability_mode", "hp")), float(params.get("hp", 50.0)), int(params.get("uses", 1))])
+	player_shield_spawned.emit(shield)  # 13-C 可视层锚点
 	return shield
 
 ## 查询某释放者的随身穿戴盾（AI/球侧判断"该球员有盾"，05 对外接口）

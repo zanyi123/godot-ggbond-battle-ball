@@ -1871,6 +1871,10 @@ var active_toggles: Dictionary = {}
 
 ## 波5 #10 印记层数变化信号（表现层：印记图标/层数显示消费）
 signal mark_changed(mark_id: String, count: int)
+
+# 13-A 基础 UI（技能规划/19）：状态数据源信号（UI 只读消费，零判定）
+signal status_lights_changed
+signal toggle_changed(skill_id: String, open: bool)
 ## 波5 #13 toggle 充能耗尽自动关闭信号
 signal toggle_auto_closed(skill_id: String)
 
@@ -1912,6 +1916,7 @@ func open_toggle(skill_id: String, lights: Array, energy_per_sec: float) -> void
 		turn_on_light(str(light_name), 99999.0)
 		lit.append(str(light_name))
 	active_toggles[skill_id] = {"lights": lit, "energy_per_sec": energy_per_sec}
+	toggle_changed.emit(skill_id, true)
 	print("[Player] toggle 开: %s lights=%s 耗能=%.1f/s" % [skill_id, str(lit), energy_per_sec])
 
 ## 波5 #13：关闭 toggle（效果全清）
@@ -1921,6 +1926,7 @@ func close_toggle(skill_id: String) -> void:
 		turn_off_light(str(light_name))
 	if active_toggles.erase(skill_id):
 		print("[Player] toggle 关: %s" % skill_id)
+	toggle_changed.emit(skill_id, false)
 
 ## 波5 #13：toggle 每秒耗能（能量尽自动关；_tick_all_timers 调用）
 func _process_toggles(delta: float) -> void:
@@ -1970,6 +1976,17 @@ const _MUTEX_LIGHTS: Dictionary = {
 }
 
 
+var _light_broadcast_accum: float = 0.0  # 13-A 整秒节流广播累加
+
+
+## 13-A 基础 UI：状态灯只读快照（UI 零判定，仅数据出口）
+func get_status_lights_view() -> Dictionary:
+	var view: Dictionary = {}
+	for status in _status_lights:
+		view[status] = _status_lights[status].duplicate()
+	return view
+
+
 func is_status_active(status_name: String) -> bool:
 	"""灯亮没亮？"""
 	return _status_lights.has(status_name) and _status_lights[status_name].get("on", false)
@@ -2009,12 +2026,14 @@ func turn_on_light(status_name: String, duration: float, extra: Dictionary = {})
 	# 附加额外数据（如易伤倍率）
 	for key in extra:
 		_status_lights[status_name][key] = extra[key]
+	status_lights_changed.emit()
 	return true
 
 
 func turn_off_light(status_name: String) -> void:
 	"""关灯（手动，如解控）"""
 	_status_lights.erase(status_name)
+	status_lights_changed.emit()
 
 
 ## ==================== 波3 球员管道变体（09 工单，判定层）====================
@@ -2110,6 +2129,14 @@ func _tick_status_lights(delta: float) -> void:
 			_status_lights[status]["remaining"] = remaining
 	for status in to_remove:
 		_status_lights.erase(status)
+	if not to_remove.is_empty():
+		status_lights_changed.emit()
+	# 13-A：整秒节流广播（秒数角标递减数据源；事件驱动非 UI 轮询）
+	_light_broadcast_accum += delta
+	if _light_broadcast_accum >= 1.0:
+		_light_broadcast_accum = 0.0
+		if not _status_lights.is_empty():
+			status_lights_changed.emit()
 	_update_state_indicator()
 
 

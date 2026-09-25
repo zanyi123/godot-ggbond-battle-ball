@@ -8,6 +8,7 @@ extends Control
 # 队B球员1体力  队B球员2体力  队B球员3体力
 
 var player_panels: Array[Control] = []
+var _status_icon_bars: Array = []   # 13-A：每球员状态图标条
 var player_stamina_bars: Array[ProgressBar] = []
 var player_energy_bars: Array[ProgressBar] = []
 var player_endurance_bars: Array[ProgressBar] = []  # M3 耐力条（跳跃资源，非血量）
@@ -68,6 +69,13 @@ func setup_players(team: Array[CharacterBody2D], enemies: Array[CharacterBody2D]
 		if team[i] and team[i].char_data.has("name"):
 			player_name_labels[i].text = team[i].char_data["name"]
 		_update_player_skill_icons(i)
+		# 13-A 基础 UI：每球员状态图标条（面板右上角，只读消费状态信号）
+		if i < _status_icon_bars.size():
+			var bar: Control = _status_icon_bars[i]
+			bar.position = Vector2(panel_width_target() - 8 * 27.0 - 6.0, 4.0)
+			bar.bind_player(team[i])
+			if not bar.visible:
+				bar.visible = true
 
 	# 更新对方名称
 	for i in range(min(3, enemies.size())):
@@ -328,10 +336,22 @@ func _create_player_panels() -> void:
 	var start_x: float = (1440.0 - panel_width * 3 - 20) / 2.0
 	var start_y: float = 900.0 - panel_height - 12.0
 
+	var icon_bars: Array = []
 	for i in range(3):
 		var panel := _create_single_panel(i, Vector2(start_x + i * (panel_width + 10), start_y), panel_width, panel_height)
 		player_panels.append(panel)
 		add_child(panel)
+		# 13-A：状态图标条实例（位置在 setup_players 绑定球员时定）
+		var bar_script: GDScript = load("res://scripts/battle/status_icon_bar.gd")
+		var bar: Control = bar_script.new()
+		bar.position = Vector2(panel_width - 8 * 27.0 - 6.0, 4.0)
+		panel.add_child(bar)
+		icon_bars.append(bar)
+	_status_icon_bars = icon_bars
+
+
+func panel_width_target() -> float:
+	return 380.0
 
 
 func _create_single_panel(index: int, pos: Vector2, width: float, height: float) -> Panel:

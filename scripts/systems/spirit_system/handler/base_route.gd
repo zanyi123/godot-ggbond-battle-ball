@@ -352,6 +352,30 @@ func _get_player_targets(params: Dictionary, caster_id: int) -> Array:
 			result.append(caster)
 	return result
 
+## 操3 坚果盾 toggle（操控规划/06 矩阵修复）：盾标签纳入 toggle 生命周期
+## open/切形态=应用盾参数组（先撤旧盾保证形态干净轮换）；close=撤销该施法者当前盾
+func apply_toggle_shield(caster_id: int, params: Dictionary) -> bool:
+	remove_toggle_shield(caster_id)
+	var p = _get_caster(caster_id)
+	if p == null:
+		return false
+	call("_apply_player_shield_obstacle", params.duplicate(true), caster_id)
+	var mgr = _get_obstacle_manager()
+	if mgr == null:
+		return false
+	var shield = mgr.get_player_shield(caster_id)
+	return shield != null and is_instance_valid(shield)
+
+
+func remove_toggle_shield(caster_id: int) -> void:
+	var mgr = _get_obstacle_manager()
+	if mgr == null:
+		return
+	var shield = mgr.get_player_shield(caster_id)
+	if shield != null and is_instance_valid(shield):
+		mgr.remove_obstacle(shield)
+
+
 ## 获取所有敌方（含隐身，用于显形等不需要过滤的场景）
 func _get_all_enemies(caster: CharacterBody2D) -> Array:
 	var result: Array = []

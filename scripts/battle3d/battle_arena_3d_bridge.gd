@@ -57,6 +57,10 @@ func setup(mgr: Node2D) -> void:
 		ofb.set_script(ofb_script)
 		ofb.name = "OperatorFeedback3D"
 		add_child(ofb)
+	# 13-C 基础 UI：盾本体 3D 主件（订阅盾生成信号，代理表每帧同步 2D 盾体位姿）
+	var om = battle_mgr.get_node_or_null("ObstacleManager") if battle_mgr != null else null
+	if om != null and om.has_signal("player_shield_spawned"):
+		om.player_shield_spawned.connect(_on_shield_spawned_3d)
 	print("[Bridge3D] ✅ 3D 场景层构建完成 (players=%d)" % _player_proxies.size())
 
 ## P1 场地投影落点光标：贴地环（黄=瞄准中，红=路径标中球员），显示在鼠标地面投影处
@@ -314,6 +318,7 @@ func _apply_materials_recursive(node: Node, mats: Dictionary, rules: Array) -> v
 func _process(delta: float) -> void:
 	if battle_mgr == null or _field_zone == null:
 		return
+	_sync_shields()
 	# 换人重建检测：不受 field_visible 限制（备战阶段换人也要重建，开赛即正确）
 	_check_roster_rebuild()
 	var field_visible: bool = _field_zone.visible
@@ -333,6 +338,37 @@ func _process(delta: float) -> void:
 			Engine.get_frames_per_second(), _player_proxies.size(), _parity_error_count])
 	if PARITY_CHECK:
 		_parity_tick()
+
+var _shield_proxies: Dictionary = {}   # 13-C：{2D盾: 3D代理}
+
+
+func _on_shield_spawned_3d(shield: StaticBody2D) -> void:
+	if shield == null or not is_instance_valid(shield) or _shield_proxies.has(shield):
+		return
+	var vis_script: GDScript = load("res://scripts/battle3d/visual/shield_visual_3d.gd")
+	if vis_script == null:
+		return
+	var proxy: Node3D = Node3D.new()
+	proxy.set_script(vis_script)
+	_world.add_child(proxy)
+	proxy.setup(shield)
+	_shield_proxies[shield] = proxy
+
+
+func _sync_shields() -> void:
+	var dead: Array = []
+	for shield2d in _shield_proxies:
+		var proxy = _shield_proxies[shield2d]
+		if shield2d == null or not is_instance_valid(shield2d) or proxy == null or not is_instance_valid(proxy):
+			dead.append(shield2d)
+			continue
+		proxy.sync_from_2d(shield2d.global_position, shield2d.rotation)
+	for shield2d in dead:
+		var proxy = _shield_proxies[shield2d]
+		if proxy != null and is_instance_valid(proxy):
+			proxy.queue_free()
+		_shield_proxies.erase(shield2d)
+
 
 ## 名单同步：迟到球员补建（dev 模式球员在开赛回调才创建，晚于 bridge）
 ## + 已销毁球员清理 + character_id 变化重建（同 key 覆盖，遍历安全）

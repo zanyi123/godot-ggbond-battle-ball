@@ -177,6 +177,7 @@ var ball_shadow: ColorRect
 
 # 技能光环（显示已激活的技能）
 var skill_aura: Sprite2D = null
+var sure_hit_line: Line2D = null   # 13-D 必中锁定线（释放点→锁定目标）
 var active_skill_data: Dictionary = {}
 const AURA_PULSE_SPEED: float = 2.0
 var aura_pulse_time: float = 0.0
@@ -239,6 +240,14 @@ func _ready() -> void:
 	ball_visual.add_theme_stylebox_override("normal", ball_style)
 	add_child(ball_visual)
 
+	# 13-D 必中锁定线（技能规划/19）：必中激活且有锁定目标时 释放点→目标 连线
+	sure_hit_line = Line2D.new()
+	sure_hit_line.name = "SureHitLine"
+	sure_hit_line.width = 2.0
+	sure_hit_line.default_color = Color(1.0, 0.9, 0.2, 0.8)
+	sure_hit_line.visible = false
+	add_child(sure_hit_line)
+
 	# 碰撞检测
 	body_entered.connect(_on_body_entered)
 
@@ -253,6 +262,7 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_sync_basic_ui_visuals()  # 13-D 可视同步（只读消费自身状态）
 	# a方案 耗尽下坠表现：球权已即时分配（is_active=false），高度继续短抛物线落回 0
 	if _manual_active and (ball_z > 0.0 or _steer_jump_airborne):
 		# 项1 空格迁移：跳跃滞空走重力回落；上升增量高度无重力维持（飞行类贴语义）
@@ -1395,6 +1405,23 @@ func begin_manual_steering() -> void:
 func manual_steer(direction: Vector2) -> void:
 	if _manual_active and direction.length_squared() > 0.001:
 		ball_direction = direction.normalized()
+
+
+## 13-D 基础 UI（技能规划/19）：球隐身半透明 + 必中锁定线（每帧可视同步；判定仍在 ball_mods）
+func _sync_basic_ui_visuals() -> void:
+	# 球隐身半透明（is_stealthed 消费）
+	var stealth: bool = is_stealthed()
+	var target_a: float = 0.35 if stealth else 1.0
+	ball_visual.modulate.a = target_a
+	ball_shadow.modulate.a = 0.3 * target_a
+	# 必中锁定线（sure_hit 激活且锁定目标有效）
+	var lockon: Node = ball_mods.get("lockon_target")
+	var show_line: bool = bool(ball_mods.get("sure_hit", false)) 		and lockon != null and is_instance_valid(lockon) and sure_hit_line != null
+	if show_line:
+		sure_hit_line.visible = true
+		sure_hit_line.points = PackedVector2Array([Vector2.ZERO, to_local(lockon.global_position)])
+	elif sure_hit_line != null and sure_hit_line.visible:
+		sure_hit_line.visible = false
 
 
 ## 项1 空格迁移（操控规划/05 §1 主人裁决）：贴地奔跑类=跳跃冲量 / 飞行类=上升增量

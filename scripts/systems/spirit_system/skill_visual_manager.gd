@@ -47,6 +47,10 @@ func _load_tags_registry() -> void:
 
 ## 注入战斗引用（由 battle_manager 调用）
 func setup(battle_mgr: Node, ball: Area2D, all_players: Array) -> void:
+	# 13-C 基础 UI：盾本体 2D 兜底可视（订阅盾生成信号，弧面子节点挂到盾实体上——UI 只读零判定）
+	var om = battle_mgr.get_node_or_null("ObstacleManager") if battle_mgr != null else null
+	if om != null and om.has_signal("player_shield_spawned"):
+		om.player_shield_spawned.connect(_on_player_shield_spawned)
 	battle_manager = battle_mgr
 	ball_node = ball
 	players = all_players
@@ -64,6 +68,19 @@ func setup(battle_mgr: Node, ball: Area2D, all_players: Array) -> void:
 
 ## 技能激活时调用：根据技能包含的标签，渲染对应轮廓
 ## 由 skill_triggered 信号或 battle_manager 直接调用
+## 13-C：给盾实体挂 2D 弧面可视（子节点=跟随/落点天然同步；碎/超时=宿主 freed 自动消失）
+func _on_player_shield_spawned(shield: StaticBody2D) -> void:
+	if shield == null or not is_instance_valid(shield):
+		return
+	var vis_script: GDScript = load("res://scripts/battle/shield_visual_2d.gd")
+	if vis_script == null:
+		return
+	var vis: Node2D = Node2D.new()
+	vis.set_script(vis_script)
+	shield.add_child(vis)
+	vis.setup(shield)
+
+
 func on_skill_triggered(skill_id: String, caster: CharacterBody2D, tag_ids: Array) -> void:
 	if not is_instance_valid(caster):
 		return

@@ -350,6 +350,24 @@ func _set_drag_ring(candidate: Node2D) -> void:
 		_drag_ring_on = false
 
 
+## 操3 e2e 可测口：鼠标世界坐标→球员朝向更新（_process 提取；测试显式传入避免 viewport 覆盖）
+func update_aim_from_mouse(mouse_pos: Vector2) -> void:
+	mouse_world_pos = mouse_pos
+	if fp_mode:
+		controlled_player.facing_direction = Vector2(cos(fp_yaw), sin(fp_yaw))
+	else:
+		controlled_player.facing_direction = (mouse_pos - controlled_player.global_position).normalized()
+	player_facing_updated.emit(controlled_player, controlled_player.facing_direction)
+
+
+## 操3 e2e 可测口：球侧方向注入（双源合成；测试直接调用）
+func inject_steer_to_ball() -> void:
+	if controlled_player != null and controlled_player.has_method("get") and controlled_player.get("ball_ref") != null:
+		var steer_ball = controlled_player.get("ball_ref")
+		if is_instance_valid(steer_ball) and steer_ball.is_active and steer_ball.get("_manual_active") == true and steer_ball.has_method("manual_steer"):
+			steer_ball.manual_steer(compose_steer_direction(controlled_player.facing_direction, _skill_control_yaw))
+
+
 ## 项1 双源合成（纯函数可测）：基础朝向（鼠标/FP 折算）+ 按键偏转增量
 func compose_steer_direction(base_dir: Vector2, key_yaw: float) -> Vector2:
 	if absf(key_yaw) < 0.0001:
@@ -414,11 +432,7 @@ func _process(delta: float) -> void:
 			mouse_world_pos = viewport.get_mouse_position()
 	
 	# 更新球员朝向（FP 下=视线方向；鼠标捕获后 mouse_world_pos 冻结不可用）
-	if fp_mode:
-		controlled_player.facing_direction = Vector2(cos(fp_yaw), sin(fp_yaw))
-	else:
-		controlled_player.facing_direction = (mouse_world_pos - controlled_player.global_position).normalized()
-	player_facing_updated.emit(controlled_player, controlled_player.facing_direction)
+	update_aim_from_mouse(mouse_world_pos)
 
 	# 操1 大点5：AIMING 子态 → 3D 世界空间 AIM 预览跟随（2D 模式/无载体时静默=2D 兜底）
 	var _ofb = get_tree().get_first_node_in_group("operator_feedback_3d") if is_inside_tree() else null
@@ -452,12 +466,7 @@ func _process(delta: float) -> void:
 			fp_yaw = fposmod(fp_yaw + key_yaw * STEER_KEY_TURN_SPEED * delta, TAU)
 
 	# 波6 #17 手动制导（项1 双源）：方向=球员朝向（鼠标/FP 折算）+ A/D 偏转增量叠加
-	if controlled_player.has_method("get") and controlled_player.get("ball_ref") != null:
-		var steer_ball = controlled_player.get("ball_ref")
-		if is_instance_valid(steer_ball) and steer_ball.is_active \
-				and steer_ball.get("_manual_active") == true and steer_ball.has_method("manual_steer"):
-			var steer_dir: Vector2 = compose_steer_direction(controlled_player.facing_direction, _skill_control_yaw)
-			steer_ball.manual_steer(steer_dir)
+	inject_steer_to_ball()
 
 	# 项3 拖长击：拖动中吸附检测（附近敌方=可作用对象 b；大相机限定），目标圈高亮为功能性显示
 	if _drag_state.active and not fp_mode:
@@ -573,6 +582,15 @@ func _on_skill_activated(skill_id: String, player_id: int) -> void:
 			elif category == "PLAYER":
 				has_player_tag = true
 		
+		# 操3 联调修复（操控规划/06 矩阵）：有激活期/确认期语义的 operator——
+		# AIM/POINT/MARK 等左键确认生效、SUMMON 点地生效、TOGGLE 开关由按键流处理——
+		# 不得"激活即生效并取消"（否则选点/开关流程被短路）。效果延迟到确认/释放路径（use_skill_by_id）
+		var e2e_operator: String = ""
+		if skill_state_manager != null:
+			e2e_operator = skill_state_manager.get_active_operator(player_id)
+		if e2e_operator in ["OP_AIM", "OP_POINT", "OP_MARK", "OP_SUMMON", "OP_TOGGLE"]:
+			print("[InputManager] 子态/开关型技能，效果延迟到确认: %s (op=%s)" % [skill_id, e2e_operator])
+			return
 		if has_field_tag or has_player_tag:
 			print("[InputManager] 场地/球员类型技能，立即生效: %s" % skill_id)
 			if controlled_player.has_method("use_skill_by_id"):
