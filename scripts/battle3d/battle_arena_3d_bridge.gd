@@ -559,8 +559,19 @@ func _input(event: InputEvent) -> void:
 		match kc:
 			KEY_F4:
 				if _cam != null and _display_rect.visible:
-					var m = _cam.next_mode()
-					print("[Bridge3D] 相机模式 → %s" % Camera3DController.MODE_NAMES[m])
+					# 2026-09-25 修复（主人报"F4 进 FP 后不可逆"）：根因=FP 由 E 键(2D 权威 fp_mode)
+					# 独占，F4 的 next_mode 切走后 _sync_fp_mode 每帧又强拉回 FP → F4 视觉无效。
+					# 语义修正：F4 只管四模式可逆环（UNITY→TOP→ANGLED→FOLLOW→UNITY）；
+					# FP 中按 F4=退出 FP（经 2D 权威 toggle，bridge 只触发不写状态）；
+					# 进 FP = E 键专管（原有，对称可逆）
+					var input_mgr = battle_mgr.input_mgr if battle_mgr else null
+					if _cam.mode == Camera3DController.Mode.FIRST_PERSON:
+						if input_mgr != null and input_mgr.has_method("toggle_fp_mode"):
+							input_mgr.toggle_fp_mode()   # 退 FP → _sync 回 _fp_prev_mode
+							print("[Bridge3D] F4: 退出第一人称（进 FP 请按 E）")
+					else:
+						var m = _cam.next_mode()
+						print("[Bridge3D] 相机模式 → %s" % Camera3DController.MODE_NAMES[m])
 			KEY_F8:
 				if _display_rect.visible:
 					var img := _vp.get_texture().get_image()
