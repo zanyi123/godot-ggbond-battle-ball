@@ -90,6 +90,7 @@ func create_obstacle(params: Dictionary, position: Vector2, rotation: float = 0.
 ## 生成随身护盾障碍（D1/D2 follow_mode=follow 跟随释放者 / static 固定；D3 挡所有球；D4 uses/hp 双耐久）
 ## 13-C 基础 UI：盾生成信号（可视层只读消费——2D 弧贴身/3D 盾体代理挂载锚点）
 signal player_shield_spawned(shield: StaticBody2D)
+signal player_shield_removed(shield: StaticBody2D)   # 13-A/13-C：盾图标条摘除锚点（碎/超时/手动移除统一出口）
 
 
 func create_player_shield(params: Dictionary, caster: Node2D) -> StaticBody2D:
@@ -234,6 +235,8 @@ func _on_obstacle_destroyed(obstacle: StaticBody2D) -> void:
 	"""障碍物被摧毁回调"""
 	if obstacles.has(obstacle):
 		obstacles.erase(obstacle)
+	if obstacle.has_method("get_shield_hp"):
+		player_shield_removed.emit(obstacle)  # 13-A 盾图标摘
 	print("[ObstacleManager] 障碍物被摧毁 pos=(" + str(snapped(obstacle.global_position.x, 1.0)) + "," + str(snapped(obstacle.global_position.y, 1.0)) + ")")
 
 
@@ -241,4 +244,6 @@ func _on_obstacle_expired(obstacle: StaticBody2D) -> void:
 	"""障碍物过期回调"""
 	if obstacles.has(obstacle):
 		obstacles.erase(obstacle)
+	if obstacle.has_method("get_shield_hp"):
+		player_shield_removed.emit(obstacle)  # 13-A 盾图标摘
 	print("[ObstacleManager] 障碍物持续时间结束 pos=(" + str(snapped(obstacle.global_position.x, 1.0)) + "," + str(snapped(obstacle.global_position.y, 1.0)) + ")")

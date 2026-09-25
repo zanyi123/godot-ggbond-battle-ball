@@ -76,6 +76,52 @@ func get_entry_keys() -> Array:
 	return _entries.keys()
 
 
+## 13-A/13-C 漏缺补齐：盾图标（数据源=obstacle_manager 盾信号；uses 模式次数点复用充能点绘制，工单"HUD 侧"）
+## 零判定：只读消费 spawned/removed/shield_state_changed，不写任何游戏状态
+func connect_shield_source(om: Node) -> void:
+	if om == null or not is_inside_tree():
+		return
+	if om.has_signal("player_shield_spawned") and not om.player_shield_spawned.is_connected(_on_shield_spawned):
+		om.player_shield_spawned.connect(_on_shield_spawned)
+	if om.has_signal("player_shield_removed") and not om.player_shield_removed.is_connected(_on_shield_removed):
+		om.player_shield_removed.connect(_on_shield_removed)
+
+
+func _on_shield_spawned(shield: StaticBody2D) -> void:
+	if _bound_player == null or shield == null or not is_instance_valid(shield):
+		return
+	if int(shield.get("caster_id")) != _bound_player.get_instance_id():
+		return
+	_update_shield_entry(shield)
+	if shield.has_signal("shield_state_changed") and not shield.shield_state_changed.is_connected(_on_shield_state_changed):
+		shield.shield_state_changed.connect(_on_shield_state_changed.bind(shield))
+
+
+func _on_shield_removed(shield: StaticBody2D) -> void:
+	remove_entry("shield")
+	queue_redraw()
+
+
+func _on_shield_state_changed(_hp: float, _reason: String, shield: StaticBody2D) -> void:
+	if shield != null and is_instance_valid(shield):
+		_update_shield_entry(shield)
+
+
+func _update_shield_entry(shield: StaticBody2D) -> void:
+	var icon: Dictionary = STATUS_ICONS.get("shield")
+	var mode: String = str(shield.get("durability_mode") if shield.get("durability_mode") != null else "hp")
+	if mode == "uses":
+		var uses_max: int = maxi(int(shield.get("uses_left")), 1)
+		# uses_max 原始值已不可得（宿主只存剩余）——以当前剩余显示次数点（递减可辨）
+		set_entry_raw("shield", "shield", str(icon["char"]), icon["color"], 0, 0,
+			int(shield.get("uses_left")), uses_max)
+	else:
+		var hp = shield.get("obstacle_hp")
+		set_entry_raw("shield", "shield", str(icon["char"]), icon["color"],
+			0, maxi(int(ceil(float(hp) if hp != null else 0.0)), 0))
+	queue_redraw()
+
+
 ## 测试口：当前可见图标数（含折叠逻辑）
 func get_visible_count() -> int:
 	var total: int = _entries.size()
@@ -112,14 +158,33 @@ func set_entry_raw(key: String, src: String, char_text: String, color: Color, re
 	_queue_redraw()
 
 
-## 印记层数（mark_changed 回调；count=0 摘除）
+## 印记层数（mark_changed 回调；count=0 摘除；叠层瞬间闪烁 2 次——13-D1）
+## ⚠ 精确"阈值触发"判定层无信号（阈值消费在 handler），以"叠层动作"近似触发并上报
+var _blink_left: int = 0
+var _blink_clock: float = 0.0
+
 func _on_mark_changed(mark_id: String, count: int) -> void:
 	var icon: Dictionary = STATUS_ICONS.get("mark")
 	if count <= 0:
 		remove_entry("mark_" + mark_id)
 	else:
+		if count >= 2 and int(_entries.get("mark_" + mark_id, {}).get("stacks", 0)) < count:
+			_blink_left = 4   # 亮-灭-亮-灭（2 次闪烁，_process 驱动）
+			_blink_clock = 0.0
 		set_entry_raw("mark_" + mark_id, "mark", str(icon["char"]), icon["color"], 0, count)
 	_queue_redraw()
+
+
+func _process(delta: float) -> void:
+	# 闪烁期唯一轮询段（平时零轮询，事件驱动）
+	if _blink_left > 0:
+		_blink_clock += delta
+		if _blink_clock >= 0.15:
+			_blink_clock = 0.0
+			_blink_left -= 1
+			modulate.a = 0.25 if _blink_left % 2 == 1 else 1.0
+		if _blink_left == 0:
+			modulate.a = 1.0
 
 
 ## toggle 激活态（toggle_changed 回调；关=摘除）

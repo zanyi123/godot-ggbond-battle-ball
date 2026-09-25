@@ -42,6 +42,38 @@ func setup() -> void:
 	add_child(fallback)
 	_ball_mesh = fallback
 
+## 13-D4 基础 UI：球隐身 3D 侧半透明（同 2D 参数 alpha=0.35；材质遍历只读切换，零判定）
+func set_stealth(on: bool) -> void:
+	var target_a: float = 0.35 if on else 1.0
+	if _ball_mesh == null or not is_instance_valid(_ball_mesh):
+		return
+	# 兼容兜底球体（material_override）与 GLB 模型（surface 材质）两种挂法；duplicate 防共享材质污染
+	for child in _ball_mesh.get_children():
+		if child is MeshInstance3D:
+			_apply_stealth_to_mesh(child, target_a, on)
+	if _ball_mesh is MeshInstance3D:
+		_apply_stealth_to_mesh(_ball_mesh, target_a, on)
+
+
+func _apply_stealth_to_mesh(mi: MeshInstance3D, target_a: float, on: bool) -> void:
+	var m = mi.get("material_override")
+	if m != null and m is BaseMaterial3D:
+		var bm: BaseMaterial3D = m
+		if on:
+			bm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		bm.albedo_color.a = target_a
+		return
+	if mi.mesh != null:
+		for i in range(mi.mesh.get_surface_count()):
+			var sm = mi.get_active_material(i)
+			if sm != null and sm is BaseMaterial3D:
+				var dup: BaseMaterial3D = sm.duplicate()
+				if on:
+					dup.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				dup.albedo_color.a = target_a
+				mi.set_surface_override_material(i, dup)
+
+
 ## ==================== 对外 API（Phase 2 bridge 复用） ====================
 
 ## 飞行态：2D 坐标 → 飞行高度 + 自旋

@@ -470,6 +470,9 @@ func _sync_players() -> void:
 func _sync_ball() -> void:
 	if _ball_proxy == null or _ball_2d == null or not is_instance_valid(_ball_2d):
 		return
+	# 13-D4：球隐身 3D 半透明（同 2D 参数）
+	if _ball_2d.has_method("is_stealthed"):
+		_ball_proxy.set_stealth(bool(_ball_2d.is_stealthed()))
 	var owner_p = _ball_2d.owner_player
 	if owner_p != null and is_instance_valid(owner_p) and _player_proxies.has(owner_p):
 		var proxy = _player_proxies[owner_p]

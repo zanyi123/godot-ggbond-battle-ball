@@ -74,6 +74,10 @@ func setup_players(team: Array[CharacterBody2D], enemies: Array[CharacterBody2D]
 			var bar: Control = _status_icon_bars[i]
 			bar.position = Vector2(panel_width_target() - 8 * 27.0 - 6.0, 4.0)
 			bar.bind_player(team[i])
+			# 13-A/13-C 漏缺补齐：盾图标数据源（spawned/removed/shield_state_changed）
+			var om_node = get_parent().get_node_or_null("ObstacleManager") if get_parent() else null
+			if om_node != null:
+				bar.connect_shield_source(om_node)
 			if not bar.visible:
 				bar.visible = true
 

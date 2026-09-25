@@ -157,6 +157,65 @@ func _run() -> void:
 	ball._sync_basic_ui_visuals()
 	_assert("13-D: 恢复→不透明+必中线隐藏", ball.ball_visual.modulate.a == 1.0 and not line.visible)
 
+	# ===== 漏缺补齐断言（2026-09-25 二轮复查）=====
+	# ①13-B 元素弱点图标（工单明确列项）
+	player.turn_on_light("element_weak", 4.0, {"elements": ["雷火"], "multiplier": 2.0})
+	await process_frame
+	_assert("补①: element_weak 灯亮→'弱'图标挂", "element_weak" in bar.get_entry_keys() 		and str(bar._entries["element_weak"]["char"]) == "弱")
+	player.turn_off_light("element_weak")
+	await process_frame
+	_assert("补①: 灭→摘", not ("element_weak" in bar.get_entry_keys()))
+
+	# ②13-D2 充能点随消耗更新联动
+	player.turn_on_light("charge_stock", 10.0, {"charges": 4, "charges_max": 6})
+	await process_frame
+	player.turn_on_light("charge_stock", 10.0, {"charges": 2, "charges_max": 6})   # 消耗后刷新（同灯重点=刷新语义）
+	await process_frame
+	var cs2: Dictionary = bar._entries.get("charge_stock", {})
+	_assert("补②: 充能点随消耗更新(4→2)", int(cs2.get("charges", -1)) == 2)
+	player.turn_off_light("charge_stock")
+
+	# ③13-A/13-C 盾图标：挂（uses 次数点 HUD 侧）/uses 联动/碎摘/超时摘
+	bar.bind_player(caster)   # 盾图标按 caster_id 匹配（盾归属施法者）
+	bar.connect_shield_source(om)
+	var shield3: StaticBody2D = om.create_player_shield({"shape": "circle", "radius": 30.0, "hp": 3.0, "uses": 3, "durability_mode": "uses", "follow_mode": "follow", "duration": 10.0}, caster)
+	await process_frame
+	_assert("补③a: 盾生成→'盾'图标挂(uses 次数点 HUD 侧)", "shield" in bar.get_entry_keys() 		and int(bar._entries["shield"].get("charges", -1)) == 3)
+	shield3.on_ball_hit()
+	await process_frame
+	_assert("补③b: uses 扣次→图标次数点联动(3→2)", int(bar._entries["shield"].get("charges", -1)) == 2)
+	shield3.on_ball_hit()
+	shield3.on_ball_hit()   # 3 次用尽→碎（_destroy→destroyed 信号→removed→图标摘）
+	await process_frame
+	_assert("补③c: 盾碎(uses 耗尽自动销毁)→图标摘", not ("shield" in bar.get_entry_keys()) or not is_instance_valid(shield3))
+	var shield4: StaticBody2D = om.create_player_shield({"shape": "circle", "radius": 30.0, "hp": 300.0, "durability_mode": "hp", "follow_mode": "static", "duration": 0.3}, caster)
+	await process_frame
+	var on4: bool = "shield" in bar.get_entry_keys()
+	await create_timer(0.8).timeout
+	await process_frame
+	_assert("补③d: 盾超时(duration 到期自动清理)→图标摘", on4 and not ("shield" in bar.get_entry_keys()))
+
+	# ④13-D4 球隐身 3D 侧透明度（同参数 alpha=0.35）
+	var proxy_script: GDScript = load("res://scripts/battle3d/visual/ball_proxy_3d_v2.gd")
+	var bproxy: Node3D = Node3D.new()
+	bproxy.set_script(proxy_script)
+	root.add_child(bproxy)
+	bproxy.setup()   # 建 mesh（模型缺失走兜底球体）
+	bproxy.set_stealth(true)
+	var p3d_ok: bool = _any_ball_mat_alpha(bproxy, 0.35)
+	bproxy.set_stealth(false)
+	var p3d_ok2: bool = _any_ball_mat_alpha(bproxy, 1.0)
+	_assert("补④: 球隐身 3D 半透明(0.35)/恢复(1.0)", p3d_ok and p3d_ok2)
+
+	# ⑤13-D1 印记叠层闪烁（轻量：叠层动作触发；精确阈值待判定层信号——上报）
+	caster.apply_mark("fire", 3, 8.0)
+	caster.apply_mark("fire", 3, 8.0)   # 第 2 层→叠层动作（bar 已绑 caster）
+	await process_frame
+	_assert("补⑤: 印记叠层→闪烁触发(blink 计数在册)", int(bar._blink_left) > 0 or bar.modulate.a < 1.0)
+	await create_timer(0.8).timeout
+	_assert("补⑤: 闪烁结束恢复不透明", bar.modulate.a == 1.0 and int(bar._blink_left) == 0)
+	caster.clear_mark("fire")
+
 	# ===== HUD 挂载 =====
 	var hud: Control = load("res://scripts/battle/battle_hud.gd").new()
 	root.add_child(hud)
@@ -187,6 +246,29 @@ func _run() -> void:
 	else:
 		print("🎉 全部通过！（截图观感项 headless 无法产出，已如实标注待窗口环境补）")
 	quit(1 if _fail > 0 else 0)
+
+
+## 遍历球 mesh 的生效材质（override 或 surface），任一 alpha 匹配即真
+func _any_ball_mat_alpha(bproxy: Node3D, expect: float) -> bool:
+	var mesh = bproxy._ball_mesh
+	if mesh == null or not is_instance_valid(mesh):
+		return false
+	var nodes: Array = [mesh]
+	for c in mesh.get_children():
+		if c is MeshInstance3D:
+			nodes.append(c)
+	for n in nodes:
+		if n is MeshInstance3D:
+			var mi: MeshInstance3D = n
+			var m = mi.get("material_override")
+			if m != null and m is BaseMaterial3D and absf((m as BaseMaterial3D).albedo_color.a - expect) < 0.01:
+				return true
+			if mi.mesh != null:
+				for i in range(mi.mesh.get_surface_count()):
+					var sm = mi.get_active_material(i)
+					if sm != null and sm is BaseMaterial3D and absf((sm as BaseMaterial3D).albedo_color.a - expect) < 0.01:
+						return true
+	return false
 
 
 func _assert(test_name: String, ok: bool) -> void:
