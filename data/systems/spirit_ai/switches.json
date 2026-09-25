@@ -1,0 +1,6 @@
+{
+	"schema_version": 1,
+	"master_enabled": false,
+	"waves": { "A": false, "B": false, "C": false, "D": false, "E": false },
+	"_说明": "master=false：原语系统整体旁路，行为=旧版评分（主游戏稳定默认）。master=true：仅 waves 中 true 的波参与原语查表，其余视为未命中走 fallback。开发者可热改本文件控制启用范围；谁开谁在看板登记。"
+}

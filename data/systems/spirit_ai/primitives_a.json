@@ -1,0 +1,244 @@
+{
+	"schema_version": 1,
+	"wave": "A",
+	"updated": "2026-09-26",
+	"descriptors": {
+		"ball_dmg_up_pct": {
+			"family": "ball_stat", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "value", "value_unit": 1.5, "value_min": 15.0, "value_cap": 90.0,
+			"intent": "attack", "intent_strength": 0.8, "target_mode": "ball",
+			"notes": "持球进攻前增伤"
+		},
+		"ball_dmg_up_flat": {
+			"family": "ball_stat", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "value", "value_unit": 1.5, "value_min": 15.0, "value_cap": 90.0,
+			"intent": "attack", "intent_strength": 0.8, "target_mode": "ball",
+			"notes": "持球进攻前增伤(固定)"
+		},
+		"ball_speed_up_pct": {
+			"family": "ball_stat", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "multiplier", "value_unit": 30.0, "value_min": 15.0, "value_cap": 75.0,
+			"intent": "attack", "intent_strength": 0.8, "target_mode": "ball",
+			"notes": "multiplier≈1.3→39分"
+		},
+		"ball_speed_up_flat": {
+			"family": "ball_stat", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "value", "value_unit": 0.4, "value_min": 15.0, "value_cap": 75.0,
+			"intent": "attack", "intent_strength": 0.8, "target_mode": "ball",
+			"notes": "registry params=value(非规约建议表multiplier)；+100速=40分"
+		},
+		"ball_dmg_down_pct": {
+			"family": "ball_stat", "direction": "enemy", "timing_gate": "enemy_carrying_visible",
+			"value_param": "value", "value_unit": 0.8, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "control", "intent_strength": 0.6, "target_mode": "enemy_visible",
+			"notes": "敌持球可见时削其球伤"
+		},
+		"ball_dmg_down_flat": {
+			"family": "ball_stat", "direction": "enemy", "timing_gate": "enemy_carrying_visible",
+			"value_param": "value", "value_unit": 0.8, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "control", "intent_strength": 0.6, "target_mode": "enemy_visible",
+			"notes": "敌持球可见时削其球伤(固定)"
+		},
+		"ball_speed_down_pct": {
+			"family": "ball_stat", "direction": "enemy", "timing_gate": "enemy_carrying_visible",
+			"value_param": "multiplier", "value_unit": 25.0, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "control", "intent_strength": 0.6, "target_mode": "enemy_visible",
+			"notes": "registry params=multiplier(÷比)"
+		},
+		"ball_speed_down_flat": {
+			"family": "ball_stat", "direction": "enemy", "timing_gate": "enemy_carrying_visible",
+			"value_param": "value", "value_unit": 0.35, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "control", "intent_strength": 0.6, "target_mode": "enemy_visible",
+			"notes": "registry params=value"
+		},
+
+		"player_atk_up_pct": {
+			"family": "player_attr", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "value", "value_unit": 1.2, "value_min": 15.0, "value_cap": 75.0,
+			"intent": "attack", "intent_strength": 0.8, "target_mode": "self",
+			"notes": "进攻前加攻"
+		},
+		"player_atk_up_flat": {
+			"family": "player_attr", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "value", "value_unit": 1.2, "value_min": 15.0, "value_cap": 75.0,
+			"intent": "attack", "intent_strength": 0.8, "target_mode": "self",
+			"notes": ""
+		},
+		"player_def_up_pct": {
+			"family": "player_attr", "direction": "self", "timing_gate": "self_threatened",
+			"value_param": "value", "value_unit": 1.0, "value_min": 15.0, "value_cap": 70.0,
+			"intent": "defense", "intent_strength": 0.8, "target_mode": "self",
+			"notes": "承伤前加防"
+		},
+		"player_def_up_flat": {
+			"family": "player_attr", "direction": "self", "timing_gate": "self_threatened",
+			"value_param": "value", "value_unit": 1.0, "value_min": 15.0, "value_cap": 70.0,
+			"intent": "defense", "intent_strength": 0.8, "target_mode": "self",
+			"notes": ""
+		},
+		"player_spd_up_pct": {
+			"family": "player_attr", "direction": "self", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 0.9, "value_min": 15.0, "value_cap": 50.0,
+			"intent": "support", "intent_strength": 0.6, "target_mode": "self",
+			"notes": "追击/逃生通用移速"
+		},
+		"player_spd_up_flat": {
+			"family": "player_attr", "direction": "self", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 0.9, "value_min": 15.0, "value_cap": 50.0,
+			"intent": "support", "intent_strength": 0.6, "target_mode": "self",
+			"notes": ""
+		},
+		"player_res_up_pct": {
+			"family": "player_attr", "direction": "self", "timing_gate": "self_threatened",
+			"value_param": "value", "value_unit": 0.8, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "defense", "intent_strength": 0.7, "target_mode": "self",
+			"notes": "承伤前加韧"
+		},
+		"player_res_up_flat": {
+			"family": "player_attr", "direction": "self", "timing_gate": "self_threatened",
+			"value_param": "value", "value_unit": 0.8, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "defense", "intent_strength": 0.7, "target_mode": "self",
+			"notes": ""
+		},
+		"player_atk_down_pct": {
+			"family": "player_attr", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 1.0, "value_min": 15.0, "value_cap": 65.0,
+			"intent": "control", "intent_strength": 0.6, "target_mode": "enemy_visible",
+			"notes": ""
+		},
+		"player_atk_down_flat": {
+			"family": "player_attr", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 1.0, "value_min": 15.0, "value_cap": 65.0,
+			"intent": "control", "intent_strength": 0.6, "target_mode": "enemy_visible",
+			"notes": ""
+		},
+		"player_def_down_pct": {
+			"family": "player_attr", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 1.1, "value_min": 15.0, "value_cap": 70.0,
+			"intent": "attack", "intent_strength": 0.7, "target_mode": "enemy_visible",
+			"notes": "破防增伤前置"
+		},
+		"player_def_down_flat": {
+			"family": "player_attr", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 1.1, "value_min": 15.0, "value_cap": 70.0,
+			"intent": "attack", "intent_strength": 0.7, "target_mode": "enemy_visible",
+			"notes": ""
+		},
+		"player_spd_down_pct": {
+			"family": "player_attr", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 0.9, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "control", "intent_strength": 0.7, "target_mode": "enemy_visible",
+			"notes": "放风筝"
+		},
+		"player_spd_down_flat": {
+			"family": "player_attr", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 0.9, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "control", "intent_strength": 0.7, "target_mode": "enemy_visible",
+			"notes": ""
+		},
+		"player_res_down_pct": {
+			"family": "player_attr", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 0.7, "value_min": 15.0, "value_cap": 50.0,
+			"intent": "attack", "intent_strength": 0.6, "target_mode": "enemy_visible",
+			"notes": ""
+		},
+		"player_res_down_flat": {
+			"family": "player_attr", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 0.7, "value_min": 15.0, "value_cap": 50.0,
+			"intent": "attack", "intent_strength": 0.6, "target_mode": "enemy_visible",
+			"notes": ""
+		},
+
+		"player_energy_gain_pct": {
+			"family": "energy_mgmt", "direction": "self", "timing_gate": "calm_state",
+			"value_param": "value", "value_unit": 1.0, "value_min": 15.0, "value_cap": 45.0,
+			"intent": "support", "intent_strength": 0.5, "target_mode": "self",
+			"notes": "闲置期攒能"
+		},
+		"player_energy_gain_flat": {
+			"family": "energy_mgmt", "direction": "self", "timing_gate": "calm_state",
+			"value_param": "value", "value_unit": 1.0, "value_min": 15.0, "value_cap": 45.0,
+			"intent": "support", "intent_strength": 0.5, "target_mode": "self",
+			"notes": ""
+		},
+		"player_energy_cost_pct": {
+			"family": "energy_mgmt", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 0.8, "value_min": 15.0, "value_cap": 50.0,
+			"intent": "control", "intent_strength": 0.5, "target_mode": "enemy_visible",
+			"notes": "registry描述=消耗敌方能量(削能debuff)，与06§2.3建议表self相反，以registry为准(看板已登记)"
+		},
+		"player_energy_cost_flat": {
+			"family": "energy_mgmt", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 0.8, "value_min": 15.0, "value_cap": 50.0,
+			"intent": "control", "intent_strength": 0.5, "target_mode": "enemy_visible",
+			"notes": "同上，以registry为准"
+		},
+		"player_energy_max_up_pct": {
+			"family": "energy_mgmt", "direction": "self", "timing_gate": "calm_state",
+			"value_param": "value", "value_unit": 0.6, "value_min": 15.0, "value_cap": 40.0,
+			"intent": "support", "intent_strength": 0.5, "target_mode": "self",
+			"notes": "间接增益，单价压低"
+		},
+		"player_energy_max_down_pct": {
+			"family": "energy_mgmt", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 0.6, "value_min": 15.0, "value_cap": 40.0,
+			"intent": "control", "intent_strength": 0.5, "target_mode": "enemy_visible",
+			"notes": ""
+		},
+		"player_energy_max_up_flat": {
+			"family": "energy_mgmt", "direction": "self", "timing_gate": "calm_state",
+			"value_param": "value", "value_unit": 0.6, "value_min": 15.0, "value_cap": 40.0,
+			"intent": "support", "intent_strength": 0.5, "target_mode": "self",
+			"notes": ""
+		},
+		"player_energy_max_down_flat": {
+			"family": "energy_mgmt", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "value", "value_unit": 0.6, "value_min": 15.0, "value_cap": 40.0,
+			"intent": "control", "intent_strength": 0.5, "target_mode": "enemy_visible",
+			"notes": ""
+		},
+
+		"player_spirit_cost_down": {
+			"family": "energy_mgmt", "direction": "self", "timing_gate": "pre_burst",
+			"value_param": "multiplier", "value_unit": 60.0, "value_min": 15.0, "value_cap": 45.0,
+			"intent": "support", "intent_strength": 0.5, "target_mode": "self",
+			"notes": "multiplier≈0.8→48分"
+		},
+		"player_spirit_cost_up": {
+			"family": "energy_mgmt", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "multiplier", "value_unit": 50.0, "value_min": 15.0, "value_cap": 45.0,
+			"intent": "control", "intent_strength": 0.5, "target_mode": "enemy_visible",
+			"notes": ""
+		},
+		"player_spirit_uses_up": {
+			"family": "energy_mgmt", "direction": "self", "timing_gate": "pre_burst",
+			"value_param": "bonus_uses", "value_unit": 30.0, "value_min": 15.0, "value_cap": 45.0,
+			"intent": "support", "intent_strength": 0.5, "target_mode": "self",
+			"notes": "value_param以registry params=bonus_uses为准"
+		},
+		"player_spirit_cd_down": {
+			"family": "energy_mgmt", "direction": "self", "timing_gate": "pre_burst",
+			"value_param": "multiplier", "value_unit": 70.0, "value_min": 15.0, "value_cap": 50.0,
+			"intent": "support", "intent_strength": 0.5, "target_mode": "self",
+			"notes": "multiplier≈0.7→49分"
+		},
+		"player_spirit_cd_up": {
+			"family": "energy_mgmt", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "multiplier", "value_unit": 60.0, "value_min": 15.0, "value_cap": 45.0,
+			"intent": "control", "intent_strength": 0.5, "target_mode": "enemy_visible",
+			"notes": ""
+		},
+		"player_spirit_double": {
+			"family": "energy_mgmt", "direction": "self", "timing_gate": "pre_burst",
+			"value_param": "duration", "value_unit": 8.0, "value_min": 15.0, "value_cap": 45.0,
+			"intent": "support", "intent_strength": 0.5, "target_mode": "self",
+			"notes": "registry params无数值项，以duration计价(5s=40分)"
+		},
+		"player_spirit_half": {
+			"family": "energy_mgmt", "direction": "enemy", "timing_gate": "enemy_visible",
+			"value_param": "duration", "value_unit": 7.0, "value_min": 15.0, "value_cap": 40.0,
+			"intent": "control", "intent_strength": 0.5, "target_mode": "enemy_visible",
+			"notes": "registry描述=下次技能效果减半(敌向debuff，reverse配对spirit_double)，与06§2.3建议表self相反，以registry为准(看板已登记)"
+		}
+	}
+}
