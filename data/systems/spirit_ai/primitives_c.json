@@ -1,0 +1,127 @@
+{
+	"schema_version": 4,
+	"wave": "C",
+	"updated": "2026-09-26",
+	"_说明": "波C球行为族17标签描述符。schema基座照06规约v1（字段冻结）；schema_version=4=波B family扩展(Q1/v2)+波D扩展(Q4/v3)+波C扩展(Q8，登记于进度看板问题区待批)：①family新增ball_flight/ball_hit/ball_range三枚举(同Q1逻辑：family纯分类元数据，契约三函数不消费)②描述符新增operation_mode字段(none=注入族AUTO直调/steer=OP_STEER手动制导激活窗/midfly=OP_MIDFLY飞行中干预，供ai_input_source分发，契约三函数不消费)③midfly标签追加op_policy字段(recall=回收时机/boost=推进时机，ai_input_source策略分发用)。target_mode全部=ball（06§2.1冻结枚举，零扩展）。timing_gate：注入族=ball_hold_engage(投前注入)；操控族=ball_flight(06§三预留键本波启用，ctx.ball_in_flight由manager填充)；ball_range_down=enemy_carrying_visible。计价口径：compute_value=params[value_param]×value_unit后clamp[value_min,value_cap]；value_param='none'表示该标签无数值参数(波B合规口径)，compute_value恒回落value_min平价。操控类(manual_steering/in_flight_boost/recall)按'AI开得一般'保守定价(04矩阵波C行，cap≤60)。ball_range_down：reverse配对(ball_range_up自向)裁为敌向debuff；registry描述'缩小AOE范围'的multiplier越小削益越强，与param×unit线性计价反向，v1取平价，梯度化归Q8待批。",
+	"descriptors": {
+		"ball_tracking": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "turn_speed", "value_unit": 12.0, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "attack", "intent_strength": 0.7, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "追踪：投前注入持续转向，命中率提升估值×turn_speed"
+		},
+		"ball_avoid": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "none", "value_unit": 0.0, "value_min": 18.0, "value_cap": 40.0,
+			"intent": "support", "intent_strength": 0.5, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "避障：反制族，投前注入保球道（无参数平价）"
+		},
+		"ball_boomerang": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "return_distance", "value_unit": 0.25, "value_min": 15.0, "value_cap": 55.0,
+			"intent": "support", "intent_strength": 0.5, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "回旋：球飞到一半返回（回手再投机会），按回程距离计价"
+		},
+		"ball_straight": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "none", "value_unit": 0.0, "value_min": 20.0, "value_cap": 40.0,
+			"intent": "attack", "intent_strength": 0.5, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "直行：不受干扰直线球（无参数平价）"
+		},
+		"ball_lockon": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "none", "value_unit": 0.0, "value_min": 28.0, "value_cap": 45.0,
+			"intent": "attack", "intent_strength": 0.8, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "精准锁定：发球自动瞄准最近敌（无参数平价，强命中向）"
+		},
+		"ball_spread": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "split_count", "value_unit": 14.0, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "attack", "intent_strength": 0.7, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "扩散：母球分裂N子球（伤害×split_damage_ratio），按子球数计价"
+		},
+		"ball_bounce_enhance": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "max_bounces", "value_unit": 18.0, "value_min": 15.0, "value_cap": 65.0,
+			"intent": "attack", "intent_strength": 0.5, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "反弹增强：撞墙上限+速度保持率，按反弹次数计价（0=无限回落min）"
+		},
+		"ball_transform": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "size_scale", "value_unit": 22.0, "value_min": 15.0, "value_cap": 70.0,
+			"intent": "attack", "intent_strength": 0.6, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "形态变换：巨型雪球(size_scale>1)易命中；<1难命中属防守向，v1按攻击向计价"
+		},
+		"ball_stealth": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "none", "value_unit": 0.0, "value_min": 22.0, "value_cap": 40.0,
+			"intent": "attack", "intent_strength": 0.6, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "球隐身：对敌不可见（敌AI躲球感知跳过），无参数平价"
+		},
+		"ball_in_flight_boost": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_flight",
+			"value_param": "dmg_pct", "value_unit": 0.5, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "attack", "intent_strength": 0.6, "target_mode": "ball",
+			"operation_mode": "midfly", "op_policy": "boost",
+			"notes": "飞行球推进：激活期同键再按干预(OP_MIDFLY)；dmg_pct主计价，speed_pct次参数留集成扩展"
+		},
+		"ball_recall": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_flight",
+			"value_param": "max_times", "value_unit": 20.0, "value_min": 15.0, "value_cap": 50.0,
+			"intent": "support", "intent_strength": 0.6, "target_mode": "ball",
+			"operation_mode": "midfly", "op_policy": "recall",
+			"notes": "拉回：飞行球回收保球权；回收时机=AI操作余量判定（球远离或敌近球）"
+		},
+		"ball_manual_steering": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "max_duration", "value_unit": 9.0, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "attack", "intent_strength": 0.6, "target_mode": "ball",
+			"operation_mode": "steer", "op_policy": "",
+			"notes": "手动制导：OP_STEER激活窗，AI产生与玩家等价转向意图；操控类保守定价（AI开得一般，cap60）"
+		},
+		"ball_penetrate": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "none", "value_unit": 0.0, "value_min": 24.0, "value_cap": 45.0,
+			"intent": "attack", "intent_strength": 0.7, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "穿透：击人不停止（群穿价值），无参数平价"
+		},
+		"ball_sure_hit": {
+			"family": "ball_flight", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "none", "value_unit": 0.0, "value_min": 30.0, "value_cap": 50.0,
+			"intent": "attack", "intent_strength": 0.8, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "必中：高度窗豁免+追踪隐身不丢，配合lockon；无参数平价（强命中向最高档）"
+		},
+		"ball_carry_push": {
+			"family": "ball_hit", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "pull_speed", "value_unit": 0.12, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "attack", "intent_strength": 0.7, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "带人位移：命中附加拖拽（持球突破被阻场景），按拖拽速度计价"
+		},
+		"ball_range_up": {
+			"family": "ball_range", "direction": "self", "timing_gate": "ball_hold_engage",
+			"value_param": "damage_pct", "value_unit": 0.5, "value_min": 15.0, "value_cap": 65.0,
+			"intent": "attack", "intent_strength": 0.6, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "范围扩大：命中后以球员为半径AOE（投距不足时）；damage_pct主计价，radius留集成扩展"
+		},
+		"ball_range_down": {
+			"family": "ball_range", "direction": "enemy", "timing_gate": "enemy_carrying_visible",
+			"value_param": "none", "value_unit": 0.0, "value_min": 20.0, "value_cap": 40.0,
+			"intent": "control", "intent_strength": 0.6, "target_mode": "ball",
+			"operation_mode": "none", "op_policy": "",
+			"notes": "范围缩小：敌向debuff（reverse配对ball_range_up自向）；multiplier反向计价v1取平价，梯度化归Q8"
+		}
+	}
+}

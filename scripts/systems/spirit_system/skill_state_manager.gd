@@ -254,6 +254,37 @@ func _clear_operator_context(player_id: int) -> void:
 	_operator_context.erase(player_id)
 
 
+## ==================== 波C（操球窗口 单写者认领）：AI 虚拟输入源（03主题③方案a） ====================
+## AI 与玩家走同一激活状态机：ai_input_source.gd 生成与玩家等价的操作意图，
+## 经本管理器公开入口（on_skill_key_pressed / confirm_substate_at）推进，禁旁路直调 use_skill。
+## 本登记只补状态机不知道的两件事：①AI 施法者节点（_trigger_midfly 球源解析用——
+## AI 玩家无 input_manager/controlled_player 链）②AI 虚拟瞄准（steer 意图留档可查）。
+## 未登记/未接线时零行为差异（字典恒空=与无此代码等价，sim 逐位不受影响）。
+var ai_virtual_inputs: Dictionary = {}  # {player_id: {"caster": Node, "aim_direction": Vector2}}
+
+
+## 登记 AI 输入源（接线口：集成窗口经 ai_input_source.attach 调用；重复登记覆盖）
+func register_ai_input_source(player_id: int, caster: Node) -> void:
+	ai_virtual_inputs[player_id] = {"caster": caster, "aim_direction": Vector2.ZERO}
+
+
+## 写 AI 虚拟瞄准（steer 激活期每周期更新；未登记忽略）
+func set_ai_aim(player_id: int, aim: Vector2) -> void:
+	if ai_virtual_inputs.has(player_id):
+		ai_virtual_inputs[player_id]["aim_direction"] = aim
+
+
+## 读 AI 虚拟瞄准（未登记返回 Vector2.ZERO，消费方按零向量=不干预处理）
+func get_ai_aim(player_id: int) -> Vector2:
+	var entry: Dictionary = ai_virtual_inputs.get(player_id, {})
+	return entry.get("aim_direction", Vector2.ZERO)
+
+
+## 注销（cleanup/比赛结束）
+func clear_ai_input_source(player_id: int) -> void:
+	ai_virtual_inputs.erase(player_id)
+
+
 func _ready() -> void:
 	pass
 
@@ -343,8 +374,14 @@ func _trigger_midfly(player_id: int, skill_id: String) -> bool:
 		print("[SkillState] MIDFLY 次数耗尽: %s" % skill_id)
 		return false
 	_operator_context[player_id]["midfly_left"] = left - 1
-	# 球引用：经 input_manager(父) 的 controlled_player.ball_ref（P1-1 注入）或 battle_manager.ball_node
+	# 球引用：测试注入口 → AI 虚拟输入源 caster（波C）→ input_manager(父) 的
+	# controlled_player.ball_ref（P1-1 注入）或 battle_manager.ball_node
 	var ball = test_ball  # 测试注入口优先
+	if ball == null:
+		# 波C：AI 施法者自己的 ball_ref 次优先（AI 玩家无 input_manager，controlled_player 链不适用）
+		var ai_caster = ai_virtual_inputs.get(player_id, {}).get("caster")
+		if ai_caster != null and is_instance_valid(ai_caster) and ai_caster.get("ball_ref") != null:
+			ball = ai_caster.get("ball_ref")
 	var parent = get_parent()
 	if parent != null:
 		var cp = parent.get("controlled_player")
@@ -529,3 +566,4 @@ func cleanup_player(player_id: int) -> void:
 	_player_skills.erase(player_id)
 	_last_press_times.erase(player_id)
 	_active_player_skills.erase(player_id)
+	ai_virtual_inputs.erase(player_id)  # 波C：AI 输入源登记一并清理
