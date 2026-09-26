@@ -8,6 +8,7 @@ extends Control
 # 队B球员1体力  队B球员2体力  队B球员3体力
 
 var player_panels: Array[Control] = []
+var spirit_trigger: Node = null   # 快捷技能栏管理：名册数据源（battle_manager 注入）
 var _status_icon_bars: Array = []   # 13-A：每球员状态图标条
 var player_stamina_bars: Array[ProgressBar] = []
 var player_energy_bars: Array[ProgressBar] = []
@@ -59,11 +60,23 @@ func _process(_delta: float) -> void:
 			skill_toast.modulate.a = skill_toast_timer / 0.5
 
 
+## 快捷技能栏管理：名册变化→刷新对应球员技能栏（事件驱动）
+func _on_player_skills_changed(player_id: int) -> void:
+	for i in range(team_players.size()):
+		if team_players[i] and is_instance_valid(team_players[i]) and team_players[i].get_instance_id() == player_id:
+			_update_player_skill_icons(i)
+			return
+
+
 func setup_players(team: Array[CharacterBody2D], enemies: Array[CharacterBody2D]) -> void:
 	"""由 battle_manager 调用，绑定球员引用"""
 	team_players = team
 	enemy_players = enemies
 
+	# 快捷技能栏管理：订阅名册变化（动态技能挂/摘→事件驱动刷新）
+	if spirit_trigger != null and spirit_trigger.has_signal("player_skills_changed"):
+		if not spirit_trigger.player_skills_changed.is_connected(_on_player_skills_changed):
+			spirit_trigger.player_skills_changed.connect(_on_player_skills_changed)
 	# 更新底部面板名称 + 技能图标
 	for i in range(min(3, team.size())):
 		if team[i] and team[i].char_data.has("name"):
@@ -98,6 +111,12 @@ func _update_player_skill_icons(player_index: int) -> void:
 	if not player:
 		return
 	var skill_ids: Array[String] = player.get_equipped_skills()
+	# 快捷技能栏管理：动态技能格（第4/5格）=上场名册 - 装备技能 的差集（复制传入/合体分发/天赋注入）
+	var dynamic_ids: Array[String] = []
+	if spirit_trigger != null:
+		for sid in spirit_trigger.get_player_skills(player.get_instance_id()):
+			if str(sid) not in skill_ids and str(sid) not in dynamic_ids:
+				dynamic_ids.append(str(sid))
 	var boxes: Array = player_skill_boxes[player_index]
 	var labels: Array = player_skill_labels[player_index]
 	for slot in range(3):
@@ -128,7 +147,29 @@ func _update_player_skill_icons(player_index: int) -> void:
 			lbl.text = ""
 
 
-## 元素颜色映射（与 handler 一致）
+## 元素颜色映射（与 handler 一致）	# 动态技能格渲染（第4/5格）：名册差集，深蓝底+首字
+	for dslot in range(2):
+		var idx: int = 3 + dslot
+		if idx >= boxes.size():
+			break
+		var dbox: ColorRect = boxes[idx]
+		var dlbl: Label = labels[idx]
+		if dslot >= dynamic_ids.size():
+			dbox.color = Color(0.15, 0.2, 0.35)
+			dlbl.text = ""
+			continue
+		var ddata: Dictionary = DataManager.get_skill_by_id(dynamic_ids[dslot])
+		if ddata.is_empty():
+			dbox.color = Color(0.15, 0.15, 0.15)
+			dlbl.text = "?"
+			continue
+		var dcolor_str := str(ddata.get("icon_color", "#FFFFFF"))
+		var dicon_color := Color.from_string(dcolor_str, Color(0.4, 0.55, 0.9))
+		if dcolor_str == "#FFFFFF" or dcolor_str == "":
+			dicon_color = Color(0.4, 0.55, 0.9)
+		dbox.color = dicon_color
+		dlbl.text = str(ddata.get("name", "?")).substr(0, 1)
+
 func _get_element_color(element: String) -> Color:
 	var colors: Dictionary = {
 		"金刚": Color(0.85, 0.75, 0.3),
@@ -485,11 +526,15 @@ func _create_single_panel(index: int, pos: Vector2, width: float, height: float)
 	var this_player_skill_boxes: Array = []
 	var this_player_skill_labels: Array = []
 	var this_player_skill_cd_overlays: Array = []
-	for s in range(3):
+	for s in range(5):
 		var skill_box := ColorRect.new()
 		skill_box.size = Vector2(30, 30)
 		skill_box.position = Vector2(70 + s * 35, 48)
 		skill_box.color = Color(0.25, 0.25, 0.25)  # 默认深灰（无技能）
+		if s >= 3:
+			# 快捷技能栏管理：第 4/5 格=动态技能格（复制传入/合体分发），深蓝底区分
+			skill_box.color = Color(0.15, 0.2, 0.35)
+			skill_box.tooltip_text = "动态技能格（复制/合体获得）"
 		panel.add_child(skill_box)
 		this_player_skill_boxes.append(skill_box)
 

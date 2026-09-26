@@ -332,6 +332,7 @@ func _setup_ui() -> void:
 	team_a_arr.assign(team_a_players)
 	var team_b_arr: Array[CharacterBody2D] = []
 	team_b_arr.assign(team_b_players)
+	hud.spirit_trigger = spirit_system.skill_trigger if "skill_trigger" in spirit_system else null  # 快捷技能栏名册数据源
 	hud.setup_players(team_a_arr, team_b_arr)
 
 	# 通信系统在 _setup_ai_manager 之后创建,这里先保存HUD引用

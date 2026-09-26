@@ -93,6 +93,9 @@ func set_player_skills(player_id: int, skill_ids: Array[String]) -> void:
 	_subscribe_passives(player_id, skill_ids)
 
 
+	if _dynamic_skills.has(player_id):
+		_dynamic_skills.erase(player_id)  # 换装重置动态技能
+	player_skills_changed.emit(player_id)
 ## ==================== 波3 #20 储存多段·方案A：技能充能池（主人裁决 2026-09-22）====================
 ## 数据格式（主人在元灵管理配技能时填写）：技能条目带 "charges": {"max": 6, "recharge_time": 8.0}
 ## 本窗口只实现消费逻辑（trigger 门槛+扣格+回充），skills.json 零触碰（R1）
@@ -543,9 +546,19 @@ func get_last_enemy_cast(viewer_team: String) -> Dictionary:
 			return item
 	return {}
 
+## 快捷技能栏管理（主人模型 2026-09-25）：动态获得技能（复制传入/合体分发）进球员名册——可释放、带时限、过期自动摘除
+signal player_skills_changed(player_id: int)
+var _dynamic_skills: Dictionary = {}   # {player_id: {skill_id: expires_at}}
+
 ## 暗黑共享：写队友可复制槽（expires 由 handler 传 duration）
 func put_shared_copy(player_id: int, snap: Dictionary, duration: float) -> void:
 	_shared_copies[player_id] = {"skill_data": snap, "expires_at": _clock + duration}
+	var copied_skill_id := str(snap.get("skill_id", ""))
+	if copied_skill_id != "":
+		add_player_skill(player_id, copied_skill_id)
+		if not _dynamic_skills.has(player_id):
+			_dynamic_skills[player_id] = {}
+		_dynamic_skills[player_id][copied_skill_id] = _clock + duration
 
 func take_shared_copy(player_id: int) -> Dictionary:
 	if not _shared_copies.has(player_id):
@@ -558,6 +571,15 @@ func take_shared_copy(player_id: int) -> Dictionary:
 
 ## 更新冷却时间（每帧调用）
 func _process(delta: float) -> void:
+	# 快捷技能栏管理：动态技能过期摘除
+	for pid in _dynamic_skills.keys():
+		var expired_ids: Array = []
+		for sid in _dynamic_skills[pid]:
+			if _clock >= float(_dynamic_skills[pid][sid]):
+				expired_ids.append(sid)
+		for sid in expired_ids:
+			_dynamic_skills[pid].erase(sid)
+			remove_player_skill(pid, sid)
 	_clock += delta
 	var bus = get_tree().get_first_node_in_group("battle_event_bus") if is_inside_tree() else null
 	for player_id in _skill_cooldowns.keys():
@@ -613,6 +635,7 @@ func add_player_skill(player_id: int, skill_id: String) -> void:
 	_skill_cooldowns[player_id][skill_id] = 0.0
 	var skills: Array[String] = [skill_id]
 	_subscribe_passives(player_id, skills)
+	player_skills_changed.emit(player_id)
 
 ## 获取玩家上场技能列表
 func get_player_skills(player_id: int) -> Array[String]:
@@ -620,6 +643,15 @@ func get_player_skills(player_id: int) -> Array[String]:
 		return _player_skills[player_id]
 	return []
 
+
+
+## 快捷技能栏管理：移除动态获得的技能（过期/驱散）
+func remove_player_skill(player_id: int, skill_id: String) -> void:
+	if _player_skills.has(player_id) and skill_id in _player_skills[player_id]:
+		_player_skills[player_id].erase(skill_id)
+		if _skill_cooldowns.has(player_id):
+			_skill_cooldowns[player_id].erase(skill_id)
+		player_skills_changed.emit(player_id)
 ## 检查标签是否存在
 func has_tag(tag_id: String) -> bool:
 	return _tags_registry.has(tag_id)

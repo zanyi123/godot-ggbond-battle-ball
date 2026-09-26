@@ -69,14 +69,16 @@ func _run() -> void:
 			echo2 = str(s.get("operator", ""))
 	_assert("回显: 编辑改 OP_TOGGLE→重载一致", echo2 == "OP_TOGGLE")
 
-	# 缺省路径：无 operator 字段的存量条目回落 AUTO（向后兼容）
-	var no_op_ok := true
+	# 缺省路径（2026-09-25 随数据演进出兼容版）：有 operator 字段的必须 ∈ 12 枚举；
+	# 无字段的缺省 AUTO 语义由 skill_state_manager.get_operator 兜底（另有断言覆盖）
+	var LEGAL_OPS: Array = ops
+	var compat_ok := true
 	for s in DevDataSync.load_skills():
 		if str(s.get("id", "")) == "test_op_sel_1":
 			continue
-		if s.has("operator"):
-			no_op_ok = false
-	_assert("兼容: 存量条目无 operator 字段（缺省 AUTO 语义）", no_op_ok)
+		if s.has("operator") and not (str(s["operator"]) in LEGAL_OPS):
+			compat_ok = false
+	_assert("兼容: 存量 operator 字段全部合法（无字段=缺省 AUTO 语义）", compat_ok)
 
 	# ===== ④ 组合校验（04 大点2，validate_skill_data 拦截）=====
 	var existing: Array = DevDataSync.load_skills()
