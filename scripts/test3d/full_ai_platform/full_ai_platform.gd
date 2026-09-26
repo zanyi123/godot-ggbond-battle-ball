@@ -19,6 +19,7 @@ var auto_matches: int = 0          # --platform-auto=N：headless 自动跑满 N
 var platform_speed: float = 1.0    # --platform-speed=F：Engine.time_scale（auto 模式默认 6）
 var platform_seed: int = 0         # --platform-seed=N（0=不设种子）
 var loadout_path: String = ""      # --platform-loadout=path（缺省用出厂配置）
+var force_observe: bool = false    # --platform-force-observe=1：headless 下也构建观测层（UI 冒烟用）
 var _finished_matches: int = 0
 
 
@@ -71,8 +72,8 @@ func _platform_start() -> void:
 	if auto_matches > 0:
 		Engine.time_scale = platform_speed
 
-	# === P3 观测层（headless 不建 UI）===
-	if auto_matches <= 0 and DisplayServer.get_name() != "headless":
+	# === P3 观测层（headless 默认不建 UI；--platform-force-observe=1 供 headless 冒烟 UI 构建路径）===
+	if auto_matches <= 0 and (DisplayServer.get_name() != "headless" or force_observe):
 		observe_layer = ObserveLayerScript.new()
 		add_child(observe_layer)
 		observe_layer.setup(battle_manager)
@@ -92,6 +93,8 @@ func _parse_platform_args() -> void:
 			platform_seed = int(arg.substr(16))
 		elif arg.begins_with("--platform-loadout="):
 			loadout_path = arg.substr(19)
+		elif arg == "--platform-force-observe=1":
+			force_observe = true
 
 
 func _on_platform_match_ended(score_a: int, score_b: int, result: String) -> void:
