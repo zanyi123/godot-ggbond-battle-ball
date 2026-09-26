@@ -13,15 +13,18 @@ const ARENA_SCENE := "res://scenes/battle/battle_arena.tscn"
 const LoadoutLoader := preload("res://scripts/test3d/full_ai_platform/loadout_loader.gd")
 const ObserveLayerScript := preload("res://scripts/test3d/full_ai_platform/observe_layer.gd")
 const RosterPanelScript := preload("res://scripts/test3d/full_ai_platform/roster_panel.gd")
+const PlatformProbeScript := preload("res://scripts/test3d/full_ai_platform/platform_probe.gd")
 
 var battle_manager: Node2D = null
 var observe_layer: CanvasLayer = null
 var roster_panel: CanvasLayer = null
+var probe: Node = null             # 工单12 检测层（信号判定，非肉眼）
 var auto_matches: int = 0          # --platform-auto=N：headless 自动跑满 N 场后退出（0=交互观战）
 var platform_speed: float = 1.0    # --platform-speed=F：Engine.time_scale（auto 模式默认 6）
 var platform_seed: int = 0         # --platform-seed=N（0=不设种子）
 var loadout_path: String = ""      # --platform-loadout=path（缺省用出厂配置）
 var force_observe: bool = false    # --platform-force-observe=1：headless 下也构建观测层（UI 冒烟用）
+var probe_enabled: bool = true     # --platform-probe=0 关闭检测层（默认开）
 var _finished_matches: int = 0
 
 
@@ -85,6 +88,11 @@ func _begin_match() -> void:
 		print("[Platform] 已清空玩家控制位，双队全 AI")
 
 	GameManager.match_ended.connect(_on_platform_match_ended)
+	# === 工单12 检测层：信号判定印记/合体是否运行时真实发生（21表对照信号，非肉眼）===
+	if probe_enabled:
+		probe = PlatformProbeScript.new()
+		add_child(probe)
+		probe.setup(battle_manager)
 	battle_manager._on_prep_match_started()
 	if auto_matches > 0:
 		Engine.time_scale = platform_speed
@@ -112,11 +120,23 @@ func _parse_platform_args() -> void:
 			loadout_path = arg.substr(19)
 		elif arg == "--platform-force-observe=1":
 			force_observe = true
+		elif arg == "--platform-probe=0":
+			probe_enabled = false
 
 
 func _on_platform_match_ended(score_a: int, score_b: int, result: String) -> void:
 	_finished_matches += 1
 	print("[Platform] 场次#%d 结束 比分 %d-%d（%s）" % [_finished_matches, score_a, score_b, result])
-	if auto_matches > 0 and _finished_matches >= auto_matches:
+	if probe != null and is_instance_valid(probe):
+		var verdict: Dictionary = probe.print_final_report()
+		if auto_matches > 0:
+			# auto 模式：探针判定=退出码（PASS=0 / FAIL=3）——检测数据替代肉眼验收
+			var ok := bool(verdict.get("pass", false))
+			print("[Platform] 探针判定: %s → 退出码 %d" % ["PASS" if ok else "FAIL", 0 if ok else 3])
+			print("[Platform] 自动模式完成，退出")
+			get_tree().quit(0 if ok else 3)
+			return
+	# auto>1 不再重开（一进程一场，多种子=多次调用）——防 RESULTS 相位挂起
+	if auto_matches > 0:
 		print("[Platform] 自动模式完成，退出")
 		get_tree().quit(0)

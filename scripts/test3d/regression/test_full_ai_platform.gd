@@ -146,6 +146,10 @@ func _run() -> void:
 	_assert("E8: 排表确认面板脚本可加载且基类型 CanvasLayer", roster_script != null and roster_script.get_instance_base_type() == "CanvasLayer")
 	var roster_src: String = roster_script.source_code
 	_assert("E9: 排表面板含确认信号+右键技能查看器", roster_src.contains("signal confirmed") and roster_src.contains("_show_skill_viewer"))
+	var probe_script: GDScript = load("res://scripts/test3d/full_ai_platform/platform_probe.gd")
+	_assert("E10: 检测层脚本可加载且基类型 Node", probe_script != null and probe_script.get_instance_base_type() == "Node")
+	var probe_src: String = probe_script.source_code
+	_assert("E11: 检测层挂接工单12三信号(释放/印记/合体)+判定出口", probe_src.contains("mark_changed") and probe_src.contains("combo_formed") and probe_src.contains("skill_used") and probe_src.contains("build_verdict"))
 
 	print("\n========== 结果: %d/%d PASS ==========" % [_pass, _pass + _fail])
 	if _fail > 0:
