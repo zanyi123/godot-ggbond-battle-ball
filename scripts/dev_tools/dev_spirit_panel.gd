@@ -1276,7 +1276,7 @@ func _get_param_default(tag_id: String, param_name: String) -> String:
 		"player_hp_dot": {"value": "5", "duration": "5", "target": "enemies"},
 		"player_move_slow": {"multiplier": "0.5", "duration": "3"},
 		"player_move_boost": {"multiplier": "1.5", "duration": "3"},
-		"player_root": {"duration": "2"},
+		"player_root": {"duration": "2", "target": "enemies"},
 		"player_unroot": {"player_id": ""},
 		"player_energy_gain_pct": {"value": "30", "target": "self"},
 		"player_energy_cost_pct": {"value": "30", "target": "enemies"},

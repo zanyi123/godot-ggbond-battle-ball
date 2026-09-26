@@ -41,9 +41,7 @@
 			"icon_path": "",
 			"id": "skill_金刚_1",
 			"name": "猛虎攻击",
-			"tag_params": {
-
-			},
+			"tag_params": {},
 			"tags": [
 				"ball_dmg_up_pct",
 				"ball_range_up"
@@ -172,9 +170,7 @@
 			"icon_path": "",
 			"id": "skill_草木_2",
 			"name": "荆棘庇佑",
-			"tag_params": {
-
-			},
+			"tag_params": {},
 			"tags": [
 				"field_obs_add"
 			],
@@ -203,9 +199,7 @@
 				"player_def_up_flat"
 			],
 			"trigger": {
-				"condition": {
-
-				},
+				"condition": {},
 				"event": "Defend.BOUNCED"
 			},
 			"type": "passive",
@@ -229,9 +223,7 @@
 				"player_def_up_flat"
 			],
 			"trigger": {
-				"condition": {
-
-				},
+				"condition": {},
 				"event": "Hit.HIT_TAKEN"
 			},
 			"type": "passive"
@@ -278,7 +270,8 @@
 			"operator": "OP_AUTO",
 			"tag_params": {
 				"player_root": {
-					"duration": 2.0
+					"duration": 2.0,
+					"target": "enemies"
 				}
 			},
 			"tags": [
@@ -315,6 +308,216 @@
 			"type": "active",
 			"unlock_cost": 0,
 			"unlock_level": 1
+		},
+		{
+			"base_description": "能量注入球中，叠加一层火印记，威力剧增",
+			"cooldown": 12.0,
+			"description": "麒麟火\n能量注入球中叠加一层火印记：球增伤35%增速35%；印记达2层命禁疗、3层接球爆炸余波",
+			"detail": "火印记链主技（原作:327）：麒麟火/三味真火同印记可跨技叠加，最大三层（工单12主人裁决：全塞player_mark_apply参数化）",
+			"element": "雷火",
+			"energy_cost": 35.0,
+			"icon_color": "#FF4500",
+			"icon_path": "",
+			"id": "skill_雷火_5",
+			"name": "麒麟火",
+			"operator": "OP_AUTO",
+			"tag_params": {
+				"ball_dmg_up_pct": {
+					"value": 35.0
+				},
+				"ball_speed_up_pct": {
+					"multiplier": 1.35
+				},
+				"player_mark_apply": {
+					"mark_id": "huo_yinji",
+					"max_stacks": 3.0,
+					"duration": 20.0,
+					"target": "self",
+					"thresholds": [
+						{
+							"count": 2.0,
+							"tag": "player_heal_block",
+							"params": {
+								"duration": 6.0,
+								"block": "heal",
+								"target": "nearest_enemy"
+							},
+							"clear": false
+						},
+						{
+							"count": 3.0,
+							"tag": "field_zone_danger",
+							"params": {
+								"position": "0,0",
+								"size": "160,160",
+								"damage_value": 15.0,
+								"duration": 3.0,
+								"spawn_at": "ball_stop",
+								"affect_ball": false
+							},
+							"clear": false
+						}
+					]
+				}
+			},
+			"tags": [
+				"ball_dmg_up_pct",
+				"ball_speed_up_pct",
+				"player_mark_apply"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"base_description": "喷出火焰注入球中，叠加一层火印记",
+			"cooldown": 12.0,
+			"description": "三味真火\n喷出火焰注入球中叠加一层火印记：球增速50%增伤20%；与麒麟火同印记可叠加至三层",
+			"detail": "火印记链副技（原作:328-329）：与麒麟火同 mark_id=huo_yinji，叠层共享（工单12印记链全链验证载体）",
+			"element": "雷火",
+			"energy_cost": 30.0,
+			"icon_color": "#FF6347",
+			"icon_path": "",
+			"id": "skill_雷火_6",
+			"name": "三味真火",
+			"operator": "OP_AUTO",
+			"tag_params": {
+				"ball_dmg_up_pct": {
+					"value": 20.0
+				},
+				"ball_speed_up_pct": {
+					"multiplier": 1.5
+				},
+				"player_mark_apply": {
+					"mark_id": "huo_yinji",
+					"max_stacks": 3.0,
+					"duration": 20.0,
+					"target": "self",
+					"thresholds": [
+						{
+							"count": 2.0,
+							"tag": "player_heal_block",
+							"params": {
+								"duration": 6.0,
+								"block": "heal",
+								"target": "nearest_enemy"
+							},
+							"clear": false
+						},
+						{
+							"count": 3.0,
+							"tag": "field_zone_danger",
+							"params": {
+								"position": "0,0",
+								"size": "160,160",
+								"damage_value": 15.0,
+								"duration": 3.0,
+								"spawn_at": "ball_stop",
+								"affect_ball": false
+							},
+							"clear": false
+						}
+					]
+				}
+			},
+			"tags": [
+				"ball_dmg_up_pct",
+				"ball_speed_up_pct",
+				"player_mark_apply"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"base_description": "个体技能，将能量注入身体，巨神灵体附着于身，大幅提升身体防御力、攻击力",
+			"cooldown": 25.0,
+			"description": "祖传秘法\n能量注入身体，巨神灵体附着于身：攻击力+40%、防御力+40%（持续10秒）",
+			"detail": "泰格队增益技（原作:502）；巨神灵体3D表现暂缓（主人裁决④：用现有简约件同级表现）",
+			"element": "大地",
+			"energy_cost": 50.0,
+			"icon_color": "#C8A24B",
+			"icon_path": "",
+			"id": "skill_大地_3",
+			"name": "祖传秘法",
+			"operator": "OP_AUTO",
+			"tag_params": {
+				"player_atk_up_pct": {
+					"value": 40.0,
+					"duration": 10.0
+				},
+				"player_def_up_pct": {
+					"value": 40.0,
+					"duration": 10.0
+				}
+			},
+			"tags": [
+				"player_atk_up_pct",
+				"player_def_up_pct"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"base_description": "两人合体技能半装（坦克本体）",
+			"cooldown": 20.0,
+			"description": "重型坦克·装甲半装\n两人合体技半装：与持炮击半装的队友近距离自动合体，合体期防御+40%移速+25%，炮弹增伤35%",
+			"detail": "金刚队合体技（原作:250）拆分半装A（工单12主人裁方案a：两队友各持半技能自动合体）；能量合缴=两半各自支付",
+			"element": "金刚",
+			"energy_cost": 30.0,
+			"icon_color": "#8B8B00",
+			"icon_path": "",
+			"id": "skill_金刚_2",
+			"name": "重型坦克·装甲半装",
+			"operator": "OP_COMBO",
+			"tag_params": {
+				"player_combo_ready": {
+					"combo_id": "combo_heavy_tank",
+					"role": "armor",
+					"duration": 8.0,
+					"combo_range": 150.0,
+					"def_up_pct": 40.0,
+					"spd_up_pct": 25.0,
+					"ball_dmg_up_pct": 35.0
+				}
+			},
+			"tags": [
+				"player_combo_ready"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"base_description": "两人合体技能半装（炮击装填）",
+			"cooldown": 20.0,
+			"description": "重型坦克·炮击半装\n两人合体技半装：与持装甲半装的队友近距离自动合体，将球当作炮弹击出（增伤35%）",
+			"detail": "金刚队合体技（原作:250）拆分半装B（工单12主人裁方案a）；合体判定=互补role+同队存活+距离≤150",
+			"element": "金刚",
+			"energy_cost": 30.0,
+			"icon_color": "#B8860B",
+			"icon_path": "",
+			"id": "skill_金刚_3",
+			"name": "重型坦克·炮击半装",
+			"operator": "OP_COMBO",
+			"tag_params": {
+				"player_combo_ready": {
+					"combo_id": "combo_heavy_tank",
+					"role": "cannon",
+					"duration": 8.0,
+					"combo_range": 150.0,
+					"def_up_pct": 40.0,
+					"spd_up_pct": 25.0,
+					"ball_dmg_up_pct": 35.0
+				}
+			},
+			"tags": [
+				"player_combo_ready"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
 		}
 	]
 }
