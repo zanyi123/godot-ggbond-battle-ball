@@ -5,6 +5,11 @@ const AIProfile = preload("res://scripts/battle/ai_profile.gd")
 const GOAL_A: Vector2 = Vector2(300.0, 0.0)
 const GOAL_B: Vector2 = Vector2(-300.0, 0.0)
 
+## 失误局部短冷却（02前置地基工单追加，主人批"按你的做"）：
+## 失误后冻结该技能 N 个决策周期，封死"重选→重掷"高频循环；
+## 以 skill_decide_count 为时钟（确定性），不引入墙钟
+const MISTAKE_HOLD_CYCLES := 3
+
 var battle_manager: Node2D
 var spirit_system: SpiritSystemManager
 var ai_manager: Node
@@ -43,7 +48,11 @@ func register_player(player: CharacterBody2D, profile: AIProfile) -> void:
 	spirit_ai_data.append({
 		"player": player,
 		"profile": profile,
-		"skill_think_timer": randf() * profile.skill_think_interval,
+		# 注册思考相位确定性化：原 randf 消耗全局随机流，跨运行不可复现（02前置地基工单A）
+		"skill_think_timer": _deterministic_dice(_player_key_v(str(player.character_id), str(player.team)), 1) * profile.skill_think_interval,
+		"skill_decide_count": 0,
+		"skill_exec_count": 0,
+		"mistake_hold": {},
 		"last_skill_use_time": 0.0,
 		"player_analysis": player_analysis,
 		"skills_analysis": skills_analysis,
@@ -661,6 +670,8 @@ func _decide_skill(sad: Dictionary) -> void:
 	var p = sad.player
 	var profile = sad.profile
 
+	sad["skill_decide_count"] += 1
+
 	if p.spirit_energy < profile.skill_energy_min:
 		return
 
@@ -683,12 +694,32 @@ func _decide_skill(sad: Dictionary) -> void:
 	if scored_skills.is_empty():
 		return
 
-	var best_skill = _select_skill_with_softmax(scored_skills, profile.skill_selection_temperature)
+	var best_skill = _select_skill_with_softmax(sad, scored_skills, profile.skill_selection_temperature)
 
 	if best_skill and best_skill["score"] >= profile.skill_use_threshold:
 		_execute_skill(sad, best_skill["skill"])
 
-func _select_skill_with_softmax(scored_skills: Array[Dictionary], temperature: float) -> Dictionary:
+## ===== 确定性骰子（02前置地基工单A）=====
+## Knuth 乘法散列，同 ai_manager._dodge_roll 范式。
+## 输入必须是跨运行稳定量：character_id/team/skill_id 字符串 hash、sad 决策计数器。
+## 禁 instance_id（跨运行漂移）、禁 randf（全局随机流消耗顺序随时序漂移）。
+## 同一场面恒同一结果 → sim 可复现。
+## ⚠ key_c（计数器）必须走大乘数混映：小步长乘数会使相邻计数骰值仅差~1e-5量级，
+## 一旦落入失误/选择区间即连续数千周期不变 → 失误死循环/选技卡死（2026-09-25 实证）
+func _deterministic_dice(key_a: int, key_b: int, key_c: int = 0) -> float:
+	var h: int = (key_a % 1000003) * 2654435761 + (key_b % 100007) * 40503 + (key_c % 1000003) * 2654435761
+	h = h % 4294967296
+	if h < 0:
+		h += 4294967296
+	return float(h) / 4294967296.0
+
+func _player_key_v(character_id: String, team: String) -> int:
+	return hash(character_id + "_" + team)
+
+func _player_key(sad: Dictionary) -> int:
+	return _player_key_v(str(sad.player.character_id), str(sad.player.team))
+
+func _select_skill_with_softmax(sad: Dictionary, scored_skills: Array[Dictionary], temperature: float) -> Dictionary:
 	if scored_skills.size() == 1:
 		return scored_skills[0]
 	
@@ -711,7 +742,7 @@ func _select_skill_with_softmax(scored_skills: Array[Dictionary], temperature: f
 		exp_scores.append(exp_val)
 		total_exp += exp_val
 	
-	var r = randf() * total_exp
+	var r = _deterministic_dice(_player_key(sad), sad["skill_decide_count"]) * total_exp
 	var cum = 0.0
 	for i in range(scored_skills.size()):
 		cum += exp_scores[i]
@@ -750,6 +781,10 @@ func _get_available_skills(sad: Dictionary) -> Array[Dictionary]:
 		# 被动技能由事件自动触发，不进主动评分池
 		# （否则每周期选中→use_skill 被拒→无冷却→无限重试刷屏，2026-09-13 seed3 诊断发现）
 		if analysis["skill_data"].get("type", "active") == "passive":
+			continue
+		# 失误局部短冷却中（02前置地基工单追加）
+		var hold_until: int = int(sad.get("mistake_hold", {}).get(skill_id, 0))
+		if int(sad["skill_decide_count"]) < hold_until:
 			continue
 		var cd = spirit_system.get_skill_cooldown(p.get_instance_id(), skill_id)
 		var energy_cost = analysis["skill_data"].get("energy_cost", 20)
@@ -1146,17 +1181,27 @@ func _select_support_target(sad: Dictionary) -> CharacterBody2D:
 
 func _select_attack_target(sad: Dictionary) -> CharacterBody2D:
 	var p = sad.player
-	
+
 	var enemies = _get_enemies(p)
 	if enemies.is_empty():
 		return null
-	
+
+	# 视野闸门（02前置地基工单B，主人裁决 2026-09-25：只有180°视野内的对象可被选中，禁卡视野）
+	# fail-closed：拿不到感知 ap 时按"无合法目标"处理
+	var fov_ap: Dictionary = {}
+	if ai_manager and ai_manager.has_method("get_ap_for_player"):
+		fov_ap = ai_manager.get_ap_for_player(p)
+	if fov_ap.is_empty():
+		return null
+
 	var best_target = null
 	var best_score: float = -INF
-	
+
 	for enemy in enemies:
 		if not is_instance_valid(enemy):
 			continue
+		if not ai_manager._is_in_field_of_view(fov_ap, enemy.global_position):
+			continue  # 视野外敌人不可选中
 		
 		var stamina_ratio = float(enemy.stamina) / float(max(enemy.max_stamina, 1))
 		var distance = p.global_position.distance_to(enemy.global_position)
@@ -1310,15 +1355,28 @@ func _get_enemy_ball_holder(player: CharacterBody2D) -> CharacterBody2D:
 func _execute_skill(sad: Dictionary, skill_info: Dictionary) -> void:
 	var p = sad.player
 	var profile = sad.profile
-	
-	if randf() < profile.skill_mistake_chance:
+
+	sad["skill_exec_count"] += 1
+
+	if _deterministic_dice(_player_key(sad), hash("mistake_" + str(skill_info["skill_id"])), sad["skill_exec_count"]) < profile.skill_mistake_chance:
 		var mistake_type = _decide_mistake_type(sad, skill_info)
-		print("[SpiritAI] %s 技能失误: %s (失误类型: %s)" % [p.name, skill_info["skill_data"].get("name", "unknown"), mistake_type])
+		# 失误→局部短冷却：周期计数时钟冻结该技能，防重选重掷循环
+		var hold: Dictionary = sad.get("mistake_hold", {})
+		hold[str(skill_info["skill_id"])] = int(sad["skill_decide_count"]) + MISTAKE_HOLD_CYCLES
+		sad["mistake_hold"] = hold
+		print("[SpiritAI] %s 技能失误: %s (失误类型: %s, 冷却%d周期)" % [p.name, skill_info["skill_data"].get("name", "unknown"), mistake_type, MISTAKE_HOLD_CYCLES])
 		return
-	
+
 	var target = _select_player_target(sad, skill_info)
 	var field_pos = _select_field_position(sad, skill_info)
-	
+
+	# 视野闸门（02前置地基工单B，主人裁决 2026-09-25：不准借选择卡视野）：
+	# 带选中对象的攻击/控制类技能选不出合法（视野内）目标 → 放弃释放
+	if target == null and skill_info.get("has_player_tag", false):
+		var exec_intents: Dictionary = skill_info["intents"]
+		if float(exec_intents.get("attack", 0.0)) > 0.5 or float(exec_intents.get("control", 0.0)) > 0.5:
+			return
+
 	var target_data: Dictionary = {}
 	if target:
 		target_data["target_player_id"] = target.get_instance_id()
@@ -1348,7 +1406,7 @@ func _send_skill_message(sad: Dictionary, skill_info: Dictionary, target: Charac
 		battle_manager.comm_system.record_message(p, battle_manager.comm_system.MsgType.BUFF_ON_YOU)
 	
 	if intents.get("attack", 0) > 0.7 and intents.get("control", 0) > 0.3:
-		if randf() < 0.3:
+		if _deterministic_dice(_player_key(sad), hash("msgsr_" + str(skill_info["skill_id"])), sad["skill_exec_count"]) < 0.3:
 			battle_manager.comm_system.try_send_message(p, battle_manager.comm_system.MsgType.SKILL_READY)
 			battle_manager.comm_system.record_message(p, battle_manager.comm_system.MsgType.SKILL_READY)
 
@@ -1371,12 +1429,12 @@ func _try_send_need_buff(sad: Dictionary) -> void:
 	var energy_ratio = float(p.spirit_energy) / float(max(p.max_spirit_energy, 1))
 	
 	if (stamina_ratio < 0.2 or energy_ratio < 0.2) and not has_support_skill:
-		if randf() < 0.2:
+		if _deterministic_dice(_player_key(sad), hash("msgnb"), sad["skill_decide_count"]) < 0.2:
 			battle_manager.comm_system.try_send_message(p, battle_manager.comm_system.MsgType.NEED_BUFF)
 			battle_manager.comm_system.record_message(p, battle_manager.comm_system.MsgType.NEED_BUFF)
 
 func _decide_mistake_type(sad: Dictionary, skill_info: Dictionary) -> String:
-	var r = randf()
+	var r = _deterministic_dice(_player_key(sad), hash("mtype_" + str(skill_info["skill_id"])), sad["skill_exec_count"])
 	if r < 0.4:
 		return "时机失误"
 	elif r < 0.7:

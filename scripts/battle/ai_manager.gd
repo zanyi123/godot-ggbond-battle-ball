@@ -440,6 +440,16 @@ func _find_nearest_visible_enemy(ap: Dictionary) -> CharacterBody2D:
 	return nearest
 
 
+## 技能AI视野闸门查询（02前置地基工单B，2026-09-25）：
+## 返回该球员的感知 ap（视野锥判定 _is_in_field_of_view 的数据源）；
+## 未注册返回空字典，调用方按"视野外"处理（fail-closed）
+func get_ap_for_player(player: Node2D) -> Dictionary:
+	for ap in ai_players:
+		if ap.player == player:
+			return ap
+	return {}
+
+
 # ==============================
 # ===== 朝向系统 ===============
 # ==============================

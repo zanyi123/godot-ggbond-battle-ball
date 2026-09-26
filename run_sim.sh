@@ -35,7 +35,7 @@ HARD_CATCHRATE_MIN=50    # 传球率硬危险线（百分口径；P4 附带发�
 WARN_CATCHRATE_MIN=80    # 传球率警告线（50~80=对抗波动提示人工看）
 HARD_HIT_MIN=1
 WARN_STATE_MIN=30
-WARN_STATE_MAX=130
+WARN_STATE_MAX=400       # 对齐 baseline.json normal_range.state_changes_per_match 上限（09-13 已放宽至400；工装原写死130与基线脱节，2026-09-25 前置地基工单对齐）
 
 echo "================================================"
 echo "决竞球 自动模拟 - 跑 $COUNT 场 (speed=$SPEED half=$HALF)"
@@ -53,7 +53,10 @@ for ((i=0; i<COUNT; i++)); do
   SEED=$((SEED_START + i))
   echo ""
   echo "--- 第 $((i+1))/$COUNT 场 (seed=$SEED) ---"
-  OUTPUT=$("$GODOT" --headless --sim --speed=$SPEED --seed=$SEED --half=$HALF "$SCENE" 2>&1)
+  # --fixed-fps 60：固定步长，消除帧节奏扰动导致的轨迹分岔（2026-09-25 前置地基工单：
+  # 实证管道捕获的写阻塞会扰动实时帧节奏，把 seed=1 推入"全场零接球"病态轨迹；
+  # 配合技能AI确定性骰子后，同种子跨运行逐位一致，存量"卡死偶发"同源根因一并消除）
+  OUTPUT=$("$GODOT" --headless --fixed-fps 60 --sim --speed=$SPEED --seed=$SEED --half=$HALF "$SCENE" 2>&1)
 
   # 提取指标（用报告行独有格式作锚点）
   SCORE_LINE=$(echo "$OUTPUT" | grep "比分: 队A" | head -1)
