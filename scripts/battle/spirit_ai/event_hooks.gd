@@ -10,6 +10,9 @@ extends RefCounted
 ## 受击/被异常状态后的反应热窗口时长（决策周期数；周期时钟由 manager 注入）
 const REACTION_TTL_CYCLES := 2
 
+## 波E复制族：敌方释放快照窗口（决策周期数；过期后 skill_copy_last 无快照必失败语义由 manager 消费侧保证）
+const COPY_SNAPSHOT_TTL_CYCLES := 4
+
 ## 订阅的事件类型（波B 生存场景：受击 + 异常状态施加）
 const WATCH_EVENTS: Array = [
 	BattleEventBus.GameEvent.HIT_TAKEN,      ## {attacker, defender, damage, ...} → defender 登记
@@ -19,6 +22,9 @@ const WATCH_EVENTS: Array = [
 var _cycle: int = 0
 var _reaction_until: Dictionary = {}  # 球员 instance_id(int) → 热窗口过期周期(int)
 var _bus: BattleEventBus = null
+
+## 波E复制族：各队最近技能释放快照（team → {caster, skill_id, team, cycle}；单槽=最近一条）
+var _last_cast_by_team: Dictionary = {}
 
 
 ## 注入决策周期时钟（manager 每个 AI 决策周期调用一次；零墙钟）
@@ -88,6 +94,42 @@ func pending_count() -> int:
 ## 清空（比赛重开/测试隔离用）
 func clear() -> void:
 	_reaction_until.clear()
+	_last_cast_by_team.clear()
+
+
+# ===== 波E复制族：技能释放快照口（生存窗口机动领域=事件钩子域；向后兼容只增不改）=====
+
+## 记录一次技能释放（manager 接线：监听 player.skill_used 信号后喂入；禁钩子自读感知）
+## caster 需带 team 字段；同队重复释放覆盖旧快照（"最近一条"语义）
+func record_skill_cast(caster, skill_id: String) -> void:
+	if caster == null or not is_instance_valid(caster) or skill_id.is_empty():
+		return
+	var team: String = str(caster.get("team"))
+	if team.is_empty():
+		return
+	_last_cast_by_team[team] = {"caster": caster, "skill_id": skill_id, "team": team, "cycle": _cycle}
+
+
+## 查询 viewer 视角的最近敌方释放快照（复制族可放性判定数据源）
+## 返回 {caster, skill_id, age_cycles}；无快照/过期/caster 失效 → {}（fail-closed）
+func get_recent_enemy_cast(viewer) -> Dictionary:
+	if viewer == null or not is_instance_valid(viewer):
+		return {}
+	var my_team: String = str(viewer.get("team"))
+	if _last_cast_by_team.is_empty():
+		return {}
+	for team in _last_cast_by_team.keys():
+		if team == my_team:
+			continue
+		var snap: Dictionary = _last_cast_by_team[team]
+		var caster = snap.get("caster", null)
+		if caster == null or not is_instance_valid(caster):
+			return {}
+		var age: int = _cycle - int(snap.get("cycle", 0))
+		if age > COPY_SNAPSHOT_TTL_CYCLES:
+			return {}
+		return {"caster": caster, "skill_id": str(snap.get("skill_id", "")), "age_cycles": age}
+	return {}
 
 
 # ===== 集成窗口接线说明（本波不接线，只读知悉）=====
