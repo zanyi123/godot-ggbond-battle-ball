@@ -10,6 +10,24 @@ const GOAL_B: Vector2 = Vector2(-300.0, 0.0)
 ## 以 skill_decide_count 为时钟（确定性），不引入墙钟
 const MISTAKE_HOLD_CYCLES := 3
 
+## ===== 原语层接线（06§五集成契约，2026-09-26 集成窗口）=====
+## 波函数表用 preload 本地词表（新脚本类名未进全局缓存时按名引用会解析失败，波C实录教训）；
+## 开关语义单口收口在 registry（08工单）——查不到描述符=自然走旧评分分支，本文件各接线点
+## 在未命中时与旧版行为逐位一致（manager 对开关零感知、零条件分支）
+const SpiritAIPrimitiveRegistry := preload("res://scripts/battle/spirit_ai/primitive_registry.gd")
+const PRIMITIVES_A := preload("res://scripts/battle/spirit_ai/primitives_a.gd")
+const PRIMITIVES_B := preload("res://scripts/battle/spirit_ai/primitives_b.gd")
+const PRIMITIVES_C := preload("res://scripts/battle/spirit_ai/primitives_c.gd")
+const PRIMITIVES_D := preload("res://scripts/battle/spirit_ai/primitives_d.gd")
+const EVENT_HOOKS_SCRIPT := preload("res://scripts/battle/spirit_ai/event_hooks.gd")
+const AI_INPUT_SOURCE := preload("res://scripts/battle/spirit_ai/ai_input_source.gd")
+
+## wave 字母 → 契约函数表分发（registry 按 JSON 顶层 wave 打标；波E 未交付=无条目=未命中）
+const _WAVE_PRIMITIVES := {"A": PRIMITIVES_A, "B": PRIMITIVES_B, "C": PRIMITIVES_C, "D": PRIMITIVES_D}
+
+## 原语 ctx 默认威胁半径（06§三 self_threatened 判定，manager 组装时可调）
+const PRIMITIVE_THREAT_RADIUS := 200.0
+
 var battle_manager: Node2D
 var spirit_system: SpiritSystemManager
 var ai_manager: Node
@@ -19,6 +37,10 @@ var spirit_ai_data: Array[Dictionary] = []
 
 var element_counters: Dictionary = {}
 var counter_multiplier: float = 1.3
+
+## 波B事件钩子实例（受击/异常状态反应热窗口；总线在首次物理帧挂接）
+var _event_hooks = null
+var _hooks_attached := false
 
 func initialize(battle_mgr: Node2D, spirit_sys: SpiritSystemManager, ai_mgr: Node) -> void:
 	battle_manager = battle_mgr
@@ -53,6 +75,7 @@ func register_player(player: CharacterBody2D, profile: AIProfile) -> void:
 		"skill_decide_count": 0,
 		"skill_exec_count": 0,
 		"mistake_hold": {},
+		"ai_input_attached": false,
 		"last_skill_use_time": 0.0,
 		"player_analysis": player_analysis,
 		"skills_analysis": skills_analysis,
@@ -183,12 +206,15 @@ func _get_combo_bonus(combo_type: String) -> float:
 
 func _analyze_single_skill(skill_data: Dictionary, player_analysis: Dictionary) -> Dictionary:
 	var result: Dictionary = {}
-	var tags = _normalize_tags(skill_data.get("tags", []))
+	# 原始 tag_id 列表（06§五#1：原语查表/闸门键，归一化前保留）
+	var raw_tags: Array[String] = _extract_raw_tags(skill_data.get("tags", []))
+	var tags = _map_tags_to_categories(raw_tags)
 	var tag_params = skill_data.get("tag_params", {})
 	var energy_cost = skill_data.get("energy_cost", 20)
 	var cooldown = skill_data.get("cooldown", 5.0)
-	
+
 	result["tags"] = tags
+	result["raw_tags"] = raw_tags
 	result["tag_count"] = tags.size()
 	result["has_ball_tag"] = "on_ball" in tags
 	result["has_player_tag"] = "on_player" in tags
@@ -259,8 +285,13 @@ func _compute_synergy_bonus(synergy_level: String) -> float:
 	return 1.0
 
 func _normalize_tags(tag_data) -> Array[String]:
+	return _map_tags_to_categories(_extract_raw_tags(tag_data))
+
+
+## 归一化前原始 tag_id 列表（06§五#1：原语查表键；tag_params 的键与其同源）
+func _extract_raw_tags(tag_data) -> Array[String]:
 	var raw_tags: Array[String] = []
-	
+
 	if tag_data is String:
 		if not tag_data.is_empty():
 			raw_tags = [tag_data] as Array[String]
@@ -268,8 +299,8 @@ func _normalize_tags(tag_data) -> Array[String]:
 		for t in tag_data:
 			if t is String and not (t as String).is_empty():
 				raw_tags.append(t as String)
-	
-	return _map_tags_to_categories(raw_tags)
+
+	return raw_tags
 
 func _map_tags_to_categories(raw_tags: Array[String]) -> Array[String]:
 	var result: Array[String] = []
@@ -332,7 +363,30 @@ func _extract_values_from_tag_params(tag_params: Dictionary) -> Dictionary:
 func _compute_base_value(tags: Array[String], tag_params: Dictionary, energy_cost: int, cooldown: float) -> float:
 	if tags.is_empty():
 		return 10.0
-	
+
+	# 原语计价（06§五#2）：任一 raw tag 命中描述符 → 逐标签描述符计价×多标签权重(1/0.7/0.5/0.4)；
+	# 技能内未命中标签按旧分支未知标签缺省 10.0 计；全未命中（含开关全关）→ 旧三大类分支逐位不变
+	var primitive_total: float = 0.0
+	var primitive_hit := false
+	for tag_id in tag_params:
+		var hit := _query_primitive(str(tag_id))
+		if hit.is_empty():
+			primitive_total += 10.0  # 未覆盖标签=旧分支未知标签缺省分（_compute_*_value 的 _ 支同口径）
+			continue
+		primitive_hit = true
+		primitive_total += float(hit["primitives"].compute_value(hit["descriptor"], tag_params[tag_id]))
+	if primitive_hit:
+		var primitive_weight := 1.0
+		match tag_params.size():
+			2:
+				primitive_weight = 0.7
+			3:
+				primitive_weight = 0.5
+			_:
+				if tag_params.size() >= 4:
+					primitive_weight = 0.4
+		return clampf(primitive_total * primitive_weight, 10.0, 100.0)
+
 	var total_value: float = 0.0
 	var tag_count: int = tags.size()
 	
@@ -533,7 +587,17 @@ func _determine_intents(tags: Array[String], tag_params: Dictionary) -> Dictiona
 		var sub_intents = _compute_tag_intents(tag, tag_params)
 		for key in sub_intents:
 			intents[key] = intents.get(key, 0) + sub_intents[key] * tag_weight
-	
+
+	# 原语意图校准（06§七）：命中描述符的 raw tag，其 intent/intent_strength 以 max 并入，
+	# 随后统一归一化；开关全关=无命中=本段零变化
+	for tag_id in tag_params:
+		var hit := _query_primitive(str(tag_id))
+		if hit.is_empty():
+			continue
+		var intent_key := str(hit["descriptor"].get("intent", ""))
+		if intents.has(intent_key):
+			intents[intent_key] = maxf(float(intents[intent_key]), float(hit["descriptor"].get("intent_strength", 0.0)))
+
 	var total: float = intents["attack"] + intents["defense"] + intents["support"] + intents["control"]
 	if total > 0:
 		intents["attack"] /= total
@@ -638,6 +702,12 @@ func _get_primary_intent(intents: Dictionary) -> String:
 	return primary
 
 func _physics_process(delta: float) -> void:
+	# 波B事件钩子挂接（event_hooks.gd 头注三步之一）：首次物理帧时必已在树内，
+	# 总线不可得时 attach(null) 静默降级（is_reaction_hot 恒 false=波B原语缺省 fail-closed 同义）
+	if not _hooks_attached:
+		_hooks_attached = true
+		_setup_event_hooks()
+
 	if not battle_manager or not battle_manager.match_started:
 		return
 
@@ -672,6 +742,14 @@ func _decide_skill(sad: Dictionary) -> void:
 
 	sad["skill_decide_count"] += 1
 
+	# 波B事件钩子：注入决策周期时钟（TTL 全周期计数，零墙钟；event_hooks.gd 三步之二）
+	if _event_hooks:
+		_event_hooks.set_cycle(int(sad["skill_decide_count"]))
+	# 波C AI输入源登记（懒挂：首决策时状态机必已就绪；旧状态机无 AI 口时 fail-closed 静默）
+	if not bool(sad.get("ai_input_attached", false)):
+		sad["ai_input_attached"] = true
+		_attach_ai_input_source(p)
+
 	if p.spirit_energy < profile.skill_energy_min:
 		return
 
@@ -682,9 +760,17 @@ func _decide_skill(sad: Dictionary) -> void:
 	if available_skills.is_empty():
 		return
 
+	# 原语时机闸门（06§五#3）：候选技能 raw_tags 逐标签跑 gate，OR 放行、bonus 取通过者最大值；
+	# ctx 惰性组装（首命中时一次/周期；开关全关=无命中=闸门不参与，评分路径与旧版逐位一致）
+	var primitive_ctx_box: Dictionary = {}
 	var scored_skills: Array[Dictionary] = []
 	for skill_info in available_skills:
+		var gate := _evaluate_primitive_gates(sad, skill_info, primitive_ctx_box)
+		if bool(gate.get("gated", false)) and not bool(gate.get("ok", false)):
+			continue  # 闸门不过=本周期跳过（无惩罚，06§一）
 		var score = _compute_skill_score(sad, skill_info)
+		if bool(gate.get("gated", false)):
+			score *= float(gate.get("bonus", 1.0))
 		if score > 0:
 			scored_skills.append({
 				"skill": skill_info,
@@ -791,6 +877,140 @@ func _get_available_skills(sad: Dictionary) -> Array[Dictionary]:
 		if cd <= 0.0 and p.spirit_energy >= energy_cost:
 			result.append(analysis)
 	return result
+
+## ===== 原语层接线函数（06§五集成契约；未命中一律回落旧路径=全关零扰动）=====
+
+## 波B事件钩子挂接（event_hooks.gd 头注三步之一）。总线不可得时静默降级
+func _setup_event_hooks() -> void:
+	_event_hooks = EVENT_HOOKS_SCRIPT.new()
+	if is_inside_tree():
+		var bus = BattleEventBus.get_bus(get_tree())
+		if bus:
+			_event_hooks.attach(bus)
+
+
+## 波C AI输入源登记（ai_input_source.attach：状态机补 AI 施法者链路，03§3.2方案a）。
+## 登记本身零行为（消费只发生在操控族激活窗 tick——激活技能查询口属 skill_state_manager，
+## 波C单写者已收官，tick 留后续集成工单，见看板集成行备注）
+func _attach_ai_input_source(player: CharacterBody2D) -> void:
+	if battle_manager == null:
+		return
+	var input_manager = battle_manager.get("input_manager")
+	if input_manager == null:
+		return
+	var state_manager = input_manager.get("skill_state_manager")
+	if state_manager == null:
+		return
+	AI_INPUT_SOURCE.attach(state_manager, player.get_instance_id(), player)
+
+
+## 原语单口查询：返回 {"descriptor": Dictionary, "primitives": GDScript} 或 {}
+## 未命中/波未开/未知波次字母一律 {}（08工单开关契约；波字母→函数表分发经 registry 打标）
+func _query_primitive(tag_id: String) -> Dictionary:
+	var entry: Dictionary = SpiritAIPrimitiveRegistry.get_descriptor_entry(str(tag_id))
+	if entry.is_empty():
+		return {}
+	var wave: String = str(entry.get("wave", ""))
+	if not _WAVE_PRIMITIVES.has(wave):
+		return {}
+	return {"descriptor": entry.get("descriptor", {}), "primitives": _WAVE_PRIMITIVES[wave]}
+
+
+## 时机闸门评估（06§五#3）：技能 raw_tags 逐标签跑 timing_gate——OR 逻辑，任一标签通过即放行，
+## bonus 取通过者最大值（06§一）。无任何标签命中描述符 → gated=false（闸门不参与，旧评分零扰动）。
+## ctx_box：单键字典 {"ctx": Dictionary}，首命中时惰性组装（每决策周期至多一次；测试可预填）
+func _evaluate_primitive_gates(sad: Dictionary, skill_info: Dictionary, ctx_box: Dictionary) -> Dictionary:
+	var gated := false
+	var any_ok := false
+	var best_bonus := 0.0
+	for tag in skill_info.get("raw_tags", []):
+		var hit := _query_primitive(tag)
+		if hit.is_empty():
+			continue
+		if not ctx_box.has("ctx"):
+			ctx_box["ctx"] = _build_primitive_ctx(sad)
+		var gate_result: Dictionary = hit["primitives"].timing_gate(hit["descriptor"], sad, ctx_box["ctx"])
+		gated = true
+		if bool(gate_result.get("ok", false)):
+			any_ok = true
+			best_bonus = maxf(best_bonus, float(gate_result.get("bonus", 1.0)))
+	if not gated:
+		return {"gated": false, "ok": false, "bonus": 1.0}
+	return {"gated": true, "ok": any_ok, "bonus": (best_bonus if any_ok else 1.0)}
+
+
+## 原语 ctx 组装（06§4.1 冻结字段 + Q5/Q7/Q8 增补键）：感知全部 manager 单口算好，原语零直连；
+## 无球/无总线时省略对应键=各波 fail-closed（等价 false/空）
+func _build_primitive_ctx(sad: Dictionary) -> Dictionary:
+	var p: CharacterBody2D = sad.player
+	var ctx: Dictionary = {
+		"player": p,
+		"stamina_ratio": float(p.stamina) / float(max(p.max_stamina, 1)),
+		"energy_ratio": float(p.spirit_energy) / float(max(p.max_spirit_energy, 1)),
+		"has_energy_blocked_burst": _has_energy_blocked_burst(sad),
+		"threat_radius": PRIMITIVE_THREAT_RADIUS,
+	}
+	# 感知：02工单感知口 + FOV 过滤（fail-closed：无 ap=视野外=空表）
+	var fov_ap: Dictionary = {}
+	if ai_manager and ai_manager.has_method("get_ap_for_player"):
+		fov_ap = ai_manager.get_ap_for_player(p)
+	var visible_enemies: Array = []
+	if not fov_ap.is_empty() and ai_manager.has_method("_is_in_field_of_view"):
+		for enemy in _get_enemies(p):
+			if is_instance_valid(enemy) and ai_manager._is_in_field_of_view(fov_ap, enemy.global_position):
+				visible_enemies.append(enemy)
+	ctx["fov_ap"] = fov_ap
+	ctx["visible_enemies"] = visible_enemies
+	# 队友（Q7）同源双形态：字典表（波A/B 消费）+ 比值表（波C/D 消费）
+	var allies: Array = []
+	var ally_ratios: Array = []
+	for member in _get_team_members(p):
+		if not is_instance_valid(member):
+			continue
+		var ratio := float(member.stamina) / float(max(member.max_stamina, 1))
+		allies.append({"player": member, "stamina_ratio": ratio})
+		ally_ratios.append(ratio)
+	ctx["allies"] = allies
+	ctx["ally_stamina_ratios"] = ally_ratios
+	# 波B受击反应热窗口（事件钩子；未挂接=false）
+	if _event_hooks:
+		ctx["reaction_hot"] = _event_hooks.is_reaction_hot(p)
+	# 球面键（Q5/Q8）
+	if ball_node and is_instance_valid(ball_node):
+		ctx["ball_position"] = ball_node.global_position
+		ctx["ball_in_flight"] = bool(ball_node.is_active)
+		ctx["ball_velocity"] = ball_node.ball_direction * ball_node.ball_speed
+	ctx["own_goal"] = _get_our_goal_position(p)
+	ctx["enemy_goal"] = _get_enemy_goal_position(p)
+	var carrier = _get_enemy_ball_holder(p)
+	if carrier != null and is_instance_valid(carrier):
+		ctx["enemy_carrier"] = carrier
+		ctx["enemy_carrier_visible"] = carrier in visible_enemies
+	return ctx
+
+
+## pre_burst 资源时机（06§三）：自己最高 base_value 的主动技能当前被能量/冷却卡住
+## （按语义只看能量/冷却，不含 mistake_hold；spirit_system 缺失时 fail-closed=false）
+func _has_energy_blocked_burst(sad: Dictionary) -> bool:
+	if spirit_system == null:
+		return false
+	var p: CharacterBody2D = sad.player
+	var best_analysis: Dictionary = {}
+	var best_value: float = -INF
+	for analysis in sad.get("skills_analysis", []):
+		if analysis["skill_data"].get("type", "active") == "passive":
+			continue
+		var bv := float(analysis.get("base_value", 0.0))
+		if bv > best_value:
+			best_value = bv
+			best_analysis = analysis
+	if best_analysis.is_empty():
+		return false
+	var skill_id: String = str(best_analysis["skill_id"])
+	if float(spirit_system.get_skill_cooldown(p.get_instance_id(), skill_id)) > 0.0:
+		return true
+	return p.spirit_energy < float(best_analysis["skill_data"].get("energy_cost", 20))
+
 
 func _compute_skill_score(sad: Dictionary, skill_info: Dictionary) -> float:
 	var base_value: float = skill_info["base_value"]
@@ -1251,10 +1471,22 @@ func _get_enemies(player: CharacterBody2D) -> Array[CharacterBody2D]:
 func _select_field_position(sad: Dictionary, skill_info: Dictionary) -> Vector2:
 	var p = sad.player
 	var has_field_tag = skill_info.get("has_field_tag", false)
-	
+
 	if not has_field_tag:
 		return p.global_position
-	
+
+	# 波D放置语义（Q4③ position_intent）：首个带放置函数的命中描述符 → 委托原语选位；
+	# 原语缺 ctx 键时自身 fail-closed 回自站位，返回零向量（拿不到施法者）时同样回自站位
+	for tag_id in skill_info.get("skill_data", {}).get("tag_params", {}):
+		var hit := _query_primitive(str(tag_id))
+		if hit.is_empty():
+			continue
+		var primitives = hit["primitives"]
+		if not primitives.has_method("select_field_position"):
+			continue
+		var pos: Vector2 = primitives.select_field_position(hit["descriptor"], sad, _build_primitive_ctx(sad))
+		return p.global_position if pos == Vector2.ZERO else pos
+
 	var values = skill_info.get("skill_data", {}).get("values", {})
 	var intents = skill_info["intents"]
 	

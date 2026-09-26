@@ -34,6 +34,18 @@ static func get_descriptor(tag_id: String) -> Dictionary:
 	return descriptor if descriptor is Dictionary else {}
 
 
+## 带波次查询（集成窗口接线用，2026-09-26）：返回 {"descriptor": Dictionary, "wave": String} 或 {}
+## 开关语义与 get_descriptor 完全一致（未命中/波未开一律 {}）；get_descriptor 即本函数的只取 descriptor 视图
+static func get_descriptor_entry(tag_id: String) -> Dictionary:
+	_ensure_aggregated()
+	var entry: Dictionary = _agg.get(tag_id, {})
+	if entry.is_empty():
+		return {}
+	if not is_wave_enabled(str(entry.get("wave", ""))):
+		return {}
+	return entry
+
+
 ## 分波开关：master_enabled 且 waves[wave] 严格为 true 才算开
 static func is_wave_enabled(wave: String) -> bool:
 	_ensure_switches(SWITCHES_PATH)
