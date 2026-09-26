@@ -183,17 +183,21 @@ func _run() -> void:
 		results[str(sc["name"])] = _run_scenario(sam_script, profile, skills, aim, ball, exile, mate, e_carrier, e2, sc, probe)
 
 	# ===== 诊断结论断言 =====
+	# 2026-09-27 集成窗口按 14a提案§四1/2/4/5 完成 RC0/RC1/RC3/视距护栏修复（裁定d）后，
+	# D1/D1b/D3/D4 由"缺陷存在"诊断断言翻转为修复后语义（14§六验收1：S1 应进入且出手）
 	var s1r: Dictionary = results["S1战败流放+敌持球+面向场内(主人报障)"]
 	var s1: StageStats = s1r["mirror"]
-	_assert("D1 战败流放首因：_is_valid 排除 is_defeated → 决策循环零进入（%d/%d）" % [int(s1.s0_valid), CYCLES], int(s1.s0_valid) == 0)
-	_assert("D1b 战败流放端到端零出手（含调用方闸镜像）", (s1r["e2e_calls"] as Array).is_empty())
+	_assert("D1(修复后) 战败流放与内场同权：决策循环进入（%d/%d）" % [int(s1.s0_valid), CYCLES], int(s1.s0_valid) > 0)
+	_assert("D1b(修复后) 战败流放端到端可出手（含调用方闸镜像）", not (s1r["e2e_calls"] as Array).is_empty())
 	var s2r: Dictionary = results["S2违规流放+敌持球+面向场内"]
 	var s2: StageStats = s2r["mirror"]
 	_assert("D2 现状反直觉证据：违规流放+开关全关走旧评分路径，隔离区内实际连放技能（%d次/%d周期）" % [int(s2.s7_exec), CYCLES], int(s2.s7_exec) > 0)
 	var s3r: Dictionary = results["S3违规流放+敌持球+面向墙"]
-	_assert("D3 朝向开关：面向墙 ctx.visible_enemies=0，面向场内=%d（angle-only 无距离上限）" % int(s2r["visible_n"]), int(s3r["visible_n"]) == 0 and int(s2r["visible_n"]) > 0)
+	# 视距护栏后：面向场内只剩 243px 的 e2（380px 敌持球者 > vision_range 被滤除），面向墙仍 0
+	_assert("D3(修复后) 视距护栏：面向墙 visible=0，面向场内=%d（380px敌持球者越界被滤，243px保留）" % int(s2r["visible_n"]), int(s3r["visible_n"]) == 0 and int(s2r["visible_n"]) == 1)
 	var s7: StageStats = results["S7违规流放+敌持球+无场地技元灵(金刚类)+面向场内"]["mirror"]
-	_assert("D4 无场地技元灵：think闸全灭（%d/%d）→ 敌持球态零出手" % [int(s7.s2_think), CYCLES], int(s7.s2_think) == 0)
+	# RC1 修复后：流放球员 think 无条件放行（原"无场地技元灵 think 全灭"缺陷消除）
+	_assert("D4(修复后) 流放球员think全放行（%d/%d，RC1裁定d）" % [int(s7.s2_think), CYCLES], int(s7.s2_think) == CYCLES)
 	var s4: StageStats = results["S4违规流放+己方持球+面向场内"]["mirror"]
 	_assert("D5 己方持球时think全放行（%d/%d）" % [int(s4.s2_think), CYCLES], int(s4.s2_think) == CYCLES)
 

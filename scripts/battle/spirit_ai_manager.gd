@@ -42,6 +42,9 @@ var counter_multiplier: float = 1.3
 var _event_hooks = null
 var _hooks_attached := false
 
+## 决策评分明细 dump（10工单P3观测层；get_decision_dump 只读口，_decide_skill 每周期刷新，纯观测零行为）
+var last_decision_dump: Dictionary = {}
+
 func initialize(battle_mgr: Node2D, spirit_sys: SpiritSystemManager, ai_mgr: Node) -> void:
 	battle_manager = battle_mgr
 	spirit_system = spirit_sys
@@ -732,7 +735,10 @@ func _is_valid(sad: Dictionary) -> bool:
 		return false
 	if ai_manager and ai_manager.input_manager and ai_manager.input_manager.controlled_player == p:
 		return false
-	if p.is_defeated:
+	# 14号修复RC0（主人裁定d，14a诊断§四1）：战败流放=is_defeated+is_penalized 双置
+	# （battle_manager 击败→传送外场→set_penalized）→ 外场与内场同权放行决策；
+	# 纯 is_defeated 未流放（击倒瞬态/真正出局）维持排除
+	if p.is_defeated and not p.is_penalized:
 		return false
 	return true
 
@@ -763,9 +769,16 @@ func _decide_skill(sad: Dictionary) -> void:
 	# 原语时机闸门（06§五#3）：候选技能 raw_tags 逐标签跑 gate，OR 放行、bonus 取通过者最大值；
 	# ctx 惰性组装（首命中时一次/周期；开关全关=无命中=闸门不参与，评分路径与旧版逐位一致）
 	var primitive_ctx_box: Dictionary = {}
+	var gate_traces: Array = []
 	var scored_skills: Array[Dictionary] = []
 	for skill_info in available_skills:
 		var gate := _evaluate_primitive_gates(sad, skill_info, primitive_ctx_box)
+		gate_traces.append({
+			"skill_id": str(skill_info["skill_id"]),
+			"gated": bool(gate.get("gated", false)),
+			"ok": bool(gate.get("ok", false)),
+			"bonus": snappedf(float(gate.get("bonus", 1.0)), 0.01),
+		})
 		if bool(gate.get("gated", false)) and not bool(gate.get("ok", false)):
 			continue  # 闸门不过=本周期跳过（无惩罚，06§一）
 		var score = _compute_skill_score(sad, skill_info)
@@ -778,9 +791,12 @@ func _decide_skill(sad: Dictionary) -> void:
 			})
 
 	if scored_skills.is_empty():
+		_record_decision_dump(sad, gate_traces, [], null, 0.0)
 		return
 
 	var best_skill = _select_skill_with_softmax(sad, scored_skills, profile.skill_selection_temperature)
+
+	_record_decision_dump(sad, gate_traces, scored_skills, best_skill, float(profile.skill_use_threshold))
 
 	if best_skill and best_skill["score"] >= profile.skill_use_threshold:
 		_execute_skill(sad, best_skill["skill"])
@@ -840,7 +856,12 @@ func _select_skill_with_softmax(sad: Dictionary, scored_skills: Array[Dictionary
 func _should_think_about_skills(sad: Dictionary) -> bool:
 	var p = sad.player
 	var profile = sad.profile
-	
+
+	# 14号修复RC1（主人裁定d，14a诊断§四2）：流放球员无条件进入技能思考
+	# （原逻辑在"不持球+球非己方+非defender+无场地技"下 think 全灭——金刚类真身）
+	if p.is_penalized:
+		return true
+
 	if p.is_carrying_ball:
 		return true
 	
@@ -877,6 +898,32 @@ func _get_available_skills(sad: Dictionary) -> Array[Dictionary]:
 		if cd <= 0.0 and p.spirit_energy >= energy_cost:
 			result.append(analysis)
 	return result
+
+## 决策明细 dump 只读口（10工单P3观测层，observe_layer 探活 get_decision_dump 自动点亮）
+func get_decision_dump() -> Dictionary:
+	return last_decision_dump
+
+
+## 刷新决策明细（纯观测零行为）：闸门轨迹+候选评分 top3+胜者阈值判定+开关状态
+func _record_decision_dump(sad: Dictionary, gate_traces: Array, scored_skills: Array, best_skill: Variant, threshold: float) -> void:
+	var p: CharacterBody2D = sad.player
+	var ranked: Array = []
+	for scored in scored_skills:
+		ranked.append({
+			"skill_id": str(scored["skill"]["skill_id"]),
+			"score": snappedf(float(scored["score"]), 0.1),
+		})
+	ranked.sort_custom(func(a, b): return float(a["score"]) > float(b["score"]))
+	last_decision_dump = {
+		"player": str(p.name),
+		"team": str(p.team),
+		"cycle": int(sad.get("skill_decide_count", 0)),
+		"switches": SpiritAIPrimitiveRegistry.get_switches_state(),
+		"gates": gate_traces,
+		"top3": ranked.slice(0, 3),
+		"threshold": snappedf(threshold, 0.1),
+		"chosen": (str(best_skill["skill"]["skill_id"]) if best_skill != null and float(best_skill["score"]) >= threshold else ""),
+	}
 
 ## ===== 原语层接线函数（06§五集成契约；未命中一律回落旧路径=全关零扰动）=====
 
@@ -956,8 +1003,16 @@ func _build_primitive_ctx(sad: Dictionary) -> Dictionary:
 		fov_ap = ai_manager.get_ap_for_player(p)
 	var visible_enemies: Array = []
 	if not fov_ap.is_empty() and ai_manager.has_method("_is_in_field_of_view"):
+		# 14号附带修正（14a诊断§二2/§四5）：_is_in_field_of_view 是纯角度锥无距离上限，
+		# 补 vision_range 距离过滤对齐 ai_manager 感知层口径——防开波后外场隔墙越界施法
+		var vision_range := 350.0
+		var profile = sad.get("profile")
+		if profile != null:
+			vision_range = float(profile.vision_range)
 		for enemy in _get_enemies(p):
-			if is_instance_valid(enemy) and ai_manager._is_in_field_of_view(fov_ap, enemy.global_position):
+			if is_instance_valid(enemy) \
+					and p.global_position.distance_to(enemy.global_position) <= vision_range \
+					and ai_manager._is_in_field_of_view(fov_ap, enemy.global_position):
 				visible_enemies.append(enemy)
 	ctx["fov_ap"] = fov_ap
 	ctx["visible_enemies"] = visible_enemies
@@ -1387,7 +1442,11 @@ func _select_support_target(sad: Dictionary) -> CharacterBody2D:
 		var stamina_ratio = float(member.stamina) / float(max(member.max_stamina, 1))
 		var energy_ratio = float(member.spirit_energy) / float(max(member.max_spirit_energy, 1))
 		var distance = p.global_position.distance_to(member.global_position)
-		
+		# 14号修复RC3（主人裁定d，14a诊断§四4）：流放施法者对内场队友按比例计距
+		# （外场↔内场 380px+ 的绝对距离把支援分压至≈0，按 0.4 系数豁免）
+		if p.is_penalized:
+			distance *= 0.4
+
 		var score: float = 0.0
 		score += (1.0 - stamina_ratio) * 3.0
 		score += (1.0 - energy_ratio) * 2.0

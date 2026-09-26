@@ -48,6 +48,8 @@ var _is_half_time_prep: bool = false
 
 # === P1方案A：自动模拟模式（headless 验证用，跳过备战面板）===
 var auto_simulate: bool = false       # 是否自动开始比赛（命令行 --sim 开启）
+# === 10工单P1：完全体AI观察模式（--fullai）：自动开赛+全AI接管（复用 sim 既有路径），保留 3D 场景供实机观战 ===
+var full_ai_observe: bool = false     # 观察模式（命令行 --fullai 开启；速度/半场时长用 --speed/--half 调）
 var dev_prep_mode: bool = false       # 开发者测试备战模式（命令行 --dev-prep 开启）
 var sim_time_scale: float = 6.0       # 模拟加速倍率（默认 6：物理稳定上限，更高会穿墙失真）
 # 默认快速模式参数（可被命令行覆盖）：每半场8秒 → 约30秒一场
@@ -160,7 +162,7 @@ func _ready() -> void:
 		event_bus.log_enabled = true
 
 	# === 3D 场景桥接层（USE_3D_SCENE=true 时激活；2D 逻辑零改动，bridge 只读同步）===
-	if USE_3D_SCENE and not auto_simulate:  # sim 模拟强制纯 2D（基线可比）
+	if USE_3D_SCENE and (not auto_simulate or full_ai_observe):  # sim 强制纯 2D（基线可比）；--fullai 观察模式保留 3D（10工单P1）
 		var bridge := Node.new()
 		bridge.name = "BattleArena3DBridge"
 		bridge.set_script(load("res://scripts/battle3d/battle_arena_3d_bridge.gd"))
@@ -173,6 +175,10 @@ func _ready() -> void:
 func _parse_sim_args() -> void:
 	for arg in OS.get_cmdline_args():
 		if arg == "--sim":
+			auto_simulate = true
+		elif arg == "--fullai":
+			# 10工单P1观察模式：复用 sim 自动开赛+全AI路径，但保留 3D（不强制纯 2D）
+			full_ai_observe = true
 			auto_simulate = true
 		elif arg == "--dev-prep":
 			dev_prep_mode = true
@@ -332,7 +338,8 @@ func _setup_ui() -> void:
 	team_a_arr.assign(team_a_players)
 	var team_b_arr: Array[CharacterBody2D] = []
 	team_b_arr.assign(team_b_players)
-	hud.spirit_trigger = spirit_system.skill_trigger if "skill_trigger" in spirit_system else null  # 快捷技能栏名册数据源
+	# 快捷技能栏名册数据源（d18fee1）：_setup_ui 先于 _setup_spirit_system 执行，此处 spirit_system 可为 null（防御）
+	hud.spirit_trigger = (spirit_system.skill_trigger if "skill_trigger" in spirit_system else null) if spirit_system != null else null
 	hud.setup_players(team_a_arr, team_b_arr)
 
 	# 通信系统在 _setup_ai_manager 之后创建,这里先保存HUD引用

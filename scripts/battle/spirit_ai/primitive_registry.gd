@@ -64,6 +64,16 @@ static func reload_switches(path: String = SWITCHES_PATH) -> void:
 	_switches_loaded = true
 
 
+## 开关状态只读快照（10工单P3观测层显示用；fail-closed 同口径）
+static func get_switches_state() -> Dictionary:
+	_ensure_switches(SWITCHES_PATH)
+	var waves = _switches.get("waves", {})
+	return {
+		"master_enabled": bool(_switches.get("master_enabled", false)),
+		"waves": (waves if waves is Dictionary else {}),
+	}
+
+
 # ===== 内部实现 =====
 
 static func _ensure_aggregated() -> void:

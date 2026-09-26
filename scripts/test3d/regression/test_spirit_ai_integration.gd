@@ -213,6 +213,25 @@ func _run() -> void:
 	var ctx4: Dictionary = sam._build_primitive_ctx(sad_full)
 	_check(bool(ctx4.get("ball_in_flight", false)) and ctx4.get("ball_velocity", Vector2.ZERO) == Vector2(-400, 0), "I11 球面键：飞行中+速度=方向×速度")
 
+	# ===== D 组：决策 dump 口（10工单P3）=====
+	print("[D] 决策 dump 口")
+	_restore_switches()
+	var sw_state: Dictionary = RegistryScript.get_switches_state()
+	_check(not bool(sw_state.get("master_enabled", true)) and (sw_state.get("waves", {}) as Dictionary).is_empty() == false, "D1 开关状态口：默认 master=false")
+	_write_switches("{\"master_enabled\": true, \"waves\": {\"A\": true}}")
+	var sw_state2: Dictionary = RegistryScript.get_switches_state()
+	_check(bool(sw_state2.get("master_enabled", false)) and bool((sw_state2.get("waves", {}) as Dictionary).get("A", false)), "D2 开关状态口：开A后 master=true/A=true")
+	var gate_trace := [{"skill_id": "s1", "gated": true, "ok": true, "bonus": 1.25}]
+	var scored_list := [{"skill": {"skill_id": "s1"}, "score": 50.0}]
+	sam._record_decision_dump(sad_full, gate_trace, scored_list, scored_list[0], 40.0)
+	var dump: Dictionary = sam.get_decision_dump()
+	_check(str(dump.get("chosen", "")) == "s1" and (dump.get("top3", []) as Array).size() == 1 and is_equal_approx(float(dump.get("threshold", 0)), 40.0), "D3 dump 结构：chosen/top3/threshold")
+	_check((dump.get("gates", []) as Array).size() == 1 and is_equal_approx(float((dump.get("gates", [{}])[0] as Dictionary).get("bonus", 0)), 1.25) and bool((dump.get("switches", {}) as Dictionary).get("master_enabled", false)), "D4 dump 闸门轨迹+开关状态")
+	var sad_low := {"player": low_stub, "skills_analysis": sad_full["skills_analysis"], "skill_decide_count": 7}
+	sam._record_decision_dump(sad_low, gate_trace, [], null, 40.0)
+	var dump2: Dictionary = sam.get_decision_dump()
+	_check(str(dump2.get("chosen", "x")) == "" and (dump2.get("top3", [1]) as Array).is_empty() and int(dump2.get("cycle", 0)) == 7, "D5 dump 空候选周期：chosen空/top3空/周期号")
+
 	# ===== F 组：场地放置委托（波D）=====
 	print("[F] 场地放置委托")
 	_write_switches("{\"master_enabled\": true, \"waves\": {\"A\": true, \"B\": true, \"C\": true, \"D\": true}}")
