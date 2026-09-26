@@ -59,7 +59,7 @@ func _run() -> void:
 	await process_frame
 	_assert("③: 换装→动态技能清空（重置语义）", not ("skill_雷火_1" in trig.get_player_skills(mate_id)))
 
-	# ===== ④ HUD 动态格（3 固定 + 2 动态，差集显示 + 信号刷新）=====
+	# ===== ④ HUD 3 格上限（2026-09-27 主人裁定：无动态格，动态技占空槽、满 3 拒收）=====
 	var hud: Control = load("res://scripts/battle/battle_hud.gd").new()
 	root.add_child(hud)
 	await process_frame
@@ -68,21 +68,29 @@ func _run() -> void:
 	var enemies: Array[CharacterBody2D] = []
 	hud.setup_players(team, enemies)
 	await process_frame
-	_assert("④: HUD 5 格技能栏（3 固定+2 动态）", hud.player_skill_boxes[0].size() == 5)
-	# 动态注入 → 差集显示在动态格
+	_assert("④: HUD 保持 3 格（上限=一局主动技能数）", hud.player_skill_boxes[0].size() == 3)
+	# 有空槽：重置名册至 1 技（空 2 槽）→ 复制注入占空槽（名册 2/3）
+	var reset_base: Array[String] = ["skill_大地_1"]
+	trig.set_player_skills(mate_id, reset_base)
+	await process_frame
 	trig.put_shared_copy(mate_id, snap, 30.0)
 	await process_frame
-	var hud_roster: Array[String] = trig.get_player_skills(mate_id)
-	var equipped: Array[String] = mate.get_equipped_skills()
-	var diff: Array[String] = []
-	for sid in hud_roster:
-		if str(sid) not in equipped:
-			diff.append(str(sid))
-	_assert("④: 复制技=名册差集(装备外)→动态格数据源成立", "skill_雷火_1" in diff)
-	# 过期 → HUD 信号驱动刷新（动态格清空）
+	_assert("④: 有空槽→复制技占空槽（名册 2/3）", trig.get_player_skills(mate_id).size() == 2)
+	# 满 3：连续注入至达上限后第四个拒收
+	trig.put_shared_copy(mate_id, {"skill_id": "skill_冰雪_1", "caster_id": 999, "team": "b"}, 30.0)
+	trig.put_shared_copy(mate_id, {"skill_id": "skill_金刚_1", "caster_id": 999, "team": "b"}, 30.0)
+	await process_frame
+	var reject_ok: bool = trig.get_player_skills(mate_id).size() == 3
+	trig.put_shared_copy(mate_id, {"skill_id": "skill_草木_1", "caster_id": 999, "team": "b"}, 30.0)
+	_assert("④: 满 3 后再注入被拒（上限=3）", reject_ok and trig.get_player_skills(mate_id).size() == 3)
+	# 过期腾位后可再收
 	trig._process(31.0)
 	await process_frame
-	_assert("④: 过期→player_skills_changed 驱动刷新（名册回基线）", "skill_雷火_1" not in trig.get_player_skills(mate_id))
+	trig.put_shared_copy(mate_id, snap, 30.0)
+	await process_frame
+	_assert("④: 过期腾位→可再接收", "skill_雷火_1" in trig.get_player_skills(mate_id))
+	trig._process(31.0)
+
 
 	# ===== ⑤ AI 池自动包含动态技（get_player_skills 即 AI 选技池）=====
 	trig.put_shared_copy(mate_id, snap, 30.0)

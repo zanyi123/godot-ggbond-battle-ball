@@ -550,11 +550,26 @@ func get_last_enemy_cast(viewer_team: String) -> Dictionary:
 signal player_skills_changed(player_id: int)
 var _dynamic_skills: Dictionary = {}   # {player_id: {skill_id: expires_at}}
 
+## 2026-09-27 主人裁定：3 格=一局主动技能数量上限，不开动态格——
+## 动态注入前检查名册 active 数，已满 3 则拒绝（装备/天赋构筑路径不受此限）
+const MAX_ACTIVE_SKILLS: int = 3
+
+func _active_count(player_id: int) -> int:
+	var n: int = 0
+	for sid in get_player_skills(player_id):
+		var sd: Dictionary = _get_skill_data(str(sid))
+		if str(sd.get("type", "active")) == "active":
+			n += 1
+	return n
+
 ## 暗黑共享：写队友可复制槽（expires 由 handler 传 duration）
 func put_shared_copy(player_id: int, snap: Dictionary, duration: float) -> void:
 	_shared_copies[player_id] = {"skill_data": snap, "expires_at": _clock + duration}
 	var copied_skill_id := str(snap.get("skill_id", ""))
 	if copied_skill_id != "":
+		if _active_count(player_id) >= MAX_ACTIVE_SKILLS:
+			print("[SpiritSkillTrigger] 共享槽: 队友主动技能已满上限(3)，复制技不注入 ", copied_skill_id)
+			return
 		add_player_skill(player_id, copied_skill_id)
 		if not _dynamic_skills.has(player_id):
 			_dynamic_skills[player_id] = {}
