@@ -19,7 +19,7 @@
 			"id": "spirit_dadi",
 			"level": 1.0,
 			"max_level": 10.0,
-			"name": "岩灵",
+			"name": "大山",
 			"skills": [
 				"skill_大地_1",
 				"skill_大地_2"
@@ -32,9 +32,11 @@
 			"id": "spirit_leihuo",
 			"level": 1.0,
 			"max_level": 10.0,
-			"name": "炎雷",
+			"name": "玲珑",
 			"skills": [
-				"skill_雷火_1"
+				"skill_雷火_1",
+				"skill_雷火_2",
+				"skill_雷火_4"
 			]
 		},
 		{
@@ -44,7 +46,7 @@
 			"id": "spirit_bingxue",
 			"level": 1.0,
 			"max_level": 10.0,
-			"name": "霜灵",
+			"name": "冰冰",
 			"skills": [
 				"skill_冰雪_1"
 			]
@@ -56,10 +58,11 @@
 			"id": "spirit_caomu",
 			"level": 1.0,
 			"max_level": 10.0,
-			"name": "藤灵",
+			"name": "小圣",
 			"skills": [
 				"skill_草木_1",
-				"skill_草木_2"
+				"skill_草木_2",
+				"skill_雷火_3"
 			]
 		},
 		{
@@ -69,7 +72,7 @@
 			"id": "spirit_menghuan",
 			"level": 1.0,
 			"max_level": 10.0,
-			"name": "幻灵",
+			"name": "欧仔",
 			"skills": [
 				"skill_梦幻_1"
 			]

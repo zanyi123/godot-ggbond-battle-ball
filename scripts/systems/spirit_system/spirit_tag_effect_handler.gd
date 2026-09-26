@@ -53,5 +53,3 @@ func _process(delta: float) -> void:
 			to_remove.append(eid)
 	for eid in to_remove:
 		remove_tag_effect(eid)
-
-

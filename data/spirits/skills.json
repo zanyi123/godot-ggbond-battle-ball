@@ -235,6 +235,86 @@
 				"event": "Hit.HIT_TAKEN"
 			},
 			"type": "passive"
+		},
+		{
+			"base_description": "端到端测试技",
+			"cooldown": 10.0,
+			"description": "端到端测试技\n该技能伤害提升40%\n该技能球速×百分比",
+			"detail": "端到端测试技详述",
+			"element": "雷火",
+			"energy_cost": 20,
+			"icon_color": "#FFFFFF",
+			"icon_path": "",
+			"id": "skill_雷火_2",
+			"name": "飞火流星(测)",
+			"operator": "OP_AIM",
+			"tag_params": {
+				"ball_dmg_up_pct": {
+					"value": 40.0
+				},
+				"ball_speed_up_pct": {
+					"multiplier": 1.5
+				}
+			},
+			"tags": [
+				"ball_dmg_up_pct",
+				"ball_speed_up_pct"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
+		},
+		{
+			"base_description": "端到端测试技",
+			"cooldown": 10.0,
+			"description": "端到端测试技\n该技能无法移动（持续2秒）",
+			"detail": "端到端测试技详述",
+			"element": "雷火",
+			"energy_cost": 20,
+			"icon_color": "#FFFFFF",
+			"icon_path": "",
+			"id": "skill_雷火_3",
+			"name": "蔓藤缠绕(测)",
+			"operator": "OP_AUTO",
+			"tag_params": {
+				"player_root": {
+					"duration": 2.0
+				}
+			},
+			"tags": [
+				"player_root"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
+		},
+		{
+			"base_description": "端到端测试技",
+			"cooldown": 10.0,
+			"description": "端到端测试技\n该技能区域内持续伤害",
+			"detail": "端到端测试技详述",
+			"element": "雷火",
+			"energy_cost": 20,
+			"icon_color": "#FFFFFF",
+			"icon_path": "",
+			"id": "skill_雷火_4",
+			"name": "火凤燎原(测)",
+			"operator": "OP_AUTO",
+			"tag_params": {
+				"field_zone_danger": {
+					"damage_value": 10.0,
+					"duration": 4.0,
+					"position": "0,0",
+					"size": "200,200",
+					"spawn_at": "ball_land"
+				}
+			},
+			"tags": [
+				"field_zone_danger"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
 		}
 	]
 }
