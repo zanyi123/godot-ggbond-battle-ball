@@ -47,9 +47,19 @@ func _run() -> void:
 	# ===== B组：出厂装载配置对账（schema/槽位/角色/元灵全可解析）=====
 	var config: Dictionary = LoadoutLoader.load_config(LoadoutLoader.LOADOUT_PATH)
 	_assert("B1: 出厂配置可加载且为对象", not config.is_empty())
-	_assert("B2: schema_version=1", int(config.get("schema_version", 0)) == 1)
+	_assert("B2: schema_version=2", int(config.get("schema_version", 0)) == 2)
 	var loadouts: Array = config.get("loadouts", [])
 	_assert("B3: 出厂配置 6 槽位", loadouts.size() == 6)
+	# v2：槽位引用的元灵可来自 test_spirits（原作球员元灵），解析序=test优先+主数据兜底
+	var registered: Array = LoadoutLoader.register_test_spirits(config)
+	var combined: Array = []
+	for ts in registered:
+		combined.append(ts)
+	# ⚠ -s 主脚本编译早于 autoload 注册，禁裸 DataManager 标识符——运行时节点查找
+	var dm: Node = root.get_node_or_null("DataManager")
+	if dm:
+		for ms in dm.spirits:
+			combined.append(ms)
 	var all_ok := true
 	var slots_seen: Dictionary = {}
 	for entry in loadouts:
@@ -57,7 +67,7 @@ func _run() -> void:
 		slots_seen[slot] = true
 		if LoadoutLoader.slot_to_index(slot) == Vector2i(-1, -1):
 			all_ok = false
-		if LoadoutLoader.resolve_spirit(str(entry.get("spirit_id", ""))).is_empty():
+		if LoadoutLoader.resolve_spirit_from(combined, str(entry.get("spirit_id", ""))).is_empty():
 			all_ok = false
 		if not LoadoutLoader.find_invalid_skills(entry.get("skills", []) if entry.get("skills", []) is Array else []).is_empty():
 			all_ok = false
@@ -69,6 +79,20 @@ func _run() -> void:
 	_assert("C1: 非法元灵查无→空", bogus.is_empty())
 	_assert("C2: 非法技能 id 被校验拦截", bad_skills.size() == 1 and bad_skills[0] == "skill_不存在_x")
 	_assert("C3: load_config 对不存在的路径返回空", LoadoutLoader.load_config("res://data/systems/spirit_ai/_no_such_file.json").is_empty())
+
+	# ===== T组：test_spirits（原作球员的元灵）注册与解析优先序 =====
+	_assert("T1: 出厂 test_spirits 全部注册（6个）", registered.size() == 6)
+	var names_ok := true
+	for ts2 in registered:
+		if not str(ts2.get("name", "")).ends_with("的元灵"):
+			names_ok = false
+	_assert("T2: 命名规约=原作球员名+的元灵", names_ok)
+	var hit_test: Dictionary = LoadoutLoader.resolve_spirit_from(combined, "猪猪侠的元灵")
+	_assert("T3: 原作元灵按名字解析", str(hit_test.get("id", "")) == "test_spirit_zhuxiaxia")
+	var hit_prio: Dictionary = LoadoutLoader.resolve_spirit_from(combined, "金刚")
+	_assert("T4: 同元素命中 test_spirits 优先于主数据", str(hit_prio.get("id", "")) == "test_spirit_zhuxiaxia")
+	var bad_ts := {"test_spirits": [{"id": "t_x", "name": "坏元灵", "skills": ["skill_不存在_y"]}, {"id": "", "name": ""}], "loadouts": []}
+	_assert("T5: 非法测试元灵跳过（技能缺失/缺id）", LoadoutLoader.register_test_spirits(bad_ts).is_empty())
 
 	# ===== D组：开关热切往返（user:// 临时文件，真实 switches.json 零触碰）=====
 	var tmp := {"schema_version": 1, "master_enabled": true, "waves": {"A": true, "B": true, "C": false, "D": false, "E": false}}
@@ -117,6 +141,10 @@ func _run() -> void:
 	_assert("E6: 观测层脚本可加载且基类型 CanvasLayer", observe_script != null and observe_script.get_instance_base_type() == "CanvasLayer")
 	var observe_src: String = observe_script.source_code
 	_assert("E7: 观测层含开关热切+恢复快照+决策探活", observe_src.contains("reload_switches") and observe_src.contains("_on_restore_snapshot") and observe_src.contains("get_decision_dump"))
+	var roster_script: GDScript = load("res://scripts/test3d/full_ai_platform/roster_panel.gd")
+	_assert("E8: 排表确认面板脚本可加载且基类型 CanvasLayer", roster_script != null and roster_script.get_instance_base_type() == "CanvasLayer")
+	var roster_src: String = roster_script.source_code
+	_assert("E9: 排表面板含确认信号+右键技能查看器", roster_src.contains("signal confirmed") and roster_src.contains("_show_skill_viewer"))
 
 	print("\n========== 结果: %d/%d PASS ==========" % [_pass, _pass + _fail])
 	if _fail > 0:

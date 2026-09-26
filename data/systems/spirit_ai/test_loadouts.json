@@ -1,0 +1,80 @@
+{
+	"schema_version": 2,
+	"test_spirits": [
+		{
+			"id": "test_spirit_zhuxiaxia",
+			"name": "猪猪侠的元灵",
+			"element": "金刚",
+			"skills": ["skill_金刚_1"]
+		},
+		{
+			"id": "test_spirit_chaorenqiang",
+			"name": "超人强的元灵",
+			"element": "大地",
+			"skills": ["skill_大地_1", "skill_大地_2"]
+		},
+		{
+			"id": "test_spirit_feifei",
+			"name": "菲菲的元灵",
+			"element": "雷火",
+			"skills": ["skill_雷火_1", "skill_雷火_2", "skill_雷火_4"]
+		},
+		{
+			"id": "test_spirit_xiaodaidai",
+			"name": "小呆呆的元灵",
+			"element": "冰雪",
+			"skills": ["skill_冰雪_1"]
+		},
+		{
+			"id": "test_spirit_bobi",
+			"name": "波比的元灵",
+			"element": "草木",
+			"skills": ["skill_草木_1", "skill_草木_2", "skill_雷火_3"]
+		},
+		{
+			"id": "test_spirit_mihu",
+			"name": "迷糊老师的元灵",
+			"element": "梦幻",
+			"skills": ["skill_梦幻_1"]
+		}
+	],
+	"loadouts": [
+		{
+			"slot": "A0",
+			"character_id": "char_001",
+			"spirit_id": "猪猪侠的元灵",
+			"skills": []
+		},
+		{
+			"slot": "A1",
+			"character_id": "char_002",
+			"spirit_id": "超人强的元灵",
+			"skills": []
+		},
+		{
+			"slot": "A2",
+			"character_id": "char_003",
+			"spirit_id": "菲菲的元灵",
+			"skills": []
+		},
+		{
+			"slot": "B0",
+			"character_id": "char_004",
+			"spirit_id": "小呆呆的元灵",
+			"skills": []
+		},
+		{
+			"slot": "B1",
+			"character_id": "char_005",
+			"spirit_id": "波比的元灵",
+			"skills": []
+		},
+		{
+			"slot": "B2",
+			"character_id": "char_006",
+			"spirit_id": "迷糊老师的元灵",
+			"skills": []
+		}
+	],
+	"_说明": "工单10 P2 技能装载配置 v2（平台窗口维护）。工作流：每次工单要测的技能先经快捷开发系统（元灵管理面板）导入 skills.json → 在 test_spirits 里建「原作球员的元灵」（命名=原作球员名+的元灵，如 猪猪侠的元灵；无原作对应的给现有3D主角色）→ loadouts.spirit_id 引用其名字/id。test_spirits 仅平台运行时内存注册，零污染主数据 spirits.json；技能id必须已存在于 skills.json（任一非法=该元灵跳过）。slot=A0~A2/B0~B2 对应 team_a/team_b 索引0~2；character_id 填 id 或名字，校验不符=跳过该槽（fail-closed）；skills 留空=用元灵默认技能表，非空=覆盖；某槽无有效装载=平台按主数据循环装备兜底。F6 后先弹排表确认面板，右键元灵可查看本次测试的技能明细，点确认才开赛。"
+}

@@ -12,9 +12,11 @@ extends Node2D
 const ARENA_SCENE := "res://scenes/battle/battle_arena.tscn"
 const LoadoutLoader := preload("res://scripts/test3d/full_ai_platform/loadout_loader.gd")
 const ObserveLayerScript := preload("res://scripts/test3d/full_ai_platform/observe_layer.gd")
+const RosterPanelScript := preload("res://scripts/test3d/full_ai_platform/roster_panel.gd")
 
 var battle_manager: Node2D = null
 var observe_layer: CanvasLayer = null
+var roster_panel: CanvasLayer = null
 var auto_matches: int = 0          # --platform-auto=N：headless 自动跑满 N 场后退出（0=交互观战）
 var platform_speed: float = 1.0    # --platform-speed=F：Engine.time_scale（auto 模式默认 6）
 var platform_seed: int = 0         # --platform-seed=N（0=不设种子）
@@ -62,6 +64,21 @@ func _platform_start() -> void:
 	if battle_manager.ai_mgr and battle_manager.ai_mgr.has_method("refresh_spirit_ai_skills"):
 		battle_manager.ai_mgr.refresh_spirit_ai_skills()
 
+	# === 主人令 09-26：F6 先弹排表确认面板（6槽×元灵，右键查看本次测试技能），点确认才开赛 ===
+	# headless 自动模式跳过面板直开
+	if auto_matches <= 0 and DisplayServer.get_name() != "headless":
+		roster_panel = RosterPanelScript.new()
+		add_child(roster_panel)
+		roster_panel.setup(battle_manager, stats)
+		roster_panel.confirmed.connect(_begin_match)
+		print("[Platform] 排表确认面板已弹出——右键元灵行查看技能明细，确认后开赛")
+	else:
+		_begin_match()
+
+
+func _begin_match() -> void:
+	if battle_manager == null or not is_instance_valid(battle_manager):
+		return
 	# === 双队全 AI（复用 sim 清位路径；否则队A0号位无人操作会僵死）===
 	if battle_manager.input_mgr:
 		battle_manager.input_mgr.set_controlled_player(null)

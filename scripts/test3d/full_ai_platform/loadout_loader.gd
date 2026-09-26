@@ -1,6 +1,7 @@
 extends RefCounted
-## 工单10 P2 技能装载配置化 —— 平台窗口
-## 读取 test_loadouts.json → 校验（fail-closed，非法槽打印+跳过）→ 经既有装备链路上身。
+## 工单10 P2 技能装载配置化 v2 —— 平台窗口
+## 读取 test_loadouts.json → 注册 test_spirits（原作球员的元灵，内存注册零污染主数据）→
+## 校验（fail-closed，非法槽打印+跳过）→ 经既有装备链路上身。
 ## 白名单纪律：只读 DataManager / 只调既有公开链路（equip_spirit/set_player_skills/HUD 刷新），
 ## 禁碰 battle_manager / ai_manager / skill_state_manager 的任何字段与逻辑。
 
@@ -23,15 +24,19 @@ static func slot_to_index(slot: String) -> Vector2i:
 		return Vector2i(-1, -1)
 	return Vector2i(team, idx)
 
-## 纯函数：按 id / 名字 / 元素 解析元灵；查无返回 {}
-static func resolve_spirit(spirit_key: String) -> Dictionary:
+## 纯函数：从给定元灵清单按 id / 名字 / 元素 解析（调用方保证 test_spirits 排在主数据前=优先命中）
+static func resolve_spirit_from(spirit_list: Array, spirit_key: String) -> Dictionary:
 	var key := spirit_key.strip_edges()
 	if key.is_empty():
 		return {}
-	for spirit_data in DataManager.spirits:
+	for spirit_data in spirit_list:
 		if str(spirit_data.get("id", "")) == key or str(spirit_data.get("name", "")) == key or str(spirit_data.get("element", "")) == key:
 			return spirit_data
 	return {}
+
+## 纯函数：主数据解析（兼容旧调用）
+static func resolve_spirit(spirit_key: String) -> Dictionary:
+	return resolve_spirit_from(DataManager.spirits, spirit_key)
 
 ## 纯函数：校验技能 id 清单，返回非法项（空数组=全部合法）
 static func find_invalid_skills(skill_ids: Array) -> Array[String]:
@@ -45,6 +50,36 @@ static func find_invalid_skills(skill_ids: Array) -> Array[String]:
 		if not found:
 			invalid.append(str(sid))
 	return invalid
+
+## 注册本次测试元灵（命名=原作球员的元灵）；缺 id/name、skills 空/含非法技能的条目跳过（fail-closed）
+static func register_test_spirits(config: Dictionary) -> Array[Dictionary]:
+	var registered: Array[Dictionary] = []
+	var entries = config.get("test_spirits", [])
+	if not entries is Array:
+		return registered
+	for entry in entries:
+		if not entry is Dictionary:
+			continue
+		var sid := str(entry.get("id", ""))
+		var sname := str(entry.get("name", ""))
+		if sid.is_empty() or sname.is_empty():
+			print("[Loadout] ⚠ 测试元灵缺 id/name，跳过: %s" % str(entry))
+			continue
+		var skills = entry.get("skills", [])
+		if not skills is Array or skills.is_empty():
+			print("[Loadout] ⚠ 测试元灵 skills 为空，跳过: %s（技能先经快捷开发系统导入 skills.json）" % sname)
+			continue
+		var invalid := find_invalid_skills(skills)
+		if not invalid.is_empty():
+			print("[Loadout] ⚠ 测试元灵 %s 含非法技能 %s，跳过（先经快捷开发系统导入 skills.json）" % [sname, str(invalid)])
+			continue
+		var spirit := {
+			"id": sid, "name": sname,
+			"element": str(entry.get("element", "")), "skills": skills,
+		}
+		registered.append(spirit)
+		print("[Loadout] 测试元灵注册: %s(%s) 技能=%s" % [sname, str(entry.get("element", "")), str(skills)])
+	return registered
 
 ## 读装载配置文件；失败返回 {}（调用方据此走全兜底路径）
 static func load_config(path: String = LOADOUT_PATH) -> Dictionary:
@@ -63,9 +98,16 @@ static func load_config(path: String = LOADOUT_PATH) -> Dictionary:
 	return parsed
 
 ## 主入口：把装载应用到 battle_manager 的 6 名球员上。
-## 返回 {applied, fallback, skipped: Array[String], total}
+## 返回 {applied, fallback, skipped: Array[String], slots: {slot: {char, spirit_id, spirit_name, element, skills, fallback}}, total}
 static func apply_loadouts(bm: Node, config: Dictionary) -> Dictionary:
-	var stats := {"applied": 0, "fallback": 0, "skipped": [], "total": 6}
+	var test_spirits := register_test_spirits(config)
+	# 解析顺序：test_spirits（原作球员元灵）优先，主数据兜底
+	var combined: Array = []
+	for spirit_data in test_spirits:
+		combined.append(spirit_data)
+	for spirit_data in DataManager.spirits:
+		combined.append(spirit_data)
+	var stats := {"applied": 0, "fallback": 0, "skipped": [], "slots": {}, "total": 6}
 	var covered: Dictionary = {}  # slot -> true（本槽已被有效装载覆盖）
 	var loadouts: Array = config.get("loadouts", []) if config.get("loadouts", []) is Array else []
 	for entry in loadouts:
@@ -92,8 +134,8 @@ static func apply_loadouts(bm: Node, config: Dictionary) -> Dictionary:
 			if want_char != got_id and want_char != got_name:
 				_skip(stats, slot, "character_id 不符(期望%s 实得%s/%s)" % [want_char, got_id, got_name])
 				continue
-		# 元灵解析
-		var spirit_data := resolve_spirit(str(entry.get("spirit_id", "")))
+		# 元灵解析（test_spirits 优先）
+		var spirit_data := resolve_spirit_from(combined, str(entry.get("spirit_id", "")))
 		if spirit_data.is_empty():
 			_skip(stats, slot, "spirit_id 查无: %s" % str(entry.get("spirit_id", "")))
 			continue
@@ -127,6 +169,14 @@ static func apply_loadouts(bm: Node, config: Dictionary) -> Dictionary:
 			str(player.get_equipped_skills())])
 		covered[slot] = true
 		stats["applied"] += 1
+		stats["slots"][slot] = {
+			"char": str(player.char_data.get("name", "?")),
+			"spirit_id": str(spirit_data.get("id", "?")),
+			"spirit_name": str(spirit_data.get("name", "?")),
+			"element": str(spirit_data.get("element", "")),
+			"skills": player.get_equipped_skills(),
+			"fallback": false,
+		}
 	# 兜底：未被有效装载覆盖的槽 → sim 同款循环装备（保证平台永远满配可观测）
 	var spirit_count := DataManager.spirits.size()
 	for team in range(2):
@@ -147,6 +197,14 @@ static func apply_loadouts(bm: Node, config: Dictionary) -> Dictionary:
 				slot, str(spirit_data.get("name", "?")), str(spirit_data.get("id", "?")),
 				str(player.get_equipped_skills())])
 			stats["fallback"] += 1
+			stats["slots"][slot] = {
+				"char": str(player.char_data.get("name", "?")),
+				"spirit_id": str(spirit_data.get("id", "?")),
+				"spirit_name": str(spirit_data.get("name", "?")),
+				"element": str(spirit_data.get("element", "")),
+				"skills": player.get_equipped_skills(),
+				"fallback": true,
+			}
 	return stats
 
 static func _skip(stats: Dictionary, slot: String, reason: String) -> void:
