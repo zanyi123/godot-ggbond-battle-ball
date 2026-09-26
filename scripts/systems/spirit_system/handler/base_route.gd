@@ -630,6 +630,10 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 		"player_mark_apply":
 			call("_apply_player_mark_apply", params, caster_id)
 			success = true
+		# === 工单12 OP_COMBO（合体半装，主人裁方案a）===
+		"player_combo_ready":
+			call("_apply_player_combo_ready", params, caster_id)
+			success = true
 		# === 球员标签 - 体力(21-26) ===
 		"player_hp_heal_pct":
 			call("_apply_player_hp_heal_pct", params, caster_id)
@@ -847,6 +851,7 @@ func _init_priority_table() -> void:
 	_tag_priority["player_on_hit_expire"] = 361  # 排在状态/控制层后，标记已在亮的灯
 	# 波5 管道/zone 扩展（11 工单）
 	_tag_priority["player_mark_apply"] = 341
+	_tag_priority["player_combo_ready"] = 342
 	# P-40 运动控制层
 	_tag_priority["player_move_slow"] = 401
 	_tag_priority["player_move_boost"] = 402

@@ -81,7 +81,8 @@ func _run() -> void:
 	_assert("C3: load_config 对不存在的路径返回空", LoadoutLoader.load_config("res://data/systems/spirit_ai/_no_such_file.json").is_empty())
 
 	# ===== T组：test_spirits（原作球员的元灵）注册与解析优先序 =====
-	_assert("T1: 出厂 test_spirits 全部注册（6个）", registered.size() == 6)
+	# 工单12（操球窗口）按本平台工作流追加 4 个原作元灵（墨麟/狐赖/狐宇/泰格）→ 出厂 6→10（数据演进，d18fee1 先例）
+	_assert("T1: 出厂 test_spirits 全部注册（10个，工单12后）", registered.size() == 10)
 	var names_ok := true
 	for ts2 in registered:
 		if not str(ts2.get("name", "")).ends_with("的元灵"):

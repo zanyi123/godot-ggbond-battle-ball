@@ -8,6 +8,7 @@ class_name SpiritTagEffectHandler
 func _ready() -> void:
 	battle_manager = get_node_or_null("/root/BattleManager")
 	_init_priority_table()
+	_connect_combo_signals()  # 工单12 OP_COMBO：合体信号监听（协调器晚进树时由半装登记处补挂）
 
 
 func _process(delta: float) -> void:

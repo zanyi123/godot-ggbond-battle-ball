@@ -168,11 +168,15 @@ func _apply_player_skill_share_copy(params: Dictionary, caster_id: int) -> void:
 ## ==================== 波5（11 工单）====================
 
 ## #10 叠层印记：命中目标 +1 层（封顶刷新）；达阈值触发引用标签；触发后按参数清层
+## 工单12 印记三层（主人裁"全塞 player_mark_apply 参数化"）：thresholds 数组=多层阈值递进，
+## 每项 {count, tag, params, clear}——层达即触发引用标签（累计语义：≥层即触发，重复命中按层刷新）；
+## 旧单阈值字段（threshold_count/threshold_tag/threshold_params）保留兼容，thresholds 优先
 func _apply_player_mark_apply(params: Dictionary, caster_id: int) -> void:
 	var targets := _get_player_targets(params, caster_id)
 	var mark_id: String = str(params.get("mark_id", "mark"))
 	var max_stacks: int = maxi(1, int(params.get("max_stacks", 3)))
 	var duration: float = float(params.get("duration", 5.0))
+	var thresholds: Array = params.get("thresholds", [])
 	var threshold_count: int = int(params.get("threshold_count", 0))
 	var threshold_tag: String = str(params.get("threshold_tag", ""))
 	var clear_on_trigger: bool = bool(params.get("clear_on_trigger", false))
@@ -182,12 +186,90 @@ func _apply_player_mark_apply(params: Dictionary, caster_id: int) -> void:
 			continue
 		var count: int = target.apply_mark(mark_id, max_stacks, duration)
 		print("[TagEffect] 印记: %s 第%d/%d层 target=%s" % [mark_id, count, max_stacks, target.char_data.get("name", "?")])
-		if threshold_count > 0 and count >= threshold_count and threshold_tag != "":
-			# 阈值触发：对带印记目标触发引用标签（递归走统一入口）
+		if not thresholds.is_empty():
+			# 多层阈值递进（工单12）：层达即触发（累计），clear 按项配置
+			for th in thresholds:
+				if typeof(th) != TYPE_DICTIONARY:
+					continue
+				var thd: Dictionary = th
+				var th_count: int = int(thd.get("count", 0))
+				var th_tag: String = str(thd.get("tag", ""))
+				if th_count > 0 and count >= th_count and th_tag != "":
+					# 层触发：对带印记目标触发引用标签（递归走统一入口）
+					apply_tag_effect(th_tag, thd.get("params", {}).duplicate(true), target.get_instance_id())
+					print("[TagEffect] 印记层触发: %s ×%d ≥ %d → %s" % [mark_id, count, th_count, th_tag])
+					if bool(thd.get("clear", false)):
+						target.clear_mark(mark_id)
+		elif threshold_count > 0 and count >= threshold_count and threshold_tag != "":
+			# 阈值触发：对带印记目标触发引用标签（递归走统一入口）——旧单阈值兼容路径
 			apply_tag_effect(threshold_tag, threshold_params.duplicate(), target.get_instance_id())
 			print("[TagEffect] 印记阈值触发: %s ×%d → %s" % [mark_id, count, threshold_tag])
 			if clear_on_trigger:
 				target.clear_mark(mark_id)
+
+
+## ==================== 工单12 OP_COMBO（主人裁方案a：两队友各持半技能自动合体） ====================
+
+## 合体半装登记（标签效果）：写入合体协调器（skill_state_manager 单写者域）；
+## 协调器只做状态机（登记/配对判定/信号/拆分），效果施加走标签流（combo_formed 信号→施组合增益）。
+## 玩家侧 T 键邀请后补（裁决备注）；AI 协同时机效用=描述符（Q9 待批，未覆盖标签计旧缺省）
+func _apply_player_combo_ready(params: Dictionary, caster_id: int) -> void:
+	_connect_combo_signals()
+	var ssm: Node = null
+	if is_inside_tree():
+		ssm = get_tree().get_first_node_in_group("skill_state_managers")
+	if ssm == null or not ssm.has_method("register_combo_ready"):
+		print("[TagEffect] player_combo_ready: 合体协调器不可用，半装未登记（fail-closed）")
+		return
+	var caster: Node = _get_caster(caster_id)
+	if caster == null:
+		print("[TagEffect] player_combo_ready: 施法者不可达，半装未登记（fail-closed）")
+		return
+	ssm.register_combo_ready(caster_id, caster, params.duplicate(true))
+	print("[TagEffect] 合体半装登记: caster=%s combo=%s role=%s" % [str(caster_id), str(params.get("combo_id", "?")), str(params.get("role", "?"))])
+
+
+## 合体协调器信号连接（幂等；facade _ready 与半装登记时双保险——协调器可能晚于 handler 进树）
+func _connect_combo_signals() -> void:
+	if not is_inside_tree():
+		return
+	var ssm: Node = get_tree().get_first_node_in_group("skill_state_managers")
+	if ssm == null or not ssm.has_signal("combo_formed"):
+		return
+	if not ssm.combo_formed.is_connected(_on_combo_formed):
+		ssm.combo_formed.connect(_on_combo_formed)
+	if not ssm.combo_broken.is_connected(_on_combo_broken):
+		ssm.combo_broken.connect(_on_combo_broken)
+
+
+## 合体成立：施加组合增益（标签流，走统一入口；buff 时长=合体期→到期自然拆分）
+## 口径=原作"伤害、移速增加"：双方 def/spd 提升 + 炮弹增伤（ball_mods 准备区，合体期投出即炮击）；
+## 能量合缴=两半技能各自支付（机制天然）；"消耗速率增加"=energy_drain_rate 参数预留（Q9 备案调参）
+func _on_combo_formed(combo_id: String, members: Array, params: Dictionary) -> void:
+	var dur := float(params.get("duration", 8.0))
+	var applied: int = 0
+	for m in members:
+		if m == null or not is_instance_valid(m):
+			continue
+		var mid: int = m.get_instance_id()
+		var def_pct := float(params.get("def_up_pct", 40.0))
+		var spd_pct := float(params.get("spd_up_pct", 25.0))
+		var ball_dmg := float(params.get("ball_dmg_up_pct", 35.0))
+		if def_pct > 0.0:
+			apply_tag_effect("player_def_up_pct", {"value": def_pct, "duration": dur, "target": "self"}, mid)
+			applied += 1
+		if spd_pct > 0.0:
+			apply_tag_effect("player_spd_up_pct", {"value": spd_pct, "duration": dur, "target": "self"}, mid)
+			applied += 1
+		if ball_dmg > 0.0:
+			apply_tag_effect("ball_dmg_up_pct", {"value": ball_dmg}, mid)
+			applied += 1
+	print("[TagEffect] 合体增益已施加: %s members=%d 项=%d dur=%.1f" % [combo_id, members.size(), applied, dur])
+
+
+## 合体拆分（增益已随合体期自然到期；此处仅状态清理留痕）
+func _on_combo_broken(combo_id: String, _members: Array) -> void:
+	print("[TagEffect] 合体拆分: %s" % combo_id)
 
 ## #13 toggle：状态标签 → 状态灯名映射（toggle 开关用；v1 仅支持状态灯类标签可精确撤销）
 const TOGGLE_STATUS_MAP: Dictionary = {

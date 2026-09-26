@@ -285,8 +285,139 @@ func clear_ai_input_source(player_id: int) -> void:
 	ai_virtual_inputs.erase(player_id)
 
 
+## ==================== 工单12 S1：OP_COMBO 合体协调器（主人裁方案a） ====================
+## 语义：两队友各持半技能（player_combo_ready 标签登记半装），同队互补 role 且双方存活、
+## 距离 < combo_range 时自动合体；合体期=登记 duration（remaining 倒计时，固定步长确定性），
+## 到期拆分（combo_broken 信号；增益 buff 时长=合体期自然到期）。
+## 本管理器只做状态机（登记/配对判定/信号/拆分），效果施加走标签流（handler 监听 combo_formed）。
+## AI 侧协同时机效用=描述符（Q9 待批）；玩家侧 T 键邀请后补（裁决备注）。
+signal combo_formed(combo_id: String, members: Array, params: Dictionary)
+signal combo_broken(combo_id: String, members: Array)
+
+## 合体判定周期（秒；_process 累计驱动，固定步长下确定性）
+const COMBO_CHECK_INTERVAL: float = 0.2
+## 合体默认距离与时长（params 未配时兜底；工单12"近距离"口径）
+const COMBO_DEFAULT_RANGE: float = 150.0
+const COMBO_DEFAULT_DURATION: float = 8.0
+
+var _combo_readies: Dictionary = {}  # {player_id: {player: Node, combo_id, role, params}}
+var _combo_states: Dictionary = {}   # {combo_id: {members: Array, remaining: float, params}}
+var _combo_check_accum: float = 0.0
+
+
+## 半装登记（handler 调用；同 player 重复登记覆盖=换半装语义；缺 combo_id/role 拒登 fail-closed）
+func register_combo_ready(player_id: int, player: Node, params: Dictionary) -> void:
+	var combo_id := str(params.get("combo_id", ""))
+	var role := str(params.get("role", ""))
+	if combo_id.is_empty() or role.is_empty():
+		print("[SkillState] 合体半装拒绝: 缺 combo_id/role player=%d" % player_id)
+		return
+	if player == null or not is_instance_valid(player):
+		return
+	_combo_readies[player_id] = {"player": player, "combo_id": combo_id, "role": role, "params": params.duplicate(true)}
+
+
+## 注销半装（手动取消/异常清理）
+func unregister_combo_ready(player_id: int) -> void:
+	_combo_readies.erase(player_id)
+
+
+## 就绪表查询口（测试/观测层）
+func get_combo_readies() -> Dictionary:
+	return _combo_readies.duplicate(true)
+
+
+## 合体态查询口（观测层/测试）：{combo_id: {members, remaining, params}}
+func get_combo_states() -> Dictionary:
+	return _combo_states.duplicate(true)
+
+
+## 配对判定+合体触发（_process 周期驱动；测试可直调）。返回本次新成合体数。
+## 配对规则：同 combo_id + role 互补（同 role 不合）+ 双方存活同队 + 距离 ≤ combo_range；
+## 平局/多候选取遍历序首个（确定性）
+func try_form_combos() -> int:
+	var formed: int = 0
+	var ids: Array = _combo_readies.keys()
+	for i in range(ids.size()):
+		var a_id = ids[i]
+		if not _combo_readies.has(a_id):
+			continue
+		var a: Dictionary = _combo_readies[a_id]
+		for j in range(i + 1, ids.size()):
+			var b_id = ids[j]
+			if not _combo_readies.has(b_id):
+				continue
+			var b: Dictionary = _combo_readies[b_id]
+			if not _pair_compatible(a, b):
+				continue
+			_form_combo(a_id, a, b_id, b)
+			formed += 1
+			break
+	return formed
+
+
+## 合体兼容判定（纯函数可测）
+func _pair_compatible(a: Dictionary, b: Dictionary) -> bool:
+	if str(a.get("combo_id", "")) != str(b.get("combo_id", "")):
+		return false
+	if str(a.get("role", "")) == str(b.get("role", "")):
+		return false  # 互补 role
+	var pa: Node = a.get("player")
+	var pb: Node = b.get("player")
+	if pa == null or pb == null or not is_instance_valid(pa) or not is_instance_valid(pb):
+		return false
+	if pa == pb:
+		return false
+	if bool(pa.get("is_defeated")) or bool(pb.get("is_defeated")):
+		return false
+	if str(pa.get("team")) != str(pb.get("team")):
+		return false  # 同队
+	var ra := float(a.get("params", {}).get("combo_range", COMBO_DEFAULT_RANGE))
+	if pa.global_position.distance_to(pb.global_position) > ra:
+		return false
+	return true
+
+
+func _form_combo(a_id: int, a: Dictionary, b_id: int, b: Dictionary) -> void:
+	var combo_id := str(a.get("combo_id", ""))
+	var params: Dictionary = a.get("params", {})
+	var members: Array = [a.get("player"), b.get("player")]
+	var dur := float(params.get("duration", COMBO_DEFAULT_DURATION))
+	_combo_states[combo_id] = {"members": members, "remaining": dur, "params": params}
+	_combo_readies.erase(a_id)
+	_combo_readies.erase(b_id)
+	combo_formed.emit(combo_id, members, params)
+	print("[SkillState] 合体成立: %s members=%d remaining=%.1f" % [combo_id, members.size(), dur])
+
+
+func _process(delta: float) -> void:
+	# 合体期倒计时（固定步长下确定性；到期拆分发信号）
+	var broken: Array = []
+	for combo_id in _combo_states:
+		var st: Dictionary = _combo_states[combo_id]
+		st["remaining"] = float(st.get("remaining", 0.0)) - delta
+		if float(st["remaining"]) <= 0.0:
+			broken.append(combo_id)
+	for combo_id in broken:
+		var st: Dictionary = _combo_states[combo_id]
+		combo_broken.emit(str(combo_id), st.get("members", []))
+		_combo_states.erase(combo_id)
+		print("[SkillState] 合体拆分: %s" % str(combo_id))
+	# 就绪表有效性清扫（死亡/失效节点）
+	for pid in _combo_readies.keys():
+		var r: Dictionary = _combo_readies[pid]
+		var p: Node = r.get("player")
+		if p == null or not is_instance_valid(p) or bool(p.get("is_defeated")):
+			_combo_readies.erase(pid)
+	# 合体判定周期驱动
+	_combo_check_accum += delta
+	if _combo_check_accum >= COMBO_CHECK_INTERVAL:
+		_combo_check_accum = 0.0
+		try_form_combos()
+
+
 func _ready() -> void:
-	pass
+	add_to_group("skill_state_managers")  # 工单12：合体协调器组（handler 经组查找连接信号）
 
 
 ## 设置玩家上场技能
@@ -567,3 +698,4 @@ func cleanup_player(player_id: int) -> void:
 	_last_press_times.erase(player_id)
 	_active_player_skills.erase(player_id)
 	ai_virtual_inputs.erase(player_id)  # 波C：AI 输入源登记一并清理
+	_combo_readies.erase(player_id)  # 工单12：合体半装登记一并清理
