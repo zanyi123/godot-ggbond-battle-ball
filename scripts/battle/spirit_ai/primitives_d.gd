@@ -7,10 +7,14 @@ extends RefCounted
 
 const TABLE_PATH := "res://data/systems/spirit_ai/primitives_d.json"
 
-## position_intent 枚举（select_field_position 分发键，Q4 ③）
+## 场地知识库（13号工单共享层）：静态几何查询，preload 直查（无状态确定性，非感知）
+const FieldKnowledge: GDScript = preload("res://scripts/battle/field_zone.gd")
+
+## position_intent 枚举（select_field_position 分发键；Q4③ 7枚举 + 13号工单升级 3枚举）
 const POSITION_INTENTS: Array[String] = [
 	"none", "goal_ball_line", "enemy_carrier_path", "enemy_cluster",
 	"shoot_line_block", "advance_lane", "defensive_anchor",
+	"own_line_inner", "outer_gate_block", "goal_area_depth",
 ]
 
 ## 12 个时机闸门键（06§三冻结，各波共用）
@@ -196,6 +200,27 @@ static func select_field_position(descriptor: Dictionary, sad: Dictionary, ctx: 
 			if typeof(own_goal) != TYPE_VECTOR2:
 				return self_pos
 			return own_goal + Vector2(0, 20)
+		"goal_area_depth":
+			# 13号工单升级：球门区纵深——按执法权威口径（a=左半场底线）取己方底线内侧60px
+			var team_depth := str(p.team)
+			if team_depth != "a" and team_depth != "b":
+				return self_pos
+			return FieldKnowledge.knowledge_goal_area_point(team_depth)
+		"own_line_inner":
+			# 13号工单升级：贴己方白线内侧——y 跟随球位（缺球ctx时取中线高度）
+			var team_line := str(p.team)
+			if team_line != "a" and team_line != "b":
+				return self_pos
+			var follow_y := 0.0
+			if typeof(ball_pos) == TYPE_VECTOR2:
+				follow_y = ball_pos.y
+			return FieldKnowledge.knowledge_own_line_inner_point(team_line, follow_y)
+		"outer_gate_block":
+			# 13号工单升级：堵敌方流放区入口（队a堵左口、队b堵右口）
+			var team_gate := str(p.team)
+			if team_gate != "a" and team_gate != "b":
+				return self_pos
+			return FieldKnowledge.knowledge_enemy_gate_point(team_gate)
 	return self_pos
 
 

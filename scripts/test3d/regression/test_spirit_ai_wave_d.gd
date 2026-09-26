@@ -274,9 +274,9 @@ func _run() -> void:
 	_assert("P3: shoot_line_block=球门→持球敌0.5系数cap100（vision_block）", pos_vision.distance_to(Vector2(-400, 0)) < 0.001)
 	var pos_lane: Vector2 = prim.select_field_position(desc_boost_pos, sad, ctx_full)
 	_assert("P4: advance_lane=自位朝敌门60px（zone_boost）", pos_lane.distance_to(Vector2(60, 0)) < 0.001)
-	var pos_anchor: Vector2 = prim.select_field_position(desc_safe, sad, ctx_full)
-	var pos_anchor_heal: Vector2 = prim.select_field_position(desc_heal, sad, ctx_full)
-	_assert("P5: defensive_anchor=己方球门前+20y（safe/heal同语义）", pos_anchor.distance_to(Vector2(-500, 20)) < 0.001 and pos_anchor_heal.distance_to(Vector2(-500, 20)) < 0.001)
+	var pos_safe: Vector2 = prim.select_field_position(desc_safe, sad, ctx_full)
+	var pos_heal: Vector2 = prim.select_field_position(desc_heal, sad, ctx_full)
+	_assert("P5: goal_area_depth=球门区纵深（13号升级：a队→己方左底线内侧60px(-320,0)）", pos_safe.distance_to(Vector2(-320, 0)) < 0.001 and pos_heal.distance_to(Vector2(-320, 0)) < 0.001)
 
 	var ctx_min: Dictionary = {"player": caster}
 	var pos_fallback_wall: Vector2 = prim.select_field_position(desc_wall, sad, ctx_min)
@@ -293,7 +293,32 @@ func _run() -> void:
 
 	var pos_repeat: Vector2 = prim.select_field_position(desc_wall, sad, ctx_full)
 	_assert("P8: 同输入两次选位恒同（零随机）", pos_repeat == pos_wall)
-	_assert("P9: 7 枚举 position_intent 全量登记", prim.POSITION_INTENTS.size() == 7)
+	_assert("P9: 10 枚举 position_intent 全量登记（Q4七枚举+13号三枚举）", prim.POSITION_INTENTS.size() == 10)
+
+	# ===== 13号工单知识库驱动语义 =====
+	var caster_b: StubPlayer = StubPlayer.new()
+	caster_b.character_id = "t_fd_caster_b"
+	caster_b.team = "b"
+	caster_b.position = Vector2(0, 0)
+	root.add_child(caster_b)
+	var sad_b: Dictionary = {"player": caster_b}
+	var ctx_b: Dictionary = {"player": caster_b}
+	var pos_safe_b: Vector2 = prim.select_field_position(desc_safe, sad_b, ctx_b)
+	_assert("P10: goal_area_depth b队镜像（b→己方右底线内侧60px(320,0)）", pos_safe_b.distance_to(Vector2(320, 0)) < 0.001)
+	var desc_line: Dictionary = {"position_intent": "own_line_inner"}
+	var ctx_ball_high: Dictionary = {"player": caster, "ball_position": Vector2(-200, 300)}
+	var pos_line: Vector2 = prim.select_field_position(desc_line, sad, ctx_ball_high)
+	_assert("P11: own_line_inner 贴己方白线内侧且y随球位夹回纵深带（a→(-368,220)）", pos_line.distance_to(Vector2(-368, 220)) < 0.001)
+	var desc_gate: Dictionary = {"position_intent": "outer_gate_block"}
+	var pos_gate_a: Vector2 = prim.select_field_position(desc_gate, sad, ctx_full)
+	var pos_gate_b: Vector2 = prim.select_field_position(desc_gate, sad_b, ctx_b)
+	_assert("P12: outer_gate_block 堵敌方流放区入口（a→左口(-250,0) / b→右口(250,0)）", pos_gate_a.distance_to(Vector2(-250, 0)) < 0.001 and pos_gate_b.distance_to(Vector2(250, 0)) < 0.001)
+	var ghost: StubPlayer = StubPlayer.new()
+	ghost.character_id = "t_fd_ghost"
+	ghost.team = ""
+	ghost.position = Vector2(90, 90)
+	root.add_child(ghost)
+	_assert("P13: 非法team fail-closed回自站位", prim.select_field_position(desc_gate, {"player": ghost}, {"player": ghost}) == ghost.global_position)
 
 	# ===== I-集成面：容错与读表 =====
 	var live: Dictionary = prim.get_descriptors()

@@ -425,3 +425,205 @@ func _in_rect(pos: Vector2, r: Dictionary) -> bool:
 
 func _rect_center(r: Dictionary) -> Vector2:
 	return Vector2(r.x + r.width / 2.0, r.y + r.height / 2.0)
+
+
+# =====================================================================
+# ===== 场地知识库（13号工单：技能AI与球员AI共用的场地认知共享层）=====
+# =====================================================================
+## 设计要点（13工单§二/§三）：
+## - 纯增量静态查询层：只读本文件上方权威常量，不改任何执法逻辑（第二真相禁令）
+## - 全静态零状态 → 技能AI原语/球员AI/测试可经 preload 直查（确定性，无感知收口问题）；
+##   个体场地语义（my_zone/in_outer 等）仍走 ctx 单口由 manager 组装（红线延伸，Q9）
+## - 语义口径：own/enemy 以执法权威（check_midline/check_field_boundary）为准：
+##   队a半场=x≤0（左）、队b半场=x≥0（右）；流放区 a=右外场、b=左外场（start_field_transition）
+## - 球门锚点（GOAL_A/GOAL_B）现存 ai_manager/spirit_ai_manager 两份重复定义且与中线规则
+##   存在语义疑点（a锚(300,0)在敌半侧），知识库暂不收录，待集成窗口统一后迁移（Q9登记）
+
+## 区域通行规则语义表（zone 语义名 → 规则一句话；AI 可查询）
+const KNOWLEDGE_ZONE_RULES: Dictionary = {
+	"inner_own": "己方半场：自由通行",
+	"inner_enemy": "对方半场：未流放球员越中线违规",
+	"outer_own": "己方流放区：仅流放/转移球员可驻留",
+	"outer_enemy": "对方流放区：未流放球员越界违规",
+	"center_circle": "中圈发球区（内场语义）",
+	"out_of_bounds": "蓝色禁区：越界失分",
+}
+
+## 球门区纵深默认值（放置语义用，像素=GD单位铁律）
+const KNOWLEDGE_GOAL_DEPTH: float = 60.0
+## 己方白线内侧默认贴线内缩
+const KNOWLEDGE_LINE_INSET: float = 12.0
+
+
+## 语义区域归属（team 给出时输出 own/enemy 语义，缺省输出方位语义）
+static func knowledge_zone_of(pos: Vector2, team: String = "") -> String:
+	var in_inner := _k_in_rect(pos, INNER)
+	var in_left := _k_in_outer_static(pos, LEFT_OUTER)
+	var in_right := _k_in_outer_static(pos, RIGHT_OUTER)
+	if not (in_inner or in_left or in_right):
+		return "out_of_bounds"
+	if in_left:
+		if team == "b":
+			return "outer_own"
+		return "outer_enemy" if team == "a" else "outer_left"
+	if in_right:
+		if team == "a":
+			return "outer_own"
+		return "outer_enemy" if team == "b" else "outer_right"
+	# 内场：中圈优先（子语义）
+	if pos.distance_to(Vector2.ZERO) <= CENTER_CIRCLE_RADIUS:
+		return "center_circle"
+	if team == "a":
+		return "inner_own" if pos.x <= 0.0 else "inner_enemy"
+	if team == "b":
+		return "inner_own" if pos.x >= 0.0 else "inner_enemy"
+	return "inner"
+
+
+## 白线/关键线段表（line_id → {a,b}；由权威常量推导，非手抄坐标）
+static func _knowledge_lines() -> Dictionary:
+	var ix: float = INNER.x
+	var iy: float = INNER.y
+	var ix2: float = INNER.x + INNER.width
+	var iy2: float = INNER.y + INNER.height
+	var lm: Dictionary = LEFT_OUTER.main
+	var rm: Dictionary = RIGHT_OUTER.main
+	var lt: Dictionary = LEFT_OUTER.top_arm
+	var rt: Dictionary = RIGHT_OUTER.top_arm
+	var lb: Dictionary = LEFT_OUTER.bot_arm
+	var rb: Dictionary = RIGHT_OUTER.bot_arm
+	return {
+		"midline": {"a": Vector2(0, iy), "b": Vector2(0, iy2)},
+		"inner_top": {"a": Vector2(ix, iy), "b": Vector2(ix2, iy)},
+		"inner_bottom": {"a": Vector2(ix, iy2), "b": Vector2(ix2, iy2)},
+		"inner_left": {"a": Vector2(ix, iy), "b": Vector2(ix, iy2)},
+		"inner_right": {"a": Vector2(ix2, iy), "b": Vector2(ix2, iy2)},
+		# 左外场（队b流放区）凹字形轮廓
+		"outer_left_face": {"a": Vector2(lm.x, lm.y), "b": Vector2(lm.x, lm.y + lm.height)},
+		"outer_left_top": {"a": Vector2(lm.x, lm.y), "b": Vector2(lt.x + lt.width, lt.y)},
+		"outer_left_bottom": {"a": Vector2(lm.x, lm.y + lm.height), "b": Vector2(lb.x + lb.width, lb.y + lb.height)},
+		"outer_left_arm_gate_top": {"a": Vector2(lt.x + lt.width, lt.y), "b": Vector2(lt.x + lt.width, lt.y + lt.height)},
+		"outer_left_arm_gate_bot": {"a": Vector2(lb.x + lb.width, lb.y), "b": Vector2(lb.x + lb.width, lb.y + lb.height)},
+		"outer_left_arm_base_top": {"a": Vector2(lt.x, lt.y + lt.height), "b": Vector2(lt.x + lt.width, lt.y + lt.height)},
+		"outer_left_arm_base_bot": {"a": Vector2(lb.x, lb.y), "b": Vector2(lb.x + lb.width, lb.y)},
+		# 右外场（队a流放区）凹字形轮廓（镜像）
+		"outer_right_face": {"a": Vector2(rm.x + rm.width, rm.y), "b": Vector2(rm.x + rm.width, rm.y + rm.height)},
+		"outer_right_top": {"a": Vector2(rm.x + rm.width, rm.y), "b": Vector2(rt.x, rt.y)},
+		"outer_right_bottom": {"a": Vector2(rm.x + rm.width, rm.y + rm.height), "b": Vector2(rb.x, rb.y + rb.height)},
+		"outer_right_arm_gate_top": {"a": Vector2(rt.x, rt.y), "b": Vector2(rt.x, rt.y + rt.height)},
+		"outer_right_arm_gate_bot": {"a": Vector2(rb.x, rb.y), "b": Vector2(rb.x, rb.y + rb.height)},
+		"outer_right_arm_base_top": {"a": Vector2(rt.x, rt.y + rt.height), "b": Vector2(rt.x + rt.width, rt.y + rt.height)},
+		"outer_right_arm_base_bot": {"a": Vector2(rb.x, rb.y), "b": Vector2(rb.x + rb.width, rb.y)},
+	}
+
+
+## 到任意白线/关键线的距离（像素；未知 line_id 返回 -1）
+static func knowledge_dist_to_line(pos: Vector2, line_id: String) -> float:
+	var lines := _knowledge_lines()
+	if not lines.has(line_id):
+		return -1.0
+	var seg: Dictionary = lines[line_id]
+	return pos.distance_to(_k_seg_closest(pos, seg["a"], seg["b"]))
+
+
+## 走位是否越过指定线段（含端点接触；平行/共线按不交叉处理）
+static func knowledge_would_cross_line(from: Vector2, to: Vector2, line_id: String) -> bool:
+	var lines := _knowledge_lines()
+	if not lines.has(line_id):
+		return false
+	var seg: Dictionary = lines[line_id]
+	return _k_seg_intersect(from, to, seg["a"], seg["b"])
+
+
+## 外场通道口（两臂之间的开口，救援/回流规则的几何接入点；side="left"/"right"）
+static func knowledge_outer_gate_segment(side: String) -> Dictionary:
+	if side == "left":
+		return {"a": Vector2(-250.0, INNER.y), "b": Vector2(-250.0, INNER.y + INNER.height)}
+	return {"a": Vector2(250.0, INNER.y), "b": Vector2(250.0, INNER.y + INNER.height)}
+
+
+static func knowledge_outer_gate_point(side: String) -> Vector2:
+	var seg := knowledge_outer_gate_segment(side)
+	return ((seg["a"] as Vector2) + (seg["b"] as Vector2)) * 0.5
+
+
+## 己方流放区入口（队a=右外场口(250,0)、队b=左外场口(-250,0)；start_field_transition 口径）
+static func knowledge_own_gate_point(team: String) -> Vector2:
+	return knowledge_outer_gate_point("right") if team == "a" else knowledge_outer_gate_point("left")
+
+
+## 敌方流放区入口（队a→左口、队b→右口；"堵外场入口"放置语义用）
+static func knowledge_enemy_gate_point(team: String) -> Vector2:
+	return knowledge_outer_gate_point("left") if team == "a" else knowledge_outer_gate_point("right")
+
+
+## 最近通道口（返回 pos/side/dist）
+static func knowledge_nearest_gate(pos: Vector2) -> Dictionary:
+	var left := knowledge_outer_gate_point("left")
+	var right := knowledge_outer_gate_point("right")
+	if pos.distance_to(left) <= pos.distance_to(right):
+		return {"pos": left, "side": "left", "dist": pos.distance_to(left)}
+	return {"pos": right, "side": "right", "dist": pos.distance_to(right)}
+
+
+## 球门区纵深点：己方半场底线内侧 depth 处（执法权威口径：a=左底线、b=右底线）
+static func knowledge_goal_area_point(team: String, depth: float = KNOWLEDGE_GOAL_DEPTH) -> Vector2:
+	if team == "a":
+		return Vector2(INNER.x + depth, 0)
+	return Vector2(INNER.x + INNER.width - depth, 0)
+
+
+## 贴己方白线内侧点（沿己方底线内缩 inset；y 跟随目标点并夹回内场纵深带）
+static func knowledge_own_line_inner_point(team: String, y: float = 0.0, inset: float = KNOWLEDGE_LINE_INSET) -> Vector2:
+	var y_clamped := clampf(y, INNER.y + 40.0, INNER.y + INNER.height - 40.0)
+	if team == "a":
+		return Vector2(INNER.x + inset, y_clamped)
+	return Vector2(INNER.x + INNER.width - inset, y_clamped)
+
+
+## 规则问答：该走位是否违规（几何口径；返回 ""/"out_of_bounds"/"cross_midline"/"cross_field_boundary"）
+## 注意：流放豁免由调用方按 player.is_penalized 处理（与实例侧执法函数同口径），本层只看几何
+static func knowledge_would_violate(team: String, from: Vector2, to: Vector2) -> String:
+	var zone_to := knowledge_zone_of(to)
+	if zone_to == "out_of_bounds":
+		return "out_of_bounds"
+	var semantic := knowledge_zone_of(to, team)
+	if semantic == "outer_enemy":
+		return "cross_field_boundary"
+	if semantic == "inner_enemy":
+		return "cross_midline"
+	return ""
+
+
+## 规则问答：流放球员当前能否回内场（救援规则接入点；现版无回流实装=false）
+static func knowledge_rescue_rule_active() -> bool:
+	return false
+
+
+static func _k_in_rect(pos: Vector2, r: Dictionary) -> bool:
+	return pos.x >= float(r.x) and pos.x <= float(r.x) + float(r.width) \
+			and pos.y >= float(r.y) and pos.y <= float(r.y) + float(r.height)
+
+
+static func _k_in_outer_static(pos: Vector2, outer: Dictionary) -> bool:
+	return _k_in_rect(pos, outer.main) or _k_in_rect(pos, outer.top_arm) or _k_in_rect(pos, outer.bot_arm)
+
+
+static func _k_seg_closest(p: Vector2, a: Vector2, b: Vector2) -> Vector2:
+	var ab := b - a
+	var len2 := ab.length_squared()
+	if len2 < 0.0001:
+		return a
+	var t := clampf((p - a).dot(ab) / len2, 0.0, 1.0)
+	return a + ab * t
+
+
+static func _k_seg_intersect(p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2) -> bool:
+	var d1 := p2 - p1
+	var d2 := p4 - p3
+	var denom := d1.cross(d2)
+	if absf(denom) < 0.0001:
+		return false
+	var t := (p3 - p1).cross(d2) / denom
+	var u := (p3 - p1).cross(d1) / denom
+	return t >= 0.0 and t <= 1.0 and u >= 0.0 and u <= 1.0
