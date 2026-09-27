@@ -10,12 +10,13 @@ const C_SOURCE_PATH := "res://scripts/battle/spirit_ai/primitives_c.gd"
 const INPUT_SOURCE_PATH := "res://scripts/battle/spirit_ai/ai_input_source.gd"
 const STATE_MANAGER_PATH := "res://scripts/systems/spirit_system/skill_state_manager.gd"
 
-## 波C 17标签全名单（07§④）
+## 波C 标签全名单（07§④ 17标签 + 工单18 半技能 combo_ready）
 const WAVE_C_TAGS: Array[String] = [
 	"ball_tracking", "ball_avoid", "ball_boomerang", "ball_straight", "ball_lockon",
 	"ball_spread", "ball_bounce_enhance", "ball_transform", "ball_stealth",
 	"ball_in_flight_boost", "ball_recall", "ball_manual_steering", "ball_penetrate",
 	"ball_sure_hit", "ball_carry_push", "ball_range_up", "ball_range_down",
+	"player_combo_ready",  # 工单18缺口1/4：合体半装描述符（Q11⑤，12号深化）
 ]
 
 ## 06§2.1 冻结字段 + 波C扩展字段 operation_mode/op_policy（Q8）
@@ -87,7 +88,7 @@ func _run() -> void:
 		return
 	_assert("J2: wave=C / schema_version=4（Q8扩展版）", str(table.get("wave", "")) == "C" and int(table.get("schema_version", 0)) == 4)
 	var descriptors: Dictionary = table.get("descriptors", {})
-	_assert("J3: 描述符恰为17个", descriptors.size() == 17)
+	_assert("J3: 描述符恰为18个（17+工单18半技能combo_ready）", descriptors.size() == 18)
 
 	var registry_text := FileAccess.get_file_as_string(REGISTRY_PATH)
 	var registry: Variant = JSON.parse_string(registry_text)
@@ -127,7 +128,7 @@ func _run() -> void:
 				fields_ok = false
 				print("    [缺字段] %s.%s" % [tag_id, f])
 		# 枚举合法
-		if str(desc.get("family", "")) not in ["ball_flight", "ball_hit", "ball_range"]:
+		if str(desc.get("family", "")) not in ["ball_flight", "ball_hit", "ball_range", "player_status"]:  # player_status=工单18半技能（Q1已批枚举复用）
 			enum_ok = false
 			print("    [family非法] " + tag_id)
 		if str(desc.get("direction", "")) not in ["self", "enemy"]:
@@ -139,7 +140,7 @@ func _run() -> void:
 		if str(desc.get("intent", "")) not in ["attack", "defense", "support", "control"]:
 			enum_ok = false
 			print("    [intent非法] " + tag_id)
-		if str(desc.get("target_mode", "")) != "ball":
+		if str(desc.get("target_mode", "")) not in ["ball", "self"]:  # self=工单18半装（合体目标=施法者双方）
 			enum_ok = false
 			print("    [target_mode非ball] " + tag_id)
 		if str(desc.get("operation_mode", "")) not in prim.OPERATION_MODES:
@@ -186,7 +187,7 @@ func _run() -> void:
 	_assert("J9: value_min ≤ value_cap ≤ 90", range_ok)
 	_assert("J10: operation_mode 联动契约（midfly↔ball_flight / steer 无policy）", mode_gate_ok)
 	_assert("J11: family 计数 14+1+2=17", int(family_count.get("ball_flight", 0)) == 14 and int(family_count.get("ball_hit", 0)) == 1 and int(family_count.get("ball_range", 0)) == 2)
-	_assert("J12: operation_mode 计数 注入14+steer1+midfly2=17", int(op_count.get("none", 0)) == 14 and int(op_count.get("steer", 0)) == 1 and int(op_count.get("midfly", 0)) == 2)
+	_assert("J12: operation_mode 计数 注入15+steer1+midfly2=18（工单18补combo_ready=none）", int(op_count.get("none", 0)) == 15 and int(op_count.get("steer", 0)) == 1 and int(op_count.get("midfly", 0)) == 2)
 
 	# ===== G-Gate：12 键正反例（波C重点：ball_flight） =====
 	var caster: StubPlayer = StubPlayer.new()
@@ -425,7 +426,7 @@ func _run() -> void:
 
 	# ===== I-集成面：容错与读表 =====
 	var live: Dictionary = prim.get_descriptors()
-	_assert("I1: get_descriptors 读实表得17标签", live.size() == 17)
+	_assert("I1: get_descriptors 读实表得18标签（17+combo_ready）", live.size() == 18)
 	_assert("I2: timing_gate 对空 descriptor fail-closed", not bool(prim.timing_gate({}, {}, {}).get("ok")))
 	_assert("I3a: resolve_target_mode 空描述符回落none", prim.resolve_target_mode({}, {}) == "none")
 	_assert("I3b: resolve_target_mode 实描述符=ball", prim.resolve_target_mode(descriptors.get("ball_tracking", {}), {}) == "ball")

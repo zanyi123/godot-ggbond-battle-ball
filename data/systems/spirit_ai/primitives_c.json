@@ -258,6 +258,21 @@
 			"operation_mode": "none",
 			"op_policy": "",
 			"notes": "范围缩小：敌向debuff（reverse配对ball_range_up自向）；multiplier反向计价v1取平价，梯度化归Q8"
+		},
+		"player_combo_ready": {
+			"family": "player_status",
+			"direction": "self",
+			"timing_gate": "enemy_visible",
+			"value_param": "duration",
+			"value_unit": 2.5,
+			"value_min": 15.0,
+			"value_cap": 45.0,
+			"intent": "attack",
+			"intent_strength": 0.6,
+			"target_mode": "self",
+			"operation_mode": "none",
+			"op_policy": "",
+			"notes": "合体半装（18工单缺口1/4，Q11⑤）：计价duration8s×2.5=20分——过评分阈值15且达能量闸可达线（future最低18.5@满能量，合体=大招级稀有节奏）；gate=enemy_visible（探针复验修正：ball_hold_engage要求施法者持球，但合体需两人——持球者唯一，无球半装永不过gate不登记不合体；配对时机归协调器距离条件）"
 		}
 	}
 }
