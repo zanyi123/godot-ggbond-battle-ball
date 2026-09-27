@@ -7,6 +7,7 @@ extends Node
 var bm: Node = null
 var results: Array = []
 var _raw_backup: String = ""
+var _spirits_backup: String = ""
 
 func _ready() -> void:
 	await get_tree().process_frame
@@ -27,6 +28,7 @@ func _run() -> void:
 
 	# ===== 数据准备（R1：备份在先；临时印记球技挂玲珑）=====
 	_raw_backup = FileAccess.get_file_as_string("res://data/spirits/skills.json")
+	_spirits_backup = FileAccess.get_file_as_string("res://data/spirits/spirits.json")
 	var skills: Array = DevDataSync.load_skills()
 	# 幂等数据准备：先清历史泄漏的测试技（上一轮崩溃可能跳过还原），再新建（R6：只动本批登记 id）
 	var GP_IDS := ["gp_frost", "gp_stealth"]
@@ -142,7 +144,11 @@ func _run() -> void:
 	var wf := FileAccess.open("res://data/spirits/skills.json", FileAccess.WRITE)
 	wf.store_string(_raw_backup)
 	wf.close()
-	_check(FileAccess.get_file_as_string("res://data/spirits/skills.json") == _raw_backup, "落盘清洁: skills.json 还原一致")
+	var wf2 := FileAccess.open("res://data/spirits/spirits.json", FileAccess.WRITE)
+	wf2.store_string(_spirits_backup)
+	wf2.close()
+	_check(FileAccess.get_file_as_string("res://data/spirits/skills.json") == _raw_backup 		and FileAccess.get_file_as_string("res://data/spirits/spirits.json") == _spirits_backup,
+		"落盘清洁: skills.json + spirits.json 双还原一致")
 	_finish("DONE")
 
 func _assert_self_clean(pa: CharacterBody2D, what: String) -> void:
