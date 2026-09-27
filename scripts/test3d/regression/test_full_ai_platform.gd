@@ -150,6 +150,7 @@ func _run() -> void:
 	_assert("E10: 检测层脚本可加载且基类型 Node", probe_script != null and probe_script.get_instance_base_type() == "Node")
 	var probe_src: String = probe_script.source_code
 	_assert("E11: 检测层挂接工单12三信号(释放/印记/合体)+判定出口", probe_src.contains("mark_changed") and probe_src.contains("combo_formed") and probe_src.contains("skill_used") and probe_src.contains("build_verdict"))
+	_assert("E12: 检测层预埋11工单团队合击信号(探活守卫)", probe_src.contains("team_combo_formed") and probe_src.contains("team_combo_trackers") and probe_src.contains("_team_combo_available"))
 
 	print("\n========== 结果: %d/%d PASS ==========" % [_pass, _pass + _fail])
 	if _fail > 0:

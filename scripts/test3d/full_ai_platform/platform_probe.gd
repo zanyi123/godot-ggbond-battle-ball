@@ -28,6 +28,8 @@ var _dump_samples: Dictionary = {}    # player_name -> {count, last}（决策 du
 var _factor_stats: Dictionary = {}    # skill_id -> {samples, score_pos, 各因子归零计数}（赛中采样）
 var _cast_times: Dictionary = {}      # skill_id -> Array[float]（释放时刻；麒麟队合击窗口判定用）
 var trio_window: float = 5.0          # 合击同窗秒数（麒麟火 ±N 秒内的三味真火计数）
+var _team_combo_available: bool = false  # 11工单一期 tracker 是否在位（探活守卫，落地自动激活）
+var team_combo_events: Array = []     # [{t, combo_id, members_desc}]（team_combo_formed 信号采集）
 
 # 工单12 关注技能（打印美化用；未列出也照常采集）
 const WATCH_SKILLS := {
@@ -66,6 +68,17 @@ func setup(battle_manager: Node2D) -> void:
 		print("[Probe] 合体协调器已挂接（combo_formed/combo_broken）")
 	else:
 		print("[Probe] ⚠ 未找到合体协调器（skill_state_managers 组空）——合体检测不可用")
+
+	# 11工单一期预留：团队合击 tracker 信号（探活守卫，一期落地即自动激活；零依赖不拦截现行判定）
+	var tct: Node = get_tree().get_first_node_in_group("team_combo_trackers")
+	if tct == null and ssm != null and ssm.has_signal("team_combo_formed"):
+		tct = ssm
+	if tct != null and tct.has_signal("team_combo_formed"):
+		tct.team_combo_formed.connect(_on_team_combo_formed)
+		_team_combo_available = true
+		print("[Probe] 团队合击信号已挂接（11工单一期 tracker 在位）")
+	else:
+		print("[Probe] 团队合击 tracker 未在位（11工单一期落地后自动接入）")
 
 	print("[Probe] 检测层已挂接：释放(skill_used) + 印记(mark_changed) + 合体(combo_formed/broken)")
 
@@ -183,6 +196,12 @@ func _on_combo_broken(_combo_id: String, _members: Array) -> void:
 	combo_broken_count += 1
 
 
+func _on_team_combo_formed(combo_id: String, members: Array, params: Dictionary) -> void:
+	var desc := _members_desc(members)
+	team_combo_events.append({"t": _elapsed, "combo_id": combo_id, "members": desc})
+	print("[Probe] 🔥 团队合击成立 %s：成员[%s]" % [combo_id, desc])
+
+
 # ==================== 报告与判定 ====================
 
 func build_verdict() -> Dictionary:
@@ -214,7 +233,11 @@ func build_verdict() -> Dictionary:
 		"combo_ok": combo_ok,
 		"trio_best": trio_best,
 		"trio_ok": trio_best >= 2,
-		"pass": mark_ok and combo_ok and trio_best >= 2,
+		"team_combo_available": _team_combo_available,
+		"team_combo_formed": team_combo_events.size(),
+		# 11工单维度：tracker 未在位=不适用（不拦判定）；在位后要求至少成立 1 次
+		"team_combo_ok": (not _team_combo_available) or not team_combo_events.is_empty(),
+		"pass": mark_ok and combo_ok and trio_best >= 2 and ((not _team_combo_available) or not team_combo_events.is_empty()),
 	}
 
 
@@ -234,6 +257,12 @@ func print_final_report() -> Dictionary:
 	var trio_best := int(v["trio_best"])
 	print("[Probe] 麒麟队合击（原作设计：麒麟火+2×三味真火同窗±%0.fs）：最佳同窗=麒麟火+[%d]道三味%s" % [
 		trio_window, trio_best, " ✅" if bool(v["trio_ok"]) else " ❌（未达成三人合击）"])
+	if _team_combo_available:
+		print("[Probe] 团队合击框架（11工单）：team_combo_formed=%d 次%s" % [
+			int(v["team_combo_formed"]),
+			" | 成员=" + str(team_combo_events[0]["members"]) if not team_combo_events.is_empty() else ""])
+	else:
+		print("[Probe] 团队合击框架（11工单）：tracker 未在位，探针就绪待接入")
 	_dump_player_pools()
 	print("[Probe] ---- 赛中因子采样（每秒×全场；score_pos=得分>0 的采样占比）----")
 	for sid in WATCH_SKILLS:
@@ -258,6 +287,8 @@ func print_final_report() -> Dictionary:
 			missing.append("OP_COMBO 合体未发生（无 combo_formed——查 装甲半/炮击半 是否双登记、同队存活且距离≤150）")
 		if not bool(v["trio_ok"]):
 			missing.append("麒麟队三人合击未达成（最佳同窗麒麟火+%d 道三味——查能量闸门/独立决策时序）" % trio_best)
+		if bool(v["team_combo_available"]) and int(v["team_combo_formed"]) == 0:
+			missing.append("团队合击框架信号未触发（team_combo_formed=0——查 team_combos.json 成员配置/窗口判定）")
 		print("[Probe] ❌ VERDICT: FAIL —— " + "；".join(missing))
 	return v
 
