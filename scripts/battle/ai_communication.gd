@@ -16,6 +16,8 @@ enum MsgType {
 	SKILL_READY,    # 技能就绪（我大招好了）
 	BUFF_ON_YOU,    # 我给你加buff了
 	NEED_BUFF,      # 我需要buff支援
+	COMBO_SETUP,    # 连招邀约（我起了手，接我）——17号v2
+	ENEMY_ULT_WARNING,  # 敌方大招预警——17号v2
 }
 
 # 消息文本（队友可见）
@@ -26,7 +28,30 @@ const MSG_TEXT = {
 	MsgType.SKILL_READY: "技能就绪!",
 	MsgType.BUFF_ON_YOU: "加油!",
 	MsgType.NEED_BUFF: "需要支援!",
+	MsgType.COMBO_SETUP: "连招邀约!",
+	MsgType.ENEMY_ULT_WARNING: "敌方大招!",
 }
+
+# v2 消息默认 TTL（秒，elapsed sim time 计——fixed-fps 下确定性）
+const MSG_TTL_V2 = {
+	MsgType.COMBO_SETUP: 6.0,
+	MsgType.ENEMY_ULT_WARNING: 4.0,
+	MsgType.SKILL_READY: 5.0,
+	MsgType.BUFF_ON_YOU: 2.0,
+	MsgType.NEED_BUFF: 3.0,
+	MsgType.DEFEND_ALERT: 1.5,
+	MsgType.PASS_TO_ME: 3.0,
+	MsgType.DONT_PASS: 1.5,
+}
+
+# ===== 17号通讯协议v2：开关（单口拦截，默认关=全旁路，行为与旧版逐位一致）=====
+# switches.json 加法键 "protocol_v2"：true 时新消息收发/消费生效；缺失/损坏一律视同关（fail-closed）
+var protocol_v2_enabled: bool = false
+var _protocol_switch_loaded: bool = false
+
+# v2 负载化消息存储（确定性时钟=elapsed_time 累加 delta；fixed-fps sim 下逐位可复现）
+# 每条：{type, sender_id, sender_name, team, urgency, expire_at, position: Vector2, related_skill_id}
+var v2_messages: Array[Dictionary] = []
 
 # 信号：某球员发送了消息（由 battle_manager 连接处理显示）
 signal message_sent(sender: CharacterBody2D, msg_type: int, team: String)
@@ -109,6 +134,131 @@ func can_send(sender: CharacterBody2D) -> bool:
 		if elapsed_time - team_last_msg_time[team] < TEAM_FREQ_INTERVAL:
 			return false
 	return true
+
+
+# ==============================
+# ===== 17号 协议v2：负载化 =====
+# ==============================
+
+## 读协议开关（switches.json 加法键 protocol_v2；缺失/损坏=关，fail-closed）
+func reload_protocol_switch(path: String = "res://data/systems/spirit_ai/switches.json") -> void:
+	protocol_v2_enabled = false
+	_protocol_switch_loaded = true
+	if not FileAccess.file_exists(path):
+		return
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not parsed is Dictionary:
+		return
+	var v = parsed.get("protocol_v2", false)
+	protocol_v2_enabled = v is bool and bool(v)
+
+
+func _ensure_protocol_switch() -> void:
+	if not _protocol_switch_loaded:
+		reload_protocol_switch()
+
+
+## v2 发送：同 legacy 冷却/频率闸，成功后写负载化存储并走同一信号（气泡/record 自动复用）
+## payload 可覆盖：{urgency: float, ttl: float, position: Vector2, related_skill_id: String}
+func post_message(sender: CharacterBody2D, msg_type: int, payload: Dictionary = {}) -> bool:
+	_ensure_protocol_switch()
+	if not protocol_v2_enabled:
+		return try_send_message(sender, msg_type)
+	if not try_send_message(sender, msg_type):
+		return false
+	var ttl: float = float(payload.get("ttl", MSG_TTL_V2.get(msg_type, 3.0)))
+	v2_messages.append({
+		"type": msg_type,
+		"sender_id": sender.get_instance_id(),
+		"sender_name": _pname(sender),
+		"team": str(sender.team),
+		"urgency": float(payload.get("urgency", 0.5)),
+		"expire_at": elapsed_time + ttl,
+		"position": payload.get("position", sender.global_position),
+		"related_skill_id": str(payload.get("related_skill_id", "")),
+	})
+	return true
+
+
+## v2 存储登记（不经冷却闸——供已通过 try_send_message 的调用方登记负载；受开关约束）
+func record_v2_message(sender: CharacterBody2D, msg_type: int, payload: Dictionary = {}) -> void:
+	_ensure_protocol_switch()
+	if not protocol_v2_enabled or not sender or not is_instance_valid(sender):
+		return
+	var ttl: float = float(payload.get("ttl", MSG_TTL_V2.get(msg_type, 3.0)))
+	v2_messages.append({
+		"type": msg_type,
+		"sender_id": sender.get_instance_id(),
+		"sender_name": _pname(sender),
+		"team": str(sender.team),
+		"urgency": float(payload.get("urgency", 0.5)),
+		"expire_at": elapsed_time + ttl,
+		"position": payload.get("position", sender.global_position),
+		"related_skill_id": str(payload.get("related_skill_id", "")),
+	})
+
+
+## 过期清理（惰性：查询时顺带清理，零额外时钟）
+func _v2_purge_expired() -> void:
+	v2_messages = v2_messages.filter(func(m): return elapsed_time < float(m["expire_at"]))
+
+
+## 查活跃消息（team 必填；type=-1 = 全类型）
+func get_active_messages(team: String, type: int = -1) -> Array[Dictionary]:
+	_ensure_protocol_switch()
+	var out: Array[Dictionary] = []
+	if not protocol_v2_enabled:
+		return out
+	_v2_purge_expired()
+	for m in v2_messages:
+		if str(m["team"]) == team and (type < 0 or int(m["type"]) == type):
+			out.append(m)
+	return out
+
+
+func is_type_active(team: String, msg_type: int) -> bool:
+	return not get_active_messages(team, msg_type).is_empty()
+
+
+func get_latest_message(team: String, msg_type: int) -> Dictionary:
+	var active := get_active_messages(team, msg_type)
+	if active.is_empty():
+		return {}
+	var best: Dictionary = active[0]
+	for m in active:
+		if float(m["expire_at"]) > float(best["expire_at"]):
+			best = m
+	return best
+
+
+## 敌方大招预警查询：任一**敌队**发出且仍活跃的 ENEMY_ULT_WARNING
+func is_enemy_ult_warning_hot(team: String) -> bool:
+	_ensure_protocol_switch()
+	if not protocol_v2_enabled:
+		return false
+	_v2_purge_expired()
+	for m in v2_messages:
+		if int(m["type"]) == MsgType.ENEMY_ULT_WARNING and str(m["team"]) != team:
+			return true
+	return false
+
+
+## 测试/平台注入口：直接写一条活跃 v2 消息（绕过冷却；仍受开关约束）
+func inject_message(team: String, msg_type: int, payload: Dictionary = {}) -> void:
+	_ensure_protocol_switch()
+	if not protocol_v2_enabled:
+		return
+	var ttl: float = float(payload.get("ttl", MSG_TTL_V2.get(msg_type, 3.0)))
+	v2_messages.append({
+		"type": msg_type,
+		"sender_id": int(payload.get("sender_id", 0)),
+		"sender_name": str(payload.get("sender_name", "test")),
+		"team": team,
+		"urgency": float(payload.get("urgency", 0.5)),
+		"expire_at": elapsed_time + ttl,
+		"position": payload.get("position", Vector2.ZERO),
+		"related_skill_id": str(payload.get("related_skill_id", "")),
+	})
 
 
 # ==============================

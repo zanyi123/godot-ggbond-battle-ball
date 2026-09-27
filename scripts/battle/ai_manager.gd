@@ -586,6 +586,19 @@ func _decide(ap: Dictionary) -> void:
 				print("[AI] %s 响应'传我'指令" % _pname(p))
 				return
 
+		# 17号v2 SKILL_READY 接应走位：队友大招就绪邀约期内，非持球者向邀约人前压接应（protocol_v2 关=不触发）
+		if battle_manager.comm_system.protocol_v2_enabled \
+				and battle_manager.comm_system.is_type_active(team, battle_manager.comm_system.MsgType.SKILL_READY) \
+				and not p.is_carrying_ball:
+			var ready_msg: Dictionary = battle_manager.comm_system.get_latest_message(team, battle_manager.comm_system.MsgType.SKILL_READY)
+			var ready_sender_id: int = int(ready_msg.get("sender_id", 0))
+			if ready_sender_id != 0 and ready_sender_id != p.get_instance_id():
+				var ready_pos: Vector2 = ready_msg.get("position", p.global_position)
+				var enemy_goal_v2: Vector2 = SIDE_ANCHOR_A if team == "a" else SIDE_ANCHOR_B
+				var push_dir: Vector2 = (enemy_goal_v2 - ready_pos).normalized()
+				# 只挪目标位不改状态（枚举无通用 MOVE 态；下一状态机周期按既有逻辑读取 target_pos）
+				ap.target_pos = _clamp_to_field(ready_pos + push_dir * 60.0)
+
 	# === 状态防抖：如果在当前位置附近已到达目标，不要重复切换 ===
 	var at_target: bool = my_pos.distance_to(ap.target_pos) < profile.arrive_threshold * 2.0
 	var current_state: int = ap.state
@@ -976,6 +989,16 @@ func _decide_carrying(ap: Dictionary) -> void:
 	pass_score += profile.weight_pass
 	shoot_score += profile.weight_shoot
 	dribble_score += profile.weight_dribble
+
+	# ===== 17号v2 收端补全（protocol_v2 关=不触发，行为与旧版一致）=====
+	if battle_manager and battle_manager.comm_system and battle_manager.comm_system.protocol_v2_enabled:
+		var comm_v2 = battle_manager.comm_system
+		# SKILL_READY 消费：队友大招就绪邀约期内持球者更敢投（04§2.3「进攻分↑」）
+		if comm_v2.is_type_active(team, comm_v2.MsgType.SKILL_READY):
+			shoot_score += 15.0
+		# T5.4 补全：收到 BUFF_ON_YOU 的球员AI 更敢进攻（04§2.3 审计确诊未实施项）
+		if comm_v2.has_buff_on_you(p):
+			shoot_score += 20.0
 
 	# 被逼抢时紧急处理（ball_focused 弱点不会急）
 	if enemy_very_close and not profile.weakness_ignore_flank:

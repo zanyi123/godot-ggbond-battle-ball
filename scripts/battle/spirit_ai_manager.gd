@@ -1136,6 +1136,11 @@ func _build_primitive_ctx(sad: Dictionary) -> Dictionary:
 		ctx["ball_in_flight"] = bool(ball_node.is_active)
 		ctx["ball_velocity"] = ball_node.ball_direction * ball_node.ball_speed
 	ctx["own_goal"] = _get_our_goal_position(p)
+	# 17号v2：Q7预留键 combo_setup_active 兑现（COMBO_SETUP 活跃=连招窗口；关=恒 false，ally_cast_setup gate 语义待 JSON 换名）
+	if battle_manager and battle_manager.comm_system:
+		var comm_v2 = battle_manager.comm_system
+		ctx["combo_setup_active"] = comm_v2.protocol_v2_enabled \
+				and comm_v2.is_type_active(str(p.team), comm_v2.MsgType.COMBO_SETUP)
 	ctx["enemy_goal"] = _get_enemy_goal_position(p)
 	var carrier = _get_enemy_ball_holder(p)
 	if carrier != null and is_instance_valid(carrier):
@@ -1292,18 +1297,30 @@ func _compute_communication_factor(sad: Dictionary, skill_info: Dictionary) -> f
 	if not battle_manager or not battle_manager.comm_system:
 		return 1.0
 	
+	var comm = battle_manager.comm_system
 	var intents = skill_info["intents"]
 	var factor: float = 1.0
 	
 	if intents.get("support", 0) > 0.3:
-		if battle_manager.comm_system.has_need_buff(p.team):
-			var need_buff_sender = battle_manager.comm_system.get_need_buff_sender(p.team)
+		if comm.has_need_buff(p.team):
+			var need_buff_sender = comm.get_need_buff_sender(p.team)
 			if need_buff_sender and p.global_position.distance_to(need_buff_sender.global_position) < 150.0:
 				factor *= 1.4
 	
 	if intents.get("attack", 0) > 0.5:
-		if battle_manager.comm_system.has_buff_on_you(p):
+		if comm.has_buff_on_you(p):
 			factor *= 1.25
+	
+	# ===== 17号v2 消费（protocol_v2 关=两查询恒 false，本段恒不触发）=====
+	# COMBO_SETUP 连招窗口：队友起手邀约期内，进攻技评分↑（连招第2拍价值，06§三 ally_cast_setup 语义的评分面）
+	if comm.protocol_v2_enabled and comm.is_type_active(p.team, comm.MsgType.COMBO_SETUP) \
+			and intents.get("attack", 0) > 0.3:
+		factor *= 1.25
+	
+	# ENEMY_ULT_WARNING 敌大招预警窗口：控场/防御技评分↑（cc_immune 类时机来源，Q3/Q10口径）
+	if comm.is_enemy_ult_warning_hot(p.team) \
+			and (intents.get("control", 0) > 0.3 or intents.get("defense", 0) > 0.3):
+		factor *= 1.3
 	
 	return factor
 
@@ -1798,15 +1815,48 @@ func _send_skill_message(sad: Dictionary, skill_info: Dictionary, target: Charac
 	
 	if not battle_manager or not battle_manager.comm_system:
 		return
+	var comm = battle_manager.comm_system
 	
 	if intents.get("support", 0) > 0.5 and target != null and target != p:
-		battle_manager.comm_system.try_send_message(p, battle_manager.comm_system.MsgType.BUFF_ON_YOU)
-		battle_manager.comm_system.record_message(p, battle_manager.comm_system.MsgType.BUFF_ON_YOU)
+		if comm.try_send_message(p, comm.MsgType.BUFF_ON_YOU):
+			comm.record_message(p, comm.MsgType.BUFF_ON_YOU)
+			_comm_v2_post(comm, p, comm.MsgType.BUFF_ON_YOU, skill_info, {"urgency": 0.6})
 	
 	if intents.get("attack", 0) > 0.7 and intents.get("control", 0) > 0.3:
 		if _deterministic_dice(_player_key(sad), hash("msgsr_" + str(skill_info["skill_id"])), sad["skill_exec_count"]) < 0.3:
-			battle_manager.comm_system.try_send_message(p, battle_manager.comm_system.MsgType.SKILL_READY)
-			battle_manager.comm_system.record_message(p, battle_manager.comm_system.MsgType.SKILL_READY)
+			if comm.try_send_message(p, comm.MsgType.SKILL_READY):
+				comm.record_message(p, comm.MsgType.SKILL_READY)
+				_comm_v2_post(comm, p, comm.MsgType.SKILL_READY, skill_info, {"urgency": 0.8})
+
+	# 17号v2新消息（protocol_v2 关=整段跳过：不占 legacy 冷却/频控槽，构造性零扰动）
+	if comm.protocol_v2_enabled:
+		# 17号v2新消息：COMBO_SETUP（连招邀约，12号合体链可直接用）——合体半装/连招起手技释放即广播
+		var raw_tags: Array = skill_info.get("raw_tags", [])
+		var is_combo_setup: bool = raw_tags.has("player_combo_ready") \
+				or bool(skill_info.get("skill_data", {}).get("combo_setup", false))
+		if is_combo_setup:
+			if comm.try_send_message(p, comm.MsgType.COMBO_SETUP):
+				comm.record_message(p, comm.MsgType.COMBO_SETUP)
+				_comm_v2_post(comm, p, comm.MsgType.COMBO_SETUP, skill_info, {"urgency": 0.8})
+
+		# 17号v2新消息：ENEMY_ULT_WARNING（大招预警）——高耗能技（≥30能量）释放即广播，消费端按敌队查询
+		var energy_cost: float = float(skill_info.get("skill_data", {}).get("energy_cost", 0))
+		if energy_cost >= 30.0:
+			if comm.try_send_message(p, comm.MsgType.ENEMY_ULT_WARNING):
+				comm.record_message(p, comm.MsgType.ENEMY_ULT_WARNING)
+				_comm_v2_post(comm, p, comm.MsgType.ENEMY_ULT_WARNING, skill_info, {"urgency": 0.9})
+
+
+## 17号v2 负载登记（须在 legacy try_send 成功后调用；record_v2_message 受 protocol_v2 开关约束，
+## 关=零存储零行为；不走 post_message 以免二次冷却闸拦下真实路径）
+func _comm_v2_post(comm, sender: CharacterBody2D, msg_type: int, skill_info: Dictionary, payload: Dictionary) -> void:
+	var full_payload: Dictionary = {
+		"related_skill_id": str(skill_info.get("skill_id", "")),
+		"position": sender.global_position,
+	}
+	for k in payload:
+		full_payload[k] = payload[k]
+	comm.record_v2_message(sender, msg_type, full_payload)
 
 func _try_send_need_buff(sad: Dictionary) -> void:
 	var p = sad.player
