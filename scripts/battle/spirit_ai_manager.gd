@@ -1146,6 +1146,17 @@ func _build_primitive_ctx(sad: Dictionary) -> Dictionary:
 	if carrier != null and is_instance_valid(carrier):
 		ctx["enemy_carrier"] = carrier
 		ctx["enemy_carrier_visible"] = carrier in visible_enemies
+	# 13号场地知识 ctx（Q9a①，主人批 2026-09-28）：个体场地语义单口组装，
+	# 静态几何由原语 preload knowledge_* 直查（布场API）。纯增量：无描述符引用前零行为
+	var field_zone_script: GDScript = load("res://scripts/battle/field_zone.gd")
+	var my_zone: String = str(field_zone_script.knowledge_zone_of(p.global_position, str(p.team)))
+	ctx["my_zone"] = my_zone
+	ctx["in_outer"] = my_zone.begins_with("outer")
+	ctx["goal_own"] = field_zone_script.knowledge_goal_area_point(str(p.team))
+	ctx["goal_enemy"] = field_zone_script.knowledge_goal_area_point("b" if str(p.team) == "a" else "a")
+	# Q10 RC2 配套：己方持球判定（outer_support gate 用；与 enemy_carrier 对偶）
+	var ball_owner = ball_node.owner_player if (ball_node and is_instance_valid(ball_node)) else null
+	ctx["own_team_has_ball"] = ball_owner != null and is_instance_valid(ball_owner) and ball_owner.team == p.team
 	return ctx
 
 

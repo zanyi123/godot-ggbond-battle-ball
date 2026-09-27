@@ -120,9 +120,46 @@ static func timing_gate(descriptor: Dictionary, sad: Dictionary, ctx: Dictionary
 		"ally_cast_setup":
 			# 本波不用，预留给⑤协议；ctx.combo_setup_active 缺省 fail-closed
 			return {"ok": bool(ctx.get("combo_setup_active", false)), "bonus": 1.0}
+		"outer_self_care":
+			# Q10/14号RC2（主人批）：流放且残血/低能 → 自护/恢复/增益类时机。
+			# in_outer 走 ctx（Q9a① 13号口径），轻量过渡兜底=player.is_penalized 直查
+			if not _is_in_outer(ctx, player):
+				return {"ok": false, "bonus": 1.0}
+			var low := stamina_ratio < 0.5 or float(ctx.get("energy_ratio", 1.0)) < 0.5
+			return {"ok": low, "bonus": 1.0}
+		"outer_receiving":
+			# Q10/14号RC2：流放且球朝我飞（球速朝向判）→ 接应类时机
+			if not _is_in_outer(ctx, player):
+				return {"ok": false, "bonus": 1.0}
+			if not bool(ctx.get("ball_in_flight", false)):
+				return {"ok": false, "bonus": 1.0}
+			var ball_pos: Variant = ctx.get("ball_position")
+			var ball_vel: Variant = ctx.get("ball_velocity")
+			var receiver = ctx.get("player")
+			if typeof(ball_pos) != TYPE_VECTOR2 or typeof(ball_vel) != TYPE_VECTOR2:
+				return {"ok": false, "bonus": 1.0}
+			if receiver == null or not is_instance_valid(receiver):
+				return {"ok": false, "bonus": 1.0}
+			var to_me: Vector2 = receiver.global_position - (ball_pos as Vector2)
+			return {"ok": (ball_vel as Vector2).dot(to_me) > 0.0, "bonus": 1.0}
+		"outer_support":
+			# Q10/14号RC2：流放且己方持球 → 支援类时机（配合 RC3 支援距离豁免）
+			if not _is_in_outer(ctx, player):
+				return {"ok": false, "bonus": 1.0}
+			return {"ok": bool(ctx.get("own_team_has_ball", false)), "bonus": 1.0}
 		_:
 			# 未知 gate 键 / 空 descriptor：fail-closed
 			return {"ok": false, "bonus": 1.0}
+
+
+## Q10/14号RC2 外场判定：ctx.in_outer 优先（Q9a① 13号口径，manager 组装），
+## 轻量过渡兜底=player.is_penalized 直查（Q10 批文；两者皆缺 fail-closed=false）
+static func _is_in_outer(ctx: Dictionary, player) -> bool:
+	if ctx.has("in_outer"):
+		return bool(ctx.get("in_outer", false))
+	if player != null and is_instance_valid(player):
+		return bool(player.get("is_penalized"))
+	return false
 
 
 ## 价值计算：value = clamp(params[value_param] × value_unit, value_min, value_cap)

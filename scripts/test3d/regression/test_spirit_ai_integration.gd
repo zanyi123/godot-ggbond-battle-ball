@@ -18,6 +18,7 @@ class StubPlayer extends CharacterBody2D:
 	var character_id: String = ""
 	var team: String = "a"
 	var is_defeated: bool = false
+	var is_penalized: bool = false
 	var is_carrying_ball: bool = false
 	var stamina: float = 100.0
 	var max_stamina: float = 100.0
@@ -242,6 +243,46 @@ func _run() -> void:
 	sam._record_decision_dump(sad_low, gate_trace, [], null, 40.0)
 	var dump2: Dictionary = sam.get_decision_dump()
 	_check(str(dump2.get("chosen", "x")) == "" and (dump2.get("top3", [1]) as Array).is_empty() and int(dump2.get("cycle", 0)) == 7, "D5 dump 空候选周期：chosen空/top3空/周期号")
+
+	# ===== Z 组：13号场地ctx（Q9a①）+ RC2 外场gate三键（Q10）=====
+	print("[Z] 场地ctx + RC2 gate")
+	var fz: GDScript = load("res://scripts/battle/field_zone.gd")
+	var outer_stub = StubPlayer.new()
+	outer_stub.team = "a"
+	outer_stub.position = Vector2(420, 0)   # a 队流放区（右外场 main区 x∈[380,510]）→ zone=outer_own
+	var sad_outer := {"player": outer_stub, "skills_analysis": [], "skill_decide_count": 1}
+	var ctx_o: Dictionary = sam._build_primitive_ctx(sad_outer)
+	_check(str(ctx_o.get("my_zone", "")) == "outer_own", "Z1 my_zone=outer_own（320,0∈a右外场）")
+	_check(bool(ctx_o.get("in_outer", false)), "Z2 in_outer=true（外场语义单口）")
+	_check(ctx_o.get("goal_own", Vector2.ZERO) == fz.knowledge_goal_area_point("a") and ctx_o.get("goal_enemy", Vector2.ZERO) == fz.knowledge_goal_area_point("b"), "Z3 goal_own/goal_enemy=知识库球门区纵深点")
+	var mid_stub = StubPlayer.new()
+	mid_stub.team = "a"
+	mid_stub.position = Vector2(-100, 0)   # a 内场
+	var sad_mid := {"player": mid_stub, "skills_analysis": [], "skill_decide_count": 1}
+	var ctx_m: Dictionary = sam._build_primitive_ctx(sad_mid)
+	_check(str(ctx_m.get("my_zone", "")) == "inner_own" and not bool(ctx_m.get("in_outer", true)), "Z4 内场：my_zone=inner_own/in_outer=false")
+	var PrimB: GDScript = load("res://scripts/battle/spirit_ai/primitives_b.gd")
+	var gate_ctx_outer := {"player": outer_stub, "visible_enemies": [], "stamina_ratio": 0.3, "energy_ratio": 1.0, "in_outer": true, "ball_in_flight": true, "ball_position": Vector2(100, 0), "ball_velocity": Vector2(200, 0), "own_team_has_ball": true}
+	var g_scare: Dictionary = PrimB.timing_gate({"timing_gate": "outer_self_care"}, sad_outer, gate_ctx_outer)
+	_check(bool(g_scare.get("ok", false)), "Z5 outer_self_care：外场+残血(0.3) → 放行")
+	var g_recv: Dictionary = PrimB.timing_gate({"timing_gate": "outer_receiving"}, sad_outer, gate_ctx_outer)
+	_check(bool(g_recv.get("ok", false)), "Z6 outer_receiving：外场+球朝我飞(velocity·to_me>0) → 放行")
+	var gate_ctx_away: Dictionary = {"player": outer_stub, "in_outer": true, "ball_in_flight": true, "ball_position": Vector2(100, 0), "ball_velocity": Vector2(-200, 0)}
+	var g_recv2: Dictionary = PrimB.timing_gate({"timing_gate": "outer_receiving"}, sad_outer, gate_ctx_away)
+	_check(not bool(g_recv2.get("ok", true)), "Z7 outer_receiving：球背离 → 拒")
+	var g_sup: Dictionary = PrimB.timing_gate({"timing_gate": "outer_support"}, sad_outer, gate_ctx_outer)
+	_check(bool(g_sup.get("ok", false)), "Z8 outer_support：外场+己方持球 → 放行")
+	var gate_ctx_inner: Dictionary = {"player": mid_stub, "visible_enemies": [], "stamina_ratio": 0.3, "in_outer": false}
+	var g_inner: Dictionary = PrimB.timing_gate({"timing_gate": "outer_self_care"}, sad_mid, gate_ctx_inner)
+	_check(not bool(g_inner.get("ok", true)), "Z9 内场球员：outer 系 gate 全拒")
+	var fallback_stub = StubPlayer.new()
+	fallback_stub.team = "a"
+	fallback_stub.position = Vector2(420, 0)
+	fallback_stub.is_penalized = true
+	var sad_fb := {"player": fallback_stub, "skills_analysis": [], "skill_decide_count": 1}
+	var ctx_fb: Dictionary = sam._build_primitive_ctx(sad_fb)
+	var g_fb: Dictionary = PrimB.timing_gate({"timing_gate": "outer_self_care"}, sad_fb, {"player": fallback_stub, "stamina_ratio": 0.3})
+	_check(bool(g_fb.get("ok", false)) and bool(ctx_fb.get("in_outer", false)), "Z10 轻量过渡兜底：无ctx.in_outer时 is_penalized=true 生效")
 
 	# ===== F 组：场地放置委托（波D）=====
 	print("[F] 场地放置委托")
