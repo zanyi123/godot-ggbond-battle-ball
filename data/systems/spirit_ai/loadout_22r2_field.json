@@ -1,0 +1,20 @@
+{
+	"schema_version": 2,
+	"_说明": "22-3第二轮抽检装载（布场窗口轮值，2026-09-27）。抽样4条与第一轮零重叠：BALL=skill_冰雪_1寒冰减速/skill_雷火_1雷霆投掷（15统计表0出手候选池）、FIELD=skill_草木_2荆棘庇佑（0出手，兼11号Q12放置流旁证）、PLAYER=skill_雷火_3蔓藤缠绕(测)（对照，兼断点2 OP_AUTO旁证）。A队三元灵覆盖全部抽样技能；B队对手不含抽样技能（信号归属干净）。test_spirits 内联本文件（loader只注册装载文件自带清单，v2修正：首轮预跑曾因空test_spirits全兜底）。内存注册零污染主数据。",
+	"test_spirits": [
+		{"id": "test_spirit_xiaodaidai", "name": "小呆呆的元灵", "element": "冰雪", "skills": ["skill_冰雪_1"]},
+		{"id": "test_spirit_feifei", "name": "菲菲的元灵", "element": "雷火", "skills": ["skill_雷火_1", "skill_雷火_2", "skill_雷火_4"]},
+		{"id": "test_spirit_bobi", "name": "波比的元灵", "element": "草木", "skills": ["skill_草木_1", "skill_草木_2", "skill_雷火_3"]},
+		{"id": "test_spirit_zhuxiaxia", "name": "猪猪侠的元灵", "element": "金刚", "skills": ["skill_金刚_1"]},
+		{"id": "test_spirit_chaorenqiang", "name": "超人强的元灵", "element": "大地", "skills": ["skill_大地_1", "skill_大地_2"]},
+		{"id": "test_spirit_mihu", "name": "迷糊老师的元灵", "element": "梦幻", "skills": ["skill_梦幻_1"]}
+	],
+	"loadouts": [
+		{"slot": "A0", "character_id": "char_001", "spirit_id": "小呆呆的元灵", "skills": []},
+		{"slot": "A1", "character_id": "char_002", "spirit_id": "菲菲的元灵", "skills": []},
+		{"slot": "A2", "character_id": "char_003", "spirit_id": "波比的元灵", "skills": []},
+		{"slot": "B0", "character_id": "char_004", "spirit_id": "猪猪侠的元灵", "skills": []},
+		{"slot": "B1", "character_id": "char_005", "spirit_id": "超人强的元灵", "skills": []},
+		{"slot": "B2", "character_id": "char_006", "spirit_id": "迷糊老师的元灵", "skills": []}
+	]
+}
