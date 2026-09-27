@@ -26,6 +26,8 @@ var _last_report_at: float = 0.0
 var _dump_poll_accum: float = 0.0
 var _dump_samples: Dictionary = {}    # player_name -> {count, last}（决策 dump 轮询累积）
 var _factor_stats: Dictionary = {}    # skill_id -> {samples, score_pos, 各因子归零计数}（赛中采样）
+var _cast_times: Dictionary = {}      # skill_id -> Array[float]（释放时刻；麒麟队合击窗口判定用）
+var trio_window: float = 5.0          # 合击同窗秒数（麒麟火 ±N 秒内的三味真火计数）
 
 # 工单12 关注技能（打印美化用；未列出也照常采集）
 const WATCH_SKILLS := {
@@ -135,8 +137,26 @@ func _on_skill_used(skill_id: String, _caster_id: int, success: bool) -> void:
 	if success:
 		casts[skill_id] = int(casts.get(skill_id, 0)) + 1
 		cast_total += 1
+		if not _cast_times.has(skill_id):
+			_cast_times[skill_id] = []
+		_cast_times[skill_id].append(_elapsed)
 	else:
 		cast_failed[skill_id] = int(cast_failed.get(skill_id, 0)) + 1
+
+
+## 麒麟队合击判定（主人 09-27 澄清原作设计）：每次麒麟火释放时刻 t0，
+## 统计 ±trio_window 秒内三味真火道数；返回最大同窗道数
+func best_kirin_trio() -> int:
+	var kirin: Array = _cast_times.get("skill_雷火_5", [])
+	var sanwei: Array = _cast_times.get("skill_雷火_6", [])
+	var best := 0
+	for t0 in kirin:
+		var count := 0
+		for t in sanwei:
+			if absf(float(t) - float(t0)) <= trio_window:
+				count += 1
+		best = maxi(best, count)
+	return best
 
 
 func _on_mark_changed(mark_id: String, count: int, player: Node) -> void:
@@ -177,6 +197,7 @@ func build_verdict() -> Dictionary:
 	var mark_ok: bool = not mark_events.is_empty()
 	var mark_chain_ok: bool = mark_skills_cast.size() >= 2 and mark_max_stack >= 2
 	var combo_ok: bool = not combo_formed_events.is_empty()
+	var trio_best := best_kirin_trio()
 	return {
 		"elapsed": _elapsed,
 		"cast_total": cast_total,
@@ -191,7 +212,9 @@ func build_verdict() -> Dictionary:
 		"combo_halves_cast": combo_halves_cast,
 		"mark_ok": mark_ok,
 		"combo_ok": combo_ok,
-		"pass": mark_ok and combo_ok,
+		"trio_best": trio_best,
+		"trio_ok": trio_best >= 2,
+		"pass": mark_ok and combo_ok and trio_best >= 2,
 	}
 
 
@@ -208,6 +231,9 @@ func print_final_report() -> Dictionary:
 		v["combo_formed"], v["combo_broken"],
 		" | 成员=" + str(combo_formed_events[0]["members"]) if not combo_formed_events.is_empty() else "",
 		"（半装释放 %d/2）" % v["combo_halves_cast"] if int(v["combo_halves_cast"]) > 0 else ""])
+	var trio_best := int(v["trio_best"])
+	print("[Probe] 麒麟队合击（原作设计：麒麟火+2×三味真火同窗±%0.fs）：最佳同窗=麒麟火+[%d]道三味%s" % [
+		trio_window, trio_best, " ✅" if bool(v["trio_ok"]) else " ❌（未达成三人合击）"])
 	_dump_player_pools()
 	print("[Probe] ---- 赛中因子采样（每秒×全场；score_pos=得分>0 的采样占比）----")
 	for sid in WATCH_SKILLS:
@@ -223,13 +249,15 @@ func print_final_report() -> Dictionary:
 			str(WATCH_SKILLS[sid]), int(st.get("score_pos", 0)), samples,
 			" | " + " ".join(parts) if not parts.is_empty() else ""])
 	if bool(v["pass"]):
-		print("[Probe] ✅ VERDICT: PASS —— 印记技能与合体技能在运行时均真实发生（信号判定）")
+		print("[Probe] ✅ VERDICT: PASS —— 印记/合体/麒麟队合击在运行时均真实发生（信号判定）")
 	else:
 		var missing: Array[String] = []
 		if not bool(v["mark_ok"]):
 			missing.append("印记未发生（无 mark_changed 事件——查 麒麟火/三味真火 是否释放与命中）")
 		if not bool(v["combo_ok"]):
-			missing.append("合体未发生（无 combo_formed——查 装甲半/炮击半 是否双登记、同队存活且距离≤150）")
+			missing.append("OP_COMBO 合体未发生（无 combo_formed——查 装甲半/炮击半 是否双登记、同队存活且距离≤150）")
+		if not bool(v["trio_ok"]):
+			missing.append("麒麟队三人合击未达成（最佳同窗麒麟火+%d 道三味——查能量闸门/独立决策时序）" % trio_best)
 		print("[Probe] ❌ VERDICT: FAIL —— " + "；".join(missing))
 	return v
 
