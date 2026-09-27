@@ -4,7 +4,14 @@ extends Node
 ## 包含:180度朝向视野感知系统、评分决策、阵型跑位
 
 const AIProfile = preload("res://scripts/battle/ai_profile.gd")
-const SpiritAIManager = preload("res://scripts/battle/spirit_ai_manager.gd")
+## 16号合一：原 preload 与 spirit_ai_manager 反向引用构成循环预载（spirit_ai 权威引用本文件锚点），
+## 改运行时 load——实例化语义不变
+var _spirit_ai_manager_script: GDScript = null
+
+func _get_spirit_ai_manager_script() -> GDScript:
+	if _spirit_ai_manager_script == null:
+		_spirit_ai_manager_script = load("res://scripts/battle/spirit_ai_manager.gd")
+	return _spirit_ai_manager_script
 
 var battle_manager: Node2D
 var input_manager: Node
@@ -55,9 +62,15 @@ const RIGHT_ARM_X_MAX: float = 380.0
 const LEFT_ARM_X_MIN: float = -380.0
 const LEFT_ARM_X_MAX: float = -250.0
 
-# 球门位置
-const GOAL_A: Vector2 = Vector2(300.0, 0.0)
-const GOAL_B: Vector2 = Vector2(-300.0, 0.0)
+# ⚠ 场地方位领域知识（主人裁定 2026-09-27 永久注释，历史上多次搞混——防再混）：
+# 决竞球没有球门（得分=击中球员）。SIDE_ANCHOR_A/SIDE_ANCHOR_B 实为「外场方向锚点」，交叉布局：
+#   SIDE_ANCHOR_A=(300,0)=a 队外场锚——a 队内场在左(x≤0)，但 a 队流放外场在右侧（对方内场背后，
+#   环带布局；见 field_zone.start_field_transition：流放区 a=右外场、b=左外场）；
+#   SIDE_ANCHOR_B=(-300,0)=b 队外场锚，镜像对称。
+# 消费语义：防守提醒/保护站位/放置朝向中的 SIDE_ANCHOR_X =「X 队自己的后方（外场）方向」，设计如此。
+# 勿按"球门/方向反了"修（2026-09-27 曾误判方向反了，主人纠正；此前也有搞混史）。
+const SIDE_ANCHOR_A: Vector2 = Vector2(300.0, 0.0)
+const SIDE_ANCHOR_B: Vector2 = Vector2(-300.0, 0.0)
 
 # 转身速度(弧度/秒)
 const TURN_SPEED: float = 5.0
@@ -71,7 +84,7 @@ func initialize(battle_mgr: Node2D, input_mgr: Node) -> void:
 	battle_manager = battle_mgr
 	input_manager = input_mgr
 	
-	spirit_ai_mgr = SpiritAIManager.new()
+	spirit_ai_mgr = _get_spirit_ai_manager_script().new()
 	spirit_ai_mgr.name = "SpiritAIManager"
 	add_child(spirit_ai_mgr)
 	
@@ -508,7 +521,7 @@ func _get_facing_target(ap: Dictionary, mode: String) -> Vector2:
 				return (ball_node.global_position - ap.player.global_position).normalized()
 			return ap.player.facing_direction
 		"goal":
-			var goal: Vector2 = GOAL_A if ap.team == "a" else GOAL_B
+			var goal: Vector2 = SIDE_ANCHOR_A if ap.team == "a" else SIDE_ANCHOR_B
 			return (goal - ap.player.global_position).normalized()
 		_:
 			return ap.player.facing_direction
@@ -880,7 +893,7 @@ func _decide_carrying(ap: Dictionary) -> void:
 	var team: String = ap.team
 	var profile: AIProfile = ap.profile
 	var my_pos: Vector2 = p.global_position
-	var goal: Vector2 = GOAL_A if team == "a" else GOAL_B
+	var goal: Vector2 = SIDE_ANCHOR_A if team == "a" else SIDE_ANCHOR_B
 	var forward: Vector2 = Vector2(1, 0) if team == "a" else Vector2(-1, 0)
 
 	# === 持球总时间检查 ===
@@ -1506,7 +1519,7 @@ func _eval_best_pass(ap: Dictionary) -> Dictionary:
 	var p: CharacterBody2D = ap.player
 	var team: String = ap.team
 	var profile: AIProfile = ap.profile
-	var goal: Vector2 = GOAL_A if team == "a" else GOAL_B
+	var goal: Vector2 = SIDE_ANCHOR_A if team == "a" else SIDE_ANCHOR_B
 	var forward: Vector2 = Vector2(1, 0) if team == "a" else Vector2(-1, 0)
 	var best: CharacterBody2D = null
 	var best_score: float = -INF

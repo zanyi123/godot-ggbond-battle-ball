@@ -160,7 +160,7 @@ func _evaluate_single_ai(ap: Dictionary, profile: AIProfile) -> void:
 		var carrier: CharacterBody2D = ball_node.owner_player
 		if carrier != p:  # 不是自己持球
 			# 我在视野外（持球者看不到我）且在好位置
-			var goal: Vector2 = ai_manager.GOAL_A if team == "a" else ai_manager.GOAL_B
+			var goal: Vector2 = ai_manager.SIDE_ANCHOR_A if team == "a" else ai_manager.SIDE_ANCHOR_B
 			var my_goal_dist: float = my_pos.distance_to(goal)
 			var carrier_goal_dist: float = carrier.global_position.distance_to(goal)
 

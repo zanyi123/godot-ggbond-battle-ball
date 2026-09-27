@@ -201,7 +201,7 @@ func _run() -> void:
 	var ctx: Dictionary = sam._build_primitive_ctx(sad_full)
 	_check(is_equal_approx(float(ctx.get("stamina_ratio", 0)), 0.5) and is_equal_approx(float(ctx.get("energy_ratio", 0)), 0.3), "I1 体力/能量比值正确")
 	_check(ctx.get("visible_enemies", ["x"]).is_empty(), "I2 stub无感知口：fov fail-closed 空表")
-	_check(ctx.get("own_goal", Vector2.ZERO) == Vector2(300, 0) and ctx.get("enemy_goal", Vector2.ZERO) == Vector2(-300, 0), "I3 a队球门键正确(GOAL_A/GOAL_B)")
+	_check(ctx.get("own_goal", Vector2.ZERO) == Vector2(300, 0) and ctx.get("enemy_goal", Vector2.ZERO) == Vector2(-300, 0), "I3 a队外场锚键正确(SIDE_ANCHOR_A/B,交叉布局)")
 	_check(not ctx.has("ball_position") and not ctx.has("ball_in_flight"), "I4 无球时省略球面键(fail-closed)")
 	var ratios: Array = ctx.get("ally_stamina_ratios", [])
 	_check(ratios.size() == 1 and is_equal_approx(float(ratios[0]), 0.2), "I6 队友比值表(ally_stamina_ratios)=0.2")
@@ -256,7 +256,7 @@ func _run() -> void:
 	stub_ball.position = Vector2.ZERO
 	sam.ball_node = stub_ball  # F2 有球场景
 	var f2: Vector2 = sam._select_field_position(sad_field, skill_field)
-	_check(f2 == Vector2(220, 0), "F2 goal_ball_line 有球(0,0)：GOAL_A(300,0)→球连线0.6系数cap80=(220,0) 实测%s" % str(f2))
+	_check(f2 == Vector2(220, 0), "F2 goal_ball_line 有球(0,0)：SIDE_ANCHOR_A(300,0)→球连线0.6系数cap80=(220,0) 实测%s" % str(f2))
 	_write_switches("{\"master_enabled\": true, \"waves\": {\"A\": true, \"B\": true}}")
 	var f3: Vector2 = sam._select_field_position(sad_field, skill_field)
 	_check(f3 == Vector2(100, 100), "F3 波D关：走旧分支(无values)回自站位，忽略球 实测%s" % str(f3))

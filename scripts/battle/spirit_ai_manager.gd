@@ -1,17 +1,18 @@
 extends Node
 
 const AIProfile = preload("res://scripts/battle/ai_profile.gd")
+## 16号合一：端区锚点（外场方向锚，原误称 GOAL_*）权威定义=ai_manager.SIDE_ANCHOR_A/B，
+## 本文件经脚本常量引用（ai_manager 侧已改运行时 load 解除循环预载）。
+## 领域知识详见 ai_manager 头部永久注释（交叉布局/勿按球门修/搞混史）。
+const AIManagerScript = preload("res://scripts/battle/ai_manager.gd")
 
 # ⚠ 场地方位领域知识（主人裁定 2026-09-27 永久注释，历史上多次搞混——防再混）：
-# 决竞球没有球门（得分=击中球员）。GOAL_A/GOAL_B 实为「外场方向锚点」，交叉布局：
-#   GOAL_A=(300,0)=a 队外场锚——a 队内场在左(x≤0)，但 a 队流放外场在右侧（对方内场背后，
+# 决竞球没有球门（得分=击中球员）。SIDE_ANCHOR_A/SIDE_ANCHOR_B 实为「外场方向锚点」，交叉布局：
+#   SIDE_ANCHOR_A=(300,0)=a 队外场锚——a 队内场在左(x≤0)，但 a 队流放外场在右侧（对方内场背后，
 #   环带布局；见 field_zone.start_field_transition：流放区 a=右外场、b=左外场）；
-#   GOAL_B=(-300,0)=b 队外场锚，镜像对称。
-# 消费语义：防守提醒/保护站位/放置朝向中的 GOAL_X =「X 队自己的后方（外场）方向」，设计如此。
+#   SIDE_ANCHOR_B=(-300,0)=b 队外场锚，镜像对称。
+# 消费语义：防守提醒/保护站位/放置朝向中的 SIDE_ANCHOR_X =「X 队自己的后方（外场）方向」，设计如此。
 # 勿按"球门/方向反了"修（2026-09-27 曾误判方向反了，主人纠正；此前也有搞混史）。
-## （双份定义暂存：合一迁移待批，见16号工单）
-const GOAL_A: Vector2 = Vector2(300.0, 0.0)
-const GOAL_B: Vector2 = Vector2(-300.0, 0.0)
 
 ## 失误局部短冷却（02前置地基工单追加，主人批"按你的做"）：
 ## 失误后冻结该技能 N 个决策周期，封死"重选→重掷"高频循环；
@@ -1725,15 +1726,15 @@ func _select_area_position(sad: Dictionary, is_defensive: bool) -> Vector2:
 
 func _get_our_goal_position(player: CharacterBody2D) -> Vector2:
 	if player.team == "a":
-		return GOAL_A
+		return AIManagerScript.SIDE_ANCHOR_A
 	else:
-		return GOAL_B
+		return AIManagerScript.SIDE_ANCHOR_B
 
 func _get_enemy_goal_position(player: CharacterBody2D) -> Vector2:
 	if player.team == "a":
-		return GOAL_B
+		return AIManagerScript.SIDE_ANCHOR_B
 	else:
-		return GOAL_A
+		return AIManagerScript.SIDE_ANCHOR_A
 
 func _get_enemy_ball_holder(player: CharacterBody2D) -> CharacterBody2D:
 	if not ball_node or not ball_node.owner_player:
