@@ -540,6 +540,186 @@
 			"type": "active",
 			"unlock_cost": 0.0,
 			"unlock_level": 1.0
+		},
+		{
+			"id": "skill_e2e_we_teleport",
+			"name": "波E实证·传送",
+			"description": "波E实证测试技：向锚点瞬移",
+			"detail": "平台窗口波E实证用（19工单任务B，e2e_命名先例=操3）；player_teleport handler实证",
+			"element": "梦幻",
+			"energy_cost": 15.0,
+			"cooldown": 15.0,
+			"icon_color": "#FFFFFF",
+			"icon_path": "",
+			"operator": "OP_AUTO",
+			"type": "active",
+			"tags": [
+				"player_teleport"
+			],
+			"tag_params": {
+				"player_teleport": {
+					"target": "self",
+					"pos_x": -250.0,
+					"pos_y": 0.0
+				}
+			},
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"id": "skill_e2e_we_copy",
+			"name": "波E实证·复制",
+			"description": "波E实证测试技：复制敌方最近释放",
+			"detail": "平台窗口波E实证用（19工单任务B）；skill_copy_last handler实证，效果信号=SKILL_COPIED",
+			"element": "梦幻",
+			"energy_cost": 20.0,
+			"cooldown": 15.0,
+			"icon_color": "#FFFFFF",
+			"icon_path": "",
+			"operator": "OP_AUTO",
+			"type": "active",
+			"tags": [
+				"skill_copy_last"
+			],
+			"tag_params": {
+				"skill_copy_last": {
+					"cost_pct": 1.0
+				}
+			},
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"id": "skill_e2e_we_illusion",
+			"name": "波E实证·幻影",
+			"description": "波E实证测试技：生成幻象球员",
+			"detail": "平台窗口波E实证用（19工单任务B）；field_illusion_add handler实证（ai_mode 仅登记未被消费=已知观察项）",
+			"element": "梦幻",
+			"energy_cost": 20.0,
+			"cooldown": 18.0,
+			"icon_color": "#FFFFFF",
+			"icon_path": "",
+			"operator": "OP_AUTO",
+			"type": "active",
+			"tags": [
+				"field_illusion_add"
+			],
+			"tag_params": {
+				"field_illusion_add": {
+					"place_mode": "near",
+					"count": 1.0,
+					"stamina": 60.0,
+					"duration": 8.0,
+					"ai_mode": true
+				}
+			},
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"id": "skill_e2e_we_terra",
+			"name": "波E实证·地形",
+			"description": "波E实证测试技：地形摩擦改变",
+			"detail": "平台窗口波E实证用（19工单任务B）；field_terra_change handler 现为空壳=实证另核项",
+			"element": "梦幻",
+			"energy_cost": 15.0,
+			"cooldown": 20.0,
+			"icon_color": "#FFFFFF",
+			"icon_path": "",
+			"operator": "OP_AUTO",
+			"type": "active",
+			"tags": [
+				"field_terra_change"
+			],
+			"tag_params": {
+				"field_terra_change": {
+					"duration": 6.0,
+					"friction": 0.5
+				}
+			},
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"id": "skill_e2e_we_vision",
+			"name": "波E实证·迷雾",
+			"description": "波E实证测试技：视野迷雾",
+			"detail": "平台窗口波E实证用（19工单任务B）；field_vision_block handler实证（spawn_at=ball_land 供 AI 无鼠标放置）",
+			"element": "梦幻",
+			"energy_cost": 20.0,
+			"cooldown": 16.0,
+			"icon_color": "#FFFFFF",
+			"icon_path": "",
+			"operator": "OP_AUTO",
+			"type": "active",
+			"tags": [
+				"field_vision_block"
+			],
+			"tag_params": {
+				"field_vision_block": {
+					"radius": 200.0,
+					"duration": 8.0,
+					"perception_scale": 0.5,
+					"spawn_at": "ball_land"
+				}
+			},
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"base_description": "操控族验收技（工单19任务A）",
+			"cooldown": 8.0,
+			"description": "手动制导(测)\n投球进入手动态：AI 输入源激活窗接管引导（敌门/拦截向）",
+			"detail": "OP_STEER 验收载体（19工单c分级：STEER 必走操作链）",
+			"element": "雷火",
+			"energy_cost": 20.0,
+			"icon_color": "#FF6347",
+			"icon_path": "",
+			"id": "skill_雷火_7",
+			"name": "手动制导(测)",
+			"operator": "OP_STEER",
+			"tag_params": {
+				"ball_manual_steering": {
+					"energy_per_sec": 5.0,
+					"max_duration": 6.0
+				}
+			},
+			"tags": [
+				"ball_manual_steering"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"base_description": "操控族验收技（工单19任务A）",
+			"cooldown": 10.0,
+			"description": "飞行干预(测)\n本方飞行球拉回（球远/敌近球时 AI 自动干预，max_times=2）",
+			"detail": "OP_MIDFLY 验收载体（19工单c分级：MIDFLY 必走操作链）",
+			"element": "雷火",
+			"energy_cost": 15.0,
+			"icon_color": "#FF8C00",
+			"icon_path": "",
+			"id": "skill_雷火_8",
+			"name": "飞行干预(测)",
+			"operator": "OP_MIDFLY",
+			"tag_params": {
+				"ball_recall": {
+					"max_times": 2.0
+				},
+				"ball_in_flight_boost": {
+					"dmg_pct": 20.0,
+					"speed_pct": 15.0,
+					"max_times": 2.0
+				}
+			},
+			"tags": [
+				"ball_recall",
+				"ball_in_flight_boost"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
 		}
 	]
 }

@@ -285,6 +285,64 @@ func clear_ai_input_source(player_id: int) -> void:
 	ai_virtual_inputs.erase(player_id)
 
 
+## ==================== 工单19任务A：操控族激活链（备案②销项） ====================
+## 语义裁定（c 分级，2026-09-28）：简单 AIM 走直调保留；STEER/MIDFLY 必须走操作链——
+## 本段交付三件：①激活技能查询口（聚合 operator 上下文）②AI 版激活入口（AI 执行层经此
+## 造激活窗上下文，替代按键）③激活窗 tick 驱动（provider 注入感知，ai_input_source 接管）。
+
+## 感知 ctx 注入口（Callable）：由集成接线（manager）或平台实证方设置；
+## 签名 = func(caster: Node) -> Dictionary（返回 ai_input_source 所需 ctx：ball_position/
+## enemy_goal/visible_enemies 等）。未设置=激活窗 tick 跳过（fail-closed，零行为差异）。
+var ai_ctx_provider: Callable = Callable()
+
+## 激活技能查询口（备案②）：返回当前操作上下文副本（operator/substate/skill_id/slot/midfly_left）
+## 或空字典（无激活/无上下文）
+func get_active_operation(player_id: int) -> Dictionary:
+	return _operator_context.get(player_id, {}).duplicate(true)
+
+
+## AI 版激活入口：AI 执行层（集成接线/平台实证 driver）经此对操控族技能造激活窗上下文——
+## 等价于玩家"按键激活→释放"序列（OP_MIDFLY 进 RELEASING 保留 midfly_left 干预次数；
+## OP_STEER 进激活窗待球手动态）。只处理有 operator 语义的技能；AUTO 类返回 false（照旧直调）。
+func ai_activate_skill(player_id: int, caster: Node, skill_id: String) -> bool:
+	var op := get_operator(skill_id)
+	if op != "OP_STEER" and op != "OP_MIDFLY":
+		return false
+	if caster == null or not is_instance_valid(caster):
+		return false
+	# 单槽登记（AI 侧无按键槽位语义，slot 固定 0）
+	if not _player_skills.has(player_id):
+		_player_skills[player_id] = {}
+		_last_press_times[player_id] = {}
+	_player_skills[player_id][0] = {"skill_id": skill_id, "state": SkillState.IDLE, "activation_time": 0}
+	# AI 输入源登记（幂等；施法者节点供球源解析）
+	if not ai_virtual_inputs.has(player_id):
+		register_ai_input_source(player_id, caster)
+	# 激活（造 operator 上下文/OP_MIDFLY 初始化 midfly_left）→立即释放（RELEASING=操控窗开）
+	_activate_skill(player_id, 0)
+	_release_skill(player_id, 0)
+	print("[SkillState] AI 激活操控族技能: %s op=%s player=%d" % [skill_id, op, player_id])
+	return true
+
+
+## 激活窗 tick（_process 驱动）：对每个 AI 输入源登记者，若 provider 可用则组装 ctx
+## 交 ai_input_source.tick_activation 接管（STEER 引导注入/MIDFLY 时机干预）。
+## provider 未设置=零循环体（fail-closed，行为与无此代码等价）。
+func _tick_ai_activations() -> void:
+	if ai_virtual_inputs.is_empty() or not ai_ctx_provider.is_valid():
+		return
+	for pid in ai_virtual_inputs.keys():
+		var entry: Dictionary = ai_virtual_inputs[pid]
+		var caster: Node = entry.get("caster")
+		if caster == null or not is_instance_valid(caster):
+			continue
+		var ctx: Dictionary = ai_ctx_provider.call(caster)
+		if ctx.is_empty():
+			continue
+		ctx["player"] = caster
+		SpiritAIInputSource.tick_activation(self, int(pid), caster, ctx)
+
+
 ## ==================== 工单12 S1：OP_COMBO 合体协调器（主人裁方案a） ====================
 ## 语义：两队友各持半技能（player_combo_ready 标签登记半装），同队互补 role 且双方存活、
 ## 距离 < combo_range 时自动合体；合体期=登记 duration（remaining 倒计时，固定步长确定性），
@@ -414,10 +472,13 @@ func _process(delta: float) -> void:
 	if _combo_check_accum >= COMBO_CHECK_INTERVAL:
 		_combo_check_accum = 0.0
 		try_form_combos()
+	# 工单19：操控族激活窗 tick（AI 输入源接管 STEER 引导/MIDFLY 干预）
+	_tick_ai_activations()
 
 
 func _ready() -> void:
 	add_to_group("skill_state_managers")  # 工单12：合体协调器组（handler 经组查找连接信号）
+	set_process(true)  # 工单19：激活窗 tick 驱动（_tick_ai_activations，provider 未设=空转）
 
 
 ## 设置玩家上场技能

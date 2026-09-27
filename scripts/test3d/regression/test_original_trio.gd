@@ -76,7 +76,7 @@ func _run() -> void:
 		_finish()
 		return
 	var skills: Array = skills_data.get("skills", [])
-	_assert("J2: 技能总数 17（12+新增5）", skills.size() == 17)
+	_assert("J2: 技能总数 24（工单12五技+波E实证四技+工单19操控两技等演进）", skills.size() == 24)
 	var by_id: Dictionary = {}
 	for s in skills:
 		if typeof(s) == TYPE_DICTIONARY:

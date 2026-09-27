@@ -262,6 +262,16 @@ func _apply_ball_manual_steering(params: Dictionary, caster_id: int) -> void:
 	mods.manual_steering = true
 	mods.manual_energy_per_sec = maxf(0.5, float(params.get("energy_per_sec", 3.0)))
 	mods.manual_max_duration = maxf(0.5, float(params.get("max_duration", 3.0)))
+	# 工单19任务A（操控族激活链）：施法者已在 AI 输入源登记（skill_state_manager.ai_virtual_inputs）
+	# → 打接管标记，ball.begin_manual_steering 放行 AI 进手动态，激活窗 tick 注入引导方向；
+	# 未登记（普通 sim AI/玩家）=无标记，行为与存量逐位一致
+	var _ssm: Node = null
+	if is_inside_tree():
+		_ssm = get_tree().get_first_node_in_group("skill_state_managers")
+	if _ssm != null and _ssm.get("ai_virtual_inputs") != null:
+		if (_ssm.ai_virtual_inputs as Dictionary).has(caster_id):
+			mods.manual_ai_controlled = true
+			print("[TagEffect] 手动制导 AI 接管标记: caster=%d（激活窗 tick 将引导）" % caster_id)
 	_mark_expiry(mods, ["manual_steering", "manual_energy_per_sec", "manual_max_duration"], float(params.get("duration", 0)))
 	print("[TagEffect] 手动制导: 耗能=%.1f/s max=%.1fs (caster=%d)" % [mods.manual_energy_per_sec, mods.manual_max_duration, caster_id])
 

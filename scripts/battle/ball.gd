@@ -826,8 +826,9 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	if ball_visual:
 		ball_visual.scale = Vector2.ONE * maxf(float(ball_mods.get("size_scale", 1.0)), 0.01)
 
-	# 波6 #17 手动制导：玩家路径进手动态（AI 退化为直线直飞）
-	if ball_mods.get("manual_steering", false) and attacker and attacker.is_player_controlled:
+	# 波6 #17 手动制导：玩家路径进手动态；AI 带 AI 输入源接管标记（工单19任务A）同样进
+	# （begin_manual_steering 内部复核 manual_ai_controlled）——无标记 AI 仍退化直线直飞
+	if ball_mods.get("manual_steering", false) and attacker 			and (attacker.is_player_controlled or bool(ball_mods.get("manual_ai_controlled", false))):
 		begin_manual_steering()
 
 	var attack_style := StyleBoxFlat.new()
@@ -1402,12 +1403,15 @@ func recall_ball(_max_times: int = 1) -> void:
 		print("[Ball] 拉回! 朝投掷者转向")
 
 
-## #17 手动制导：开启手动态（玩家路径；AI 的球 attacker.is_player_controlled=false 不进入=直线直飞）
+## #17 手动制导：开启手动态（玩家路径；AI 无操控退化为直线直飞——除非施法者带 AI 输入源
+## 接管标记（工单19任务A：manual_ai_controlled=handler 层判定施法者在 AI 输入源登记，
+## 激活窗 tick 将逐周期注入引导方向=操控链成立）
 func begin_manual_steering() -> void:
 	if is_clone or not is_active:
 		return
 	if attacker_player and is_instance_valid(attacker_player) and not attacker_player.is_player_controlled:
-		return  # AI 无操控，退化为直线直飞
+		if not bool(ball_mods.get("manual_ai_controlled", false)):
+			return  # AI 无操控且无接管标记=直线直飞（存量行为，未接线零差异）
 	_manual_active = true
 	_manual_time_left = float(ball_mods.get("manual_max_duration", 3.0))
 	print("[Ball] 手动制导开启")

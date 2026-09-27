@@ -86,6 +86,15 @@
 			"skills": [
 				"skill_大地_3"
 			]
+		},
+		{
+			"id": "test_spirit_ctrl",
+			"name": "操控测试的元灵",
+			"element": "雷火",
+			"skills": [
+				"skill_雷火_7",
+				"skill_雷火_8"
+			]
 		}
 	],
 	"loadouts": [
@@ -118,10 +127,8 @@
 		{
 			"slot": "B1",
 			"character_id": "char_005",
-			"spirit_id": "墨麟的元灵",
-			"skills": [
-				"skill_雷火_5"
-			]
+			"spirit_id": "操控测试的元灵",
+			"skills": []
 		},
 		{
 			"slot": "B2",

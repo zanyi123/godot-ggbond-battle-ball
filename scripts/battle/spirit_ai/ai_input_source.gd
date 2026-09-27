@@ -103,6 +103,136 @@ static func detach(state_manager: Variant, player_id: int) -> void:
 		state_manager.clear_ai_input_source(player_id)
 
 
+## ==================== 工单19任务A：激活窗 tick 接管（c 分级：STEER/MIDFLY 走操作链） ====================
+
+## 激活窗接管（skill_state_manager._process 周期调用；provider 组装 ctx）：
+## ①STEER 窗=施法者的球处于手动态（ball_mods.manual_steering 落地+begin_manual_steering 放行）
+##   →生成引导意图（敌门>拦截>保持航向）→ ball.manual_steer 注入 + set_ai_aim 留档
+## ②MIDFLY 窗=state machine 上下文 OP_MIDFLY（ai_activate_skill 造）+midfly_left>0
+##   →时机策略（recall/boost，按激活技能 tags 判定）→公开入口同键再按
+## 返回本周期动作描述（"" =无动作；观测/实证用）
+static func tick_activation(state_manager: Variant, player_id: int, caster: Node, ctx: Dictionary) -> String:
+	if state_manager == null or caster == null or not is_instance_valid(caster):
+		return ""
+	# —— STEER 激活窗：球手动态判定（球侧状态=操控窗已开的权威信号）——
+	var ball = caster.get("ball_ref")
+	if ball != null and is_instance_valid(ball) and bool(ball.get("is_active")) 			and bool(ball.get("_manual_active")) and ball.has_method("manual_steer"):
+		var aim: Vector2 = _compute_steer_aim(ctx)
+		if aim != Vector2.ZERO:
+			if state_manager.has_method("set_ai_aim"):
+				state_manager.set_ai_aim(player_id, aim)
+			ball.manual_steer(aim)
+			return "steer_inject"
+		return "steer_hold"  # 零向量=保持直线（退化语义，registry：AI 路径退化直线）
+	# —— MIDFLY 激活窗：state machine 上下文（ai_activate_skill 造的 OP_MIDFLY RELEASING）——
+	# AI 无按键：激活上下文由本 tick 自动建立（执行层对齐——装备含 OP_MIDFLY 技+己方球在飞
+	# →ai_activate_skill 造 RELEASING/midfly_left 上下文；per-ball 一次，干预完或耗尽不再重建）
+	if state_manager.has_method("get_active_operation"):
+		var op_ctx: Dictionary = state_manager.get_active_operation(player_id)
+		if op_ctx.is_empty() and state_manager.has_method("ai_activate_skill"):
+			var ball_in_flight: bool = ball != null and is_instance_valid(ball) 					and bool(ball.get("is_active")) and not bool(ball.get("_manual_active"))
+			if ball_in_flight and caster.has_method("get_equipped_skills") 					and state_manager.has_method("get_operator"):
+				for equipped_id in caster.get_equipped_skills():
+					# 只自动激活 OP_MIDFLY 装备技（STEER 无需 state machine 上下文=球侧判定）
+					if str(state_manager.get_operator(str(equipped_id))) != "OP_MIDFLY":
+						continue
+					if state_manager.ai_activate_skill(player_id, caster, str(equipped_id)):
+						op_ctx = state_manager.get_active_operation(player_id)
+						break
+		if str(op_ctx.get("operator", "")) == "OP_MIDFLY":
+			var left := int(op_ctx.get("midfly_left", 0))
+			if left <= 0:
+				return ""
+			# 策略判定：激活技能 tags 带 ball_recall=recall 优先；带 ball_in_flight_boost=boost
+			var policy := ""
+			if state_manager.has_method("_get_skill_data"):
+				var sd: Dictionary = state_manager._get_skill_data(str(op_ctx.get("skill_id", "")))
+				var tags: Array = sd.get("tags", [])
+				if tags.has("ball_recall"):
+					policy = "recall"
+				elif tags.has("ball_in_flight_boost"):
+					policy = "boost"
+			var intent := _midfly_intent_by_policy(policy, ctx)
+			if bool(intent.get("should_press", false)):
+				var slot := int(op_ctx.get("slot", 0))
+				if state_manager.has_method("on_skill_key_pressed"):
+					var ok: bool = bool(state_manager.on_skill_key_pressed(player_id, slot))
+					return "midfly_press" if ok else "midfly_press_fail"
+			return "midfly_hold"
+	return ""
+
+
+## midfly 时机策略（复用 12号 op_policy 判据；policy 空时两策略并测——任一满足即干预）
+static func _midfly_intent_by_policy(policy: String, ctx: Dictionary) -> Dictionary:
+	var none: Dictionary = {"op": "midfly", "aim_direction": Vector2.ZERO, "should_press": false, "reason": ""}
+	var ball_pos: Variant = ctx.get("ball_position")
+	if typeof(ball_pos) != TYPE_VECTOR2:
+		none["reason"] = "no_ball_ctx"
+		return none
+	var player: Variant = ctx.get("player")
+	if player == null or not is_instance_valid(player):
+		none["reason"] = "no_player_ctx"
+		return none
+	var enemies := _valid_enemies(ctx)
+	match policy:
+		"recall":
+			var ball_dist: float = (ball_pos as Vector2).distance_to(player.global_position)
+			if ball_dist > RECALL_FAR_DISTANCE:
+				return {"op": "midfly", "aim_direction": Vector2.ZERO, "should_press": true, "reason": "ball_far"}
+			for e in enemies:
+				if (e as Node2D).global_position.distance_to(ball_pos) < RECALL_ENEMY_NEAR_RADIUS:
+					return {"op": "midfly", "aim_direction": Vector2.ZERO, "should_press": true, "reason": "enemy_near_ball"}
+			none["reason"] = "recall_hold"
+			return none
+		"boost":
+			var velocity: Variant = ctx.get("ball_velocity")
+			if typeof(velocity) != TYPE_VECTOR2 or (velocity as Vector2).length_squared() < 1.0:
+				none["reason"] = "ball_stalled"
+				return none
+			var enemy_goal: Variant = ctx.get("enemy_goal")
+			if typeof(enemy_goal) == TYPE_VECTOR2 and (enemy_goal - ball_pos).dot(velocity) > 0.0:
+				return {"op": "midfly", "aim_direction": Vector2.ZERO, "should_press": true, "reason": "toward_goal"}
+			if not enemies.is_empty():
+				var nearest: Node2D = _nearest_node_to(ball_pos, enemies)
+				if nearest != null and (nearest.global_position - ball_pos).dot(velocity) > 0.0:
+					return {"op": "midfly", "aim_direction": Vector2.ZERO, "should_press": true, "reason": "toward_enemy"}
+			none["reason"] = "boost_hold"
+			return none
+		_:
+			# 双策略并测（recall 条件或 boost 条件任一成立）
+			var r: Dictionary = _midfly_intent_by_policy("recall", ctx)
+			if bool(r.get("should_press", false)):
+				return r
+			return _midfly_intent_by_policy("boost", ctx)
+
+
+## 默认感知 provider（平台实证/兜底；正式接线由 manager 单口组装换装）。
+## 数据面与 input_manager 同款先例（inject_steer 读 ball_ref / _find_drag_candidate 扫名册）：
+## 球位置速度=施法者 ball_ref；敌=players 组按队过滤（存活）；敌门锚=交叉布局外场锚
+## （16号主人裁：a 队锚=(300,0) 在 b 半场深处，a 攻向 +x；b 队反之）
+static func build_default_ctx(caster: Node) -> Dictionary:
+	if caster == null or not is_instance_valid(caster):
+		return {}
+	var ctx: Dictionary = {"player": caster}  # 自含 player（ recall/boost 距离判定与 06§4.1 ctx 口径一致）
+	var ball = caster.get("ball_ref")
+	if ball != null and is_instance_valid(ball) and bool(ball.get("is_active")):
+		ctx["ball_position"] = (ball as Node2D).global_position
+		if ball.get("ball_direction") != null:
+			var dir: Vector2 = ball.get("ball_direction")
+			var speed: float = float(ball.get("speed")) if ball.get("speed") != null else 0.0
+			ctx["ball_velocity"] = dir * speed
+	var team := str(caster.get("team"))
+	ctx["enemy_goal"] = Vector2(-300, 0) if team == "b" else Vector2(300, 0)
+	var enemies: Array = []
+	var tree := caster.get_tree()
+	if tree != null:
+		for n in tree.get_nodes_in_group("players"):
+			if n != caster and is_instance_valid(n) and str(n.get("team")) != team 					and not bool(n.get("is_defeated")):
+				enemies.append(n)
+	ctx["visible_enemies"] = enemies
+	return ctx
+
+
 # ===== 私有工具（零感知直连，全部从 ctx 取；平局取遍历序首个=确定性） =====
 
 ## steer 瞄准优先级：敌门方向 > 最近敌（拦截向） > 保持当前航向 > 零向量（不干预）
