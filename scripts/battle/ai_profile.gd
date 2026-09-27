@@ -142,7 +142,11 @@ var facing_mode_support: String = "ball"
 var facing_mode_defend: String = "enemy"
 
 # ──── 元灵技能AI参数（2026-07-13 新增）────
-var skill_use_threshold: float = 15.0
+# 2026-09-27 平台窗口调参（主人令"涉及数值的自己合理去调"，工单12缺口#2/#4）：
+# threshold 15→10、expected_future_score 50→25——依据=平台三种子实测：技能池 raw 实际分布 10~33，
+# 旧期望分 50 高于池上限（能量闸门对高耗能技永拒）；阈值 15 高于合体半装 raw(10~14)。
+# 仅动 AI 选技欲望门槛，不动技能游戏效果数值；sim 门禁与基线位移另报。
+var skill_use_threshold: float = 10.0
 var skill_energy_min: float = 10.0
 var skill_reserve_weight: float = 0.9
 var skill_attack_intent_weight: float = 1.0
@@ -153,7 +157,7 @@ var skill_late_game_bonus: float = 1.5
 var skill_losing_bonus: float = 1.3
 var skill_leading_penalty: float = 0.7
 var skill_uncertainty_discount: float = 0.6
-var skill_expected_future_score: float = 50.0
+var skill_expected_future_score: float = 25.0
 var skill_element_counter_bonus: float = 1.3
 var skill_element_counter_penalty: float = 0.7
 var skill_combo_bonus: float = 0.5
