@@ -642,6 +642,7 @@
 			"reverse": "player_atk_up_pct",
 			"description": "攻击力降低X%",
 			"params": [
+				"target",
 				"value",
 				"duration"
 			],
@@ -672,6 +673,7 @@
 			"reverse": "player_atk_up_flat",
 			"description": "攻击力-固定值",
 			"params": [
+				"target",
 				"value",
 				"duration"
 			],
@@ -702,6 +704,7 @@
 			"reverse": "player_def_up_pct",
 			"description": "防御降低X%",
 			"params": [
+				"target",
 				"value",
 				"duration"
 			],
@@ -732,6 +735,7 @@
 			"reverse": "player_def_up_flat",
 			"description": "防御-固定值",
 			"params": [
+				"target",
 				"value",
 				"duration"
 			],
@@ -762,6 +766,7 @@
 			"reverse": "player_spd_up_pct",
 			"description": "移动速度降低X%",
 			"params": [
+				"target",
 				"value",
 				"duration"
 			],
@@ -792,6 +797,7 @@
 			"reverse": "player_spd_up_flat",
 			"description": "移动速度-固定值",
 			"params": [
+				"target",
 				"value",
 				"duration"
 			],
@@ -822,6 +828,7 @@
 			"reverse": "player_res_up_pct",
 			"description": "韧性降低X%",
 			"params": [
+				"target",
 				"value",
 				"duration"
 			],
@@ -852,6 +859,7 @@
 			"reverse": "player_res_up_flat",
 			"description": "韧性-固定值",
 			"params": [
+				"target",
 				"value",
 				"duration"
 			],
@@ -881,6 +889,7 @@
 			"reverse": "player_invincible",
 			"description": "受到的伤害增加",
 			"params": [
+				"target",
 				"multiplier",
 				"duration"
 			],
@@ -911,6 +920,7 @@
 			"reverse": "",
 			"description": "目标治疗无效且/或能量不回复；block=heal/energy/both（默认both，受击目标类）",
 			"params": [
+				"target",
 				"duration",
 				"block"
 			],
@@ -927,6 +937,7 @@
 			"reverse": "",
 			"description": "目标能量不回复（player_heal_block 的单禁能别名，规划版命名）",
 			"params": [
+				"target",
 				"duration"
 			],
 			"target_type": "player",
@@ -974,6 +985,7 @@
 			"reverse": "player_element_immune",
 			"description": "对指定元素的攻击伤害×multiplier（默认1.5=弱点）",
 			"params": [
+				"target",
 				"duration",
 				"elements",
 				"multiplier"
@@ -990,6 +1002,7 @@
 			"reverse": "",
 			"description": "持灯者替同队施法者分摊技能能耗share_pct（均摊，付不起付到0）",
 			"params": [
+				"target",
 				"duration",
 				"share_pct"
 			],
@@ -1079,6 +1092,7 @@
 			"reverse": "player_stealth",
 			"description": "强制显现敌人",
 			"params": [
+				"target",
 				"target_id",
 				"duration"
 			],
@@ -1188,6 +1202,7 @@
 			"reverse": "player_move_boost",
 			"description": "移动速度降低",
 			"params": [
+				"target",
 				"multiplier",
 				"duration"
 			],
@@ -1310,6 +1325,7 @@
 			"reverse": "player_energy_max_down_pct",
 			"description": "最大能量提升X%",
 			"params": [
+				"target",
 				"value",
 				"duration"
 			],
@@ -1325,6 +1341,7 @@
 			"reverse": "player_energy_max_up_pct",
 			"description": "最大能量降低X%",
 			"params": [
+				"target",
 				"value",
 				"duration"
 			],
@@ -1340,6 +1357,7 @@
 			"reverse": "player_energy_max_down_flat",
 			"description": "最大能量+固定值",
 			"params": [
+				"target",
 				"value",
 				"duration"
 			],
@@ -1355,6 +1373,7 @@
 			"reverse": "player_energy_max_up_flat",
 			"description": "最大能量-固定值",
 			"params": [
+				"target",
 				"value",
 				"duration"
 			],
@@ -1370,6 +1389,7 @@
 			"reverse": "player_spirit_cost_up",
 			"description": "技能消耗减少",
 			"params": [
+				"target",
 				"multiplier",
 				"duration"
 			],
@@ -1385,6 +1405,7 @@
 			"reverse": "player_spirit_cost_down",
 			"description": "技能消耗增加",
 			"params": [
+				"target",
 				"multiplier",
 				"duration"
 			],
@@ -1400,6 +1421,7 @@
 			"reverse": "",
 			"description": "技能可使用次数增加",
 			"params": [
+				"target",
 				"skill_id",
 				"bonus_uses",
 				"duration"
@@ -1416,6 +1438,7 @@
 			"reverse": "player_spirit_cd_up",
 			"description": "技能冷却时间缩短",
 			"params": [
+				"target",
 				"multiplier",
 				"duration"
 			],
@@ -1431,6 +1454,7 @@
 			"reverse": "player_spirit_cd_down",
 			"description": "技能冷却时间延长",
 			"params": [
+				"target",
 				"multiplier",
 				"duration"
 			],
@@ -1446,6 +1470,7 @@
 			"reverse": "player_spirit_half",
 			"description": "下次技能效果翻倍",
 			"params": [
+				"target",
 				"skill_id",
 				"duration"
 			],
@@ -1461,6 +1486,7 @@
 			"reverse": "player_spirit_double",
 			"description": "下次技能效果减半",
 			"params": [
+				"target",
 				"skill_id",
 				"duration"
 			],
@@ -1476,6 +1502,7 @@
 			"reverse": "player_cc_immune",
 			"description": "无法行动",
 			"params": [
+				"target",
 				"duration"
 			],
 			"target_type": "player",
@@ -1505,6 +1532,7 @@
 			"reverse": "",
 			"description": "无法使用技能",
 			"params": [
+				"target",
 				"duration"
 			],
 			"target_type": "player",
@@ -1520,6 +1548,7 @@
 			"reverse": "",
 			"description": "无法投球",
 			"params": [
+				"target",
 				"duration"
 			],
 			"target_type": "player",
