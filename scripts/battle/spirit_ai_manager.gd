@@ -45,6 +45,12 @@ var _hooks_attached := false
 ## 决策评分明细 dump（10工单P3观测层；get_decision_dump 只读口，_decide_skill 每周期刷新，纯观测零行为）
 var last_decision_dump: Dictionary = {}
 
+## ===== 工单15交付物1：技能释放统计表（纯观察零决策影响；run_sim/平台报告聚合源）=====
+## skill_id -> {"name","cat"(BALL/PLAYER/FIELD),"ok","miss","registered"}
+## 15工单验收口径：覆盖率=出手技能数/实配技能数（基线3/9），三分类各≥1出手，失误率可见
+var _cast_stats: Dictionary = {}
+var _cast_stats_hooked: bool = false
+
 func initialize(battle_mgr: Node2D, spirit_sys: SpiritSystemManager, ai_mgr: Node) -> void:
 	battle_manager = battle_mgr
 	spirit_system = spirit_sys
@@ -93,7 +99,92 @@ func refresh_all_skills_analysis() -> void:
 		return
 	for sad in spirit_ai_data:
 		sad["skills_analysis"] = _analyze_skills_for_player(sad["player"], sad["player_analysis"])
+		_cast_stats_register(sad["skills_analysis"])
 		print("[SpiritAI] %s 技能分析完成，技能数: %d" % [sad["player"].name, sad["skills_analysis"].size()])
+	_cast_stats_hookup()
+
+
+## ===== 工单15交付物1：技能释放统计（纯观察，不碰决策/骰子/评分任何路径）=====
+
+## 分母注册：实配主动技能（被动由事件触发不进评分池，不计覆盖率分母）
+func _cast_stats_register(skills_analysis: Array[Dictionary]) -> void:
+	for analysis in skills_analysis:
+		if str(analysis.get("skill_data", {}).get("type", "active")) == "passive":
+			continue
+		_cast_stats_note(analysis, true)
+
+## 单技能登记（registered=true 计入覆盖率分母；出手时未注册也补记但不入分母）
+func _cast_stats_note(skill_info: Dictionary, registered: bool) -> void:
+	var sid := str(skill_info.get("skill_id", ""))
+	if sid.is_empty():
+		return
+	if _cast_stats.has(sid):
+		if registered:
+			_cast_stats[sid]["registered"] = true
+		return
+	var cat := "PLAYER"
+	if bool(skill_info.get("has_field_tag", false)):
+		cat = "FIELD"
+	elif bool(skill_info.get("has_ball_tag", false)):
+		cat = "BALL"
+	_cast_stats[sid] = {
+		"name": str(skill_info.get("skill_data", {}).get("name", sid)),
+		"cat": cat, "ok": 0, "miss": 0, "registered": registered,
+	}
+
+## 出手计数（_execute_skill 成功/失误两处调用）
+func _cast_stats_count(skill_info: Dictionary, ok: bool) -> void:
+	_cast_stats_note(skill_info, false)
+	var sid := str(skill_info.get("skill_id", ""))
+	if sid.is_empty():
+		return
+	var entry: Dictionary = _cast_stats[sid]
+	if ok:
+		entry["ok"] = int(entry.get("ok", 0)) + 1
+	else:
+		entry["miss"] = int(entry.get("miss", 0)) + 1
+
+## 终场信号挂接（GameManager.match_ended；autoload 信号无需在树）
+func _cast_stats_hookup() -> void:
+	if _cast_stats_hooked:
+		return
+	_cast_stats_hooked = true
+	GameManager.match_ended.connect(_print_cast_stats)
+
+## 终场统计表（[SpiritAIStats] 行供 run_sim.sh 聚合；SUMMARY 行机器可读）
+func _print_cast_stats(_score_a: int = 0, _score_b: int = 0, _result: String = "") -> void:
+	var denom_cat := {"BALL": 0, "PLAYER": 0, "FIELD": 0}
+	var cast_cat := {"BALL": 0, "PLAYER": 0, "FIELD": 0}
+	var total := 0
+	var cast := 0
+	var ok_sum := 0
+	var miss_sum := 0
+	var sids: Array = _cast_stats.keys()
+	sids.sort()  # 稳定输出（同种子逐位可比）
+	print("[SpiritAIStats] === 技能释放统计 ===")
+	for sid in sids:
+		var e: Dictionary = _cast_stats[sid]
+		if not bool(e.get("registered", false)):
+			continue
+		total += 1
+		denom_cat[str(e["cat"])] = int(denom_cat.get(str(e["cat"]), 0)) + 1
+		var ok_n := int(e.get("ok", 0))
+		var miss_n := int(e.get("miss", 0))
+		ok_sum += ok_n
+		miss_sum += miss_n
+		if ok_n > 0:
+			cast += 1
+			cast_cat[str(e["cat"])] = int(cast_cat.get(str(e["cat"]), 0)) + 1
+		print("[SpiritAIStats] %s %s: 成功%d 失误%d" % [str(e["cat"]), str(e["name"]), ok_n, miss_n])
+	var cover_pct := (100.0 * cast / total) if total > 0 else 0.0
+	var total_try := ok_sum + miss_sum
+	var miss_pct := (100.0 * miss_sum / total_try) if total_try > 0 else 0.0
+	print("[SpiritAIStats] SUMMARY 出手=%d/%d 覆盖率=%.1f%% BALL=%d/%d PLAYER=%d/%d FIELD=%d/%d 成功=%d 失误=%d 失误率=%.1f%%" % [
+		cast, total, cover_pct,
+		int(cast_cat["BALL"]), int(denom_cat["BALL"]),
+		int(cast_cat["PLAYER"]), int(denom_cat["PLAYER"]),
+		int(cast_cat["FIELD"]), int(denom_cat["FIELD"]),
+		ok_sum, miss_sum, miss_pct])
 
 func _analyze_player_attributes(player: CharacterBody2D) -> Dictionary:
 	var result: Dictionary = {}
@@ -1656,6 +1747,7 @@ func _execute_skill(sad: Dictionary, skill_info: Dictionary) -> void:
 		hold[str(skill_info["skill_id"])] = int(sad["skill_decide_count"]) + MISTAKE_HOLD_CYCLES
 		sad["mistake_hold"] = hold
 		print("[SpiritAI] %s 技能失误: %s (失误类型: %s, 冷却%d周期)" % [p.name, skill_info["skill_data"].get("name", "unknown"), mistake_type, MISTAKE_HOLD_CYCLES])
+		_cast_stats_count(skill_info, false)
 		return
 
 	var target = _select_player_target(sad, skill_info)
@@ -1682,6 +1774,7 @@ func _execute_skill(sad: Dictionary, skill_info: Dictionary) -> void:
 		var target_name = "自己" if target == p else (target.name if target else "无")
 		var pos_str = "无" if not skill_info.get("has_field_tag", false) else "场地"
 		print("[SpiritAI] %s 使用技能: %s (评分: %.1f, 目标: %s, 位置: %s)" % [p.name, skill_info["skill_data"].get("name", "unknown"), skill_info.get("base_value", 0), target_name, pos_str])
+		_cast_stats_count(skill_info, true)
 		
 		_send_skill_message(sad, skill_info, target)
 

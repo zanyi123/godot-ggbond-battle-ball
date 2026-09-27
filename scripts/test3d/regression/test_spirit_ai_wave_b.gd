@@ -190,7 +190,7 @@ func _run() -> void:
 	# ===== V-Value：四族计价 + clamp 边界 + 缺参数/none 回落 =====
 	_assert("V1: 状态族 invincible duration=3 ×15=45", absf(PrimB.compute_value(desc["player_invincible"], {"duration": 3.0}) - 45.0) < 0.001)
 	_assert("V2: 控制族 stun duration=2 ×14=28", absf(PrimB.compute_value(desc["player_stun"], {"duration": 2.0}) - 28.0) < 0.001)
-	_assert("V3: 运动族 move_slow multiplier=1.5 ×10=15（下限边界）", absf(PrimB.compute_value(desc["player_move_slow"], {"multiplier": 1.5}) - 15.0) < 0.001)
+	_assert("V3: 运动族 move_slow multiplier=0.5×16=8→回落15（下限边界；单价随15工单断点1校准10→16）", absf(PrimB.compute_value(desc["player_move_slow"], {"multiplier": 0.5}) - 15.0) < 0.001)
 	_assert("V4: 体力族 hp_heal_pct value=20 ×2=40", absf(PrimB.compute_value(desc["player_hp_heal_pct"], {"value": 20.0}) - 40.0) < 0.001)
 	_assert("V5a: clamp 下限触发 regen value=1 ×6=6→15", absf(PrimB.compute_value(desc["player_hp_regen"], {"value": 1.0}) - 15.0) < 0.001)
 	_assert("V5b: clamp 上限触发 charge_stock charges=10 ×12=120→60", absf(PrimB.compute_value(desc["player_charge_stock"], {"charges": 10.0}) - 60.0) < 0.001)

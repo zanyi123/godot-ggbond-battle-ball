@@ -47,7 +47,7 @@ TOTAL_WARN=0
 TOTAL_HARD_PASS=0
 TOTAL_MATCHES=0
 
-echo "场次,种子,时长秒,比分A,比分B,同队接球,敌队接球,同队接球率,外场接球,球击中,总伤害,出界,卡死,状态切换,评级" > "$SUMMARY_FILE"
+  echo "场次,种子,时长秒,比分A,比分B,同队接球,敌队接球,同队接球率,外场接球,球击中,总伤害,出界,卡死,状态切换,评级,技能覆盖,覆盖率%,BALL出手,PLAYER出手,FIELD出手,失误率%" > "$SUMMARY_FILE"
 
 for ((i=0; i<COUNT; i++)); do
   SEED=$((SEED_START + i))
@@ -72,6 +72,19 @@ for ((i=0; i<COUNT; i++)); do
   OUT_BOUND=$(echo "$OUTPUT" | grep "出界次数" | grep -oE '[0-9]+$' | head -1)
   STUCK=$(echo "$OUTPUT" | grep "卡死触发" | sed -nE 's/.*卡死触发: ([0-9]+) 次.*/\1/p' | head -1)
   STATE_CHG=$(echo "$OUTPUT" | grep "状态切换" | sed -nE 's/.*状态切换: ([0-9]+) 次.*/\1/p' | head -1)
+
+  # 工单15交付物1：技能释放统计（[SpiritAIStats] SUMMARY 行，纯观察指标）
+  STATS_LINE=$(echo "$OUTPUT" | grep "SpiritAIStats\] SUMMARY" | head -1)
+  CAST_N=$(echo "$STATS_LINE" | sed -nE 's/.*出手=([0-9]+)\/([0-9]+).*/\1/p')
+  CAST_D=$(echo "$STATS_LINE" | sed -nE 's/.*出手=([0-9]+)\/([0-9]+).*/\2/p')
+  CAST_BALL=$(echo "$STATS_LINE" | sed -nE 's/.*BALL=([0-9]+)\/([0-9]+).*/\1/p')
+  CAST_PLAYER=$(echo "$STATS_LINE" | sed -nE 's/.*PLAYER=([0-9]+)\/([0-9]+).*/\1/p')
+  CAST_FIELD=$(echo "$STATS_LINE" | sed -nE 's/.*FIELD=([0-9]+)\/([0-9]+).*/\1/p')
+  CAST_COVER=$(echo "$STATS_LINE" | sed -nE 's/.*覆盖率=([0-9.]+)%.*/\1/p')
+  CAST_MISSRATE=$(echo "$STATS_LINE" | sed -nE 's/.*失误率=([0-9.]+)%.*/\1/p')
+  CAST_N=${CAST_N:-0}; CAST_D=${CAST_D:-0}; CAST_BALL=${CAST_BALL:-0}
+  CAST_PLAYER=${CAST_PLAYER:-0}; CAST_FIELD=${CAST_FIELD:-0}
+  CAST_COVER=${CAST_COVER:-0}; CAST_MISSRATE=${CAST_MISSRATE:-0}
 
   # 兜底
   DURATION=${DURATION:-0}; SCORE_A=${SCORE_A:-0}; SCORE_B=${SCORE_B:-0}
@@ -118,12 +131,25 @@ for ((i=0; i<COUNT; i++)); do
     WARNINGS="$WARNINGS 外场接球0(已知现象,可能正常)"; TOTAL_WARN=$((TOTAL_WARN+1))
   fi
 
+  # 工单15交付物1：技能释放覆盖（警告级指标，不设硬规则——避免误杀，升格待主人批）
+  if [ "$CAST_D" -gt 0 ]; then
+    if [ "$CAST_BALL" = "0" ]; then
+      WARNINGS="$WARNINGS BALL类零出手(技能AI覆盖缺口)"; RATING="⚠"; TOTAL_WARN=$((TOTAL_WARN+1))
+    fi
+    COVER_LOW=$(awk "BEGIN{print ($CAST_COVER<50)?1:0}")
+    if [ "$COVER_LOW" = "1" ]; then
+      WARNINGS="$WARNINGS 技能覆盖率偏低(${CAST_COVER}%<50%)"; RATING="⚠"; TOTAL_WARN=$((TOTAL_WARN+1))
+    fi
+  else
+    WARNINGS="$WARNINGS 技能统计缺失(无SUMMARY行)"; TOTAL_WARN=$((TOTAL_WARN+1))
+  fi
+
   # 输出本场
-  echo "  $RATING 比分 $SCORE_A-$SCORE_B | 接球率 $CATCH_RATE% | 击中 $HIT | 卡死 $STUCK | 切换 $STATE_CHG"
+  echo "  $RATING 比分 $SCORE_A-$SCORE_B | 接球率 $CATCH_RATE% | 击中 $HIT | 卡死 $STUCK | 切换 $STATE_CHG | 技能覆盖 $CAST_N/$CAST_D(${CAST_COVER}%) BALL=$CAST_BALL PLAYER=$CAST_PLAYER FIELD=$CAST_FIELD 失误率${CAST_MISSRATE}%"
   [ -n "$DANGER" ] && echo "     ✗ 危险:$DANGER"
   [ -n "$WARNINGS" ] && echo "     ⚠ 警告:$WARNINGS"
 
-  echo "$((i+1)),$SEED,$DURATION,$SCORE_A,$SCORE_B,$CATCH_SAME,$CATCH_ENEMY,$CATCH_RATE,$OUTER_CATCH,$HIT,$DAMAGE,$OUT_BOUND,$STUCK,$STATE_CHG,$RATING" >> "$SUMMARY_FILE"
+  echo "$((i+1)),$SEED,$DURATION,$SCORE_A,$SCORE_B,$CATCH_SAME,$CATCH_ENEMY,$CATCH_RATE,$OUTER_CATCH,$HIT,$DAMAGE,$OUT_BOUND,$STUCK,$STATE_CHG,$RATING,$CAST_N/$CAST_D,$CAST_COVER,$CAST_BALL,$CAST_PLAYER,$CAST_FIELD,$CAST_MISSRATE" >> "$SUMMARY_FILE"
 done
 
 # === 整体健康结论 ===

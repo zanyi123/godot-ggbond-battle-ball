@@ -33,7 +33,7 @@
 		},
 		{
 			"cooldown": 9.5,
-			"description": "新建技能",
+			"description": "猛虎攻击：为球注入猛虎之力，伤害提升30%，命中后以球员为半径范围伤害（工单15断点1数据补全）",
 			"detail": "技能详细说明",
 			"element": "金刚",
 			"energy_cost": 20.0,
@@ -41,7 +41,16 @@
 			"icon_path": "",
 			"id": "skill_金刚_1",
 			"name": "猛虎攻击",
-			"tag_params": {},
+			"tag_params": {
+				"ball_dmg_up_pct": {
+					"value": 30.0
+				},
+				"ball_range_up": {
+					"radius": 120.0,
+					"damage_pct": 0.6,
+					"duration": 8.0
+				}
+			},
 			"tags": [
 				"ball_dmg_up_pct",
 				"ball_range_up"

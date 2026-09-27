@@ -189,9 +189,10 @@ func _run() -> void:
 	_assert("G13 未知 gate 键 fail-closed", not g.call("__no_such_gate__", ctx_base)["ok"])
 	_assert("G14 空 descriptor fail-closed", not PrimitivesA.timing_gate({}, sad, ctx_base)["ok"])
 
-	# ===== V-Value：每家族计价 + clamp 上下限 + 缺参数回落（浮点一律 is_equal_approx）=====
+	# ===== V-Value：每家族计价 + clamp 上下限 + 缺参数回落（浮点一律 is_equal_approx；期望值从描述符推导，防调参钉死）=====
 	var d_ball: Dictionary = descs["ball_dmg_up_pct"]
-	_assert("V1 ball_stat 计价: 20×1.5=30", is_equal_approx(PrimitivesA.compute_value(d_ball, {"value": 20}), 30.0))
+	var v1_exp: float = clampf(20.0 * float(d_ball["value_unit"]), float(d_ball["value_min"]), float(d_ball["value_cap"]))
+	_assert("V1 ball_stat 计价: 20×unit=推导值", is_equal_approx(PrimitivesA.compute_value(d_ball, {"value": 20}), v1_exp))
 	_assert("V1b clamp 上限: 100×1.5→cap 90", is_equal_approx(PrimitivesA.compute_value(d_ball, {"value": 100}), 90.0))
 	_assert("V1c clamp 下限: 1×1.5→min 15", is_equal_approx(PrimitivesA.compute_value(d_ball, {"value": 1}), 15.0))
 	_assert("V1d 缺参数回落 value_min", is_equal_approx(PrimitivesA.compute_value(d_ball, {}), 15.0))
