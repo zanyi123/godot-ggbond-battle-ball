@@ -22,6 +22,8 @@ func _run() -> void:
 	root.add_child(caster)
 	var victim: CharacterBody2D = load("res://scripts/battle/player.gd").new()
 	victim.team = "b"
+	victim.attack_power = 50.0   # dot 的 attack_mult=有效攻击/attack_power，0 会 0/0=NaN 污染 stamina
+	victim.defense = 20.0
 	root.add_child(victim)
 	await process_frame
 	var roster: Array[Node] = [caster, victim]
@@ -72,6 +74,67 @@ func _run() -> void:
 	var c5: int = handler.consume_hit_tags(cid, victim)
 	await process_frame
 	_assert("⑥: 过期标签不消费/新标签正常（TTL 生效）", c5 == 1 and victim.is_status_active("rooted") and victim.get_mark_count("frost") == 1)
+
+	# ===== 22-2 on-hit 矩阵：11 条逐条"暂存→消费→按各自落地方式断言"（2026-09-27 工单）=====
+	# 每条独立轮：登记（无目标→暂存）→consume 到 victim→真行为断言→复位
+	var matrix := {
+		"player_mark_apply": {"params": {"mark_id": "m1", "max_stacks": 3, "duration": 5.0},
+			"check": func(): return victim.get_mark_count("m1") >= 1, "reset": func(): victim.clear_mark("m1")},
+		"player_move_slow": {"params": {"multiplier": 1.4, "duration": 3.0},
+			"check": func(): return victim._get_effective_value("speed", victim.speed) < victim.speed,
+			"reset": func(): victim.turn_off_light("speed_down")},
+		"player_stun": {"params": {"duration": 2.0},
+			"check": func(): return victim.is_status_active("stunned"), "reset": func(): victim.turn_off_light("stunned")},
+		"player_root": {"params": {"duration": 2.0},
+			"check": func(): return victim.is_status_active("rooted"), "reset": func(): victim.turn_off_light("rooted")},
+		"player_heal_block": {"params": {"duration": 3.0},
+			"check": func(): return victim.heal(30.0) == 0.0,
+			"reset": func(): victim.turn_off_light("heal_block")},
+		"player_energy_block": {"params": {"duration": 3.0},
+			"check": func():
+				var e0: float = victim.spirit_energy
+				victim._tick_all_timers(1.0)   # 回能 tick（真函数）：灯亮时不回复（+delta 被拦）
+				return victim.spirit_energy == e0,
+			"reset": func(): victim.turn_off_light("energy_block")},
+		"player_hp_dot": {"params": {"value": 6.0, "duration": 3.0},
+			"check": func():
+				var h0: float = victim.stamina
+				victim._tick_all_timers(0.5)
+				return victim.stamina < h0,
+			"reset": func(): victim.turn_off_light("hp_dot")},
+		"player_vulnerable": {"params": {"multiplier": 1.5, "duration": 3.0},
+			"check": func():
+				var d1: float = float(victim.take_damage(100.0, null, "")["damage"])
+				victim.turn_off_light("vulnerable")
+				var d2: float = float(victim.take_damage(100.0, null, "")["damage"])
+				return d1 > d2,
+			"reset": func(): pass},
+		"player_disarm": {"params": {"duration": 3.0},
+			"check": func(): return victim.is_status_active("disarmed"),
+			"reset": func(): victim.turn_off_light("disarmed")},
+		"player_reveal": {"params": {"duration": 3.0},
+			"pre": func(): victim.turn_on_light("stealthed", 10.0),
+			"check": func(): return not victim.is_status_active("stealthed"),   # reveal 落地=清隐身（既有实现：群体显形不点灯）
+			"reset": func(): pass},
+		"player_silence": {"params": {"duration": 2.0},
+			"check": func(): return victim.is_status_active("silenced"), "reset": func(): victim.turn_off_light("silenced")},
+	}
+	for tag_id in matrix:
+		var spec: Dictionary = matrix[tag_id]
+		if spec.has("pre"):
+			spec["pre"].call()
+		handler._do_apply_tag(str(tag_id), spec["params"], cid)
+		await process_frame
+		var consumed_n: int = handler.consume_hit_tags(cid, victim)
+		await process_frame
+		var ok: bool = bool(spec["check"].call())
+		_assert("矩阵 %s: 消费=%d 落地断言" % [tag_id, consumed_n], consumed_n == 1 and ok)
+		if spec.has("reset"):
+			spec["reset"].call()
+		# 复位生命（vulnerable 对比伤害可能致死，防污染下一条）
+		victim.is_defeated = false
+		victim.stamina = victim.max_stamina
+		await process_frame
 
 	print("\n========== 结果: %d/%d PASS ==========" % [_pass, _pass + _fail])
 	if _fail > 0:
