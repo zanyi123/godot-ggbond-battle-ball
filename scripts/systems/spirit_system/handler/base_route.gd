@@ -43,6 +43,12 @@ var priority_queue_enabled: bool = true
 # 球的临时修饰符准备区（2026-09-19 Step2：按投球者隔离+有效期，修全局串味/覆盖/无期限）
 # 每个 caster 一张纸；写入带 expires_at（比赛时钟，无 duration=投球前不过期）；投球取走即清
 var _ball_mods_by_caster: Dictionary = {}   # {caster_id: mods_dict}
+
+## 命中传递管线（2026-09-27 修复"印记挂自己"缺陷）：on-hit 类标签（registry on_hit=true）
+## 释放时不立即执行，暂存施法者随球区 → 球命中敌人时以被命中者为目标消费 → 球停/回收/超时清空
+var _pending_hit_tags: Dictionary = {}   # {caster_id: {tag_id: {params, expires}}}
+var _consuming_hit: bool = false         # consume 期间的再入守卫（消费时 on-hit 标签直接执行不再分流）
+const HIT_TAGS_TTL: float = 8.0          # 随球有效期（秒）：防止上一球的标签污染下一球
 var _last_ball_caster: int = -1             # 最近写入者（兼容旧 getter 视图）
 var _match_clock: float = 0.0               # 比赛时钟（_process 累计，time_scale/暂停自动同步）
 
@@ -328,6 +334,12 @@ func _get_element_color(element: String) -> Color:
 
 ## 获取目标球员列表
 func _get_player_targets(params: Dictionary, caster_id: int) -> Array:
+	# 命中传递优先（球打中谁就作用于谁）：params 带 _hit_victim_id 时无视 target 模式
+	if params.has("_hit_victim_id"):
+		var hv := _get_caster(int(params["_hit_victim_id"]))
+		if hv:
+			return [hv]
+		return []
 	var target_mode: String = str(params.get("target", "self"))
 	var caster := _get_caster(caster_id)
 	var result: Array = []
@@ -342,6 +354,11 @@ func _get_player_targets(params: Dictionary, caster_id: int) -> Array:
 			for p in players:
 				if p and is_instance_valid(p) and p.team == caster.team and not p.is_defeated:
 					result.append(p)
+		"_hit_victim":
+			var vid := int(params.get("_hit_victim_id", -1))
+			var victim := _get_caster(vid)   # 通用按 id 查名册
+			if victim:
+				result.append(victim)
 		"nearest_enemy":
 			var nearest := _get_nearest_enemy(caster)
 			if nearest:
@@ -387,6 +404,34 @@ func _get_all_enemies(caster: CharacterBody2D) -> Array:
 
 
 
+## 命中传递：球命中敌人 → 以被命中者为目标消费施法者随球标签（印记/减速/眩晕…）
+func consume_hit_tags(caster_id: int, victim: CharacterBody2D) -> int:
+	if not _pending_hit_tags.has(caster_id):
+		return 0
+	var consumed: int = 0
+	var tags: Dictionary = _pending_hit_tags[caster_id]
+	_consuming_hit = true
+	for tag_id in tags.keys():
+		var item: Dictionary = tags[tag_id]
+		if _match_clock >= float(item.get("expires", 0.0)):
+			continue
+		var p2: Dictionary = item["params"].duplicate(true)
+		p2["_hit_victim_id"] = victim.get_instance_id()
+		var r: Dictionary = _do_apply_tag(str(tag_id), p2, caster_id)
+		if bool(r.get("success", false)):
+			consumed += 1
+	_consuming_hit = false
+	_pending_hit_tags.erase(caster_id)   # 一次性消费（一球一清，防重复）
+	print("[TagEffect] 命中传递: 消费 %d 个随球标签 → %s" % [consumed, str(victim.char_data.get("name", "?"))])
+	return consumed
+
+
+## 命中传递：球停/回收/超时 → 清空随球区（未命中不残留）
+func clear_hit_tags(caster_id: int) -> void:
+	if _pending_hit_tags.erase(caster_id) :
+		print("[TagEffect] 随球标签清空: caster=%d" % caster_id)
+
+
 func apply_tag_effect(tag_id: String, params: Dictionary, caster_id: int) -> Dictionary:
 	"""标签效果入口:启用队列时入队,否则直接执行"""
 	if priority_queue_enabled and not _pending_tags.is_empty():
@@ -405,6 +450,22 @@ func apply_tag_effect(tag_id: String, params: Dictionary, caster_id: int) -> Dic
 func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictionary:
 	"""实际执行标签效果(原 match 逻辑)"""
 	print("[TagEffect] 执行标签: %s params=%s" % [tag_id, params])
+
+	# 命中传递分流：on-hit 标签（registry on_hit=true）且无明确目标 → 暂存施法者随球区；
+	# 立即执行例外：①消费期 _consuming_hit ②球命中注入 _hit_victim_id ③选人技带具体目标
+	# （POINT 技/AI 选人 _target_data.target_player_id——冰封粒子类直接作用于选中目标）
+	var _td: Dictionary = params.get("_target_data", {})
+	var _has_explicit_target: bool = params.has("_hit_victim_id") or _td.has("target_player_id")
+	if not _consuming_hit and not _has_explicit_target:
+		var reg: Dictionary = {}
+		if Engine.get_main_loop() != null and (Engine.get_main_loop() as SceneTree).root.has_node("DataManager"):
+			reg = (Engine.get_main_loop() as SceneTree).root.get_node("DataManager").get_tag_by_id(tag_id)
+		if bool(reg.get("on_hit", false)):
+			if not _pending_hit_tags.has(caster_id):
+				_pending_hit_tags[caster_id] = {}
+			_pending_hit_tags[caster_id][tag_id] = {"params": params.duplicate(true), "expires": _match_clock + HIT_TAGS_TTL}
+			print("[TagEffect] on-hit 标签随球暂存: %s (caster=%d, TTL=%.0fs)" % [tag_id, caster_id, HIT_TAGS_TTL])
+			return {"success": true, "tag_id": tag_id, "on_hit_pending": true}
 
 	var success := false
 

@@ -99,8 +99,11 @@ func _run() -> void:
 	var mark_params := {"mark_id": "healmark", "max_stacks": 2, "duration": 5.0,
 		"threshold_count": 2, "threshold_tag": "player_hp_heal_flat",
 		"threshold_params": {"value": 30.0}, "clear_on_trigger": true, "target": "self"}
-	handler._do_apply_tag("player_mark_apply", mark_params.duplicate(), hr.get_instance_id())
-	handler._do_apply_tag("player_mark_apply", mark_params.duplicate(), hr.get_instance_id())
+	# 2026-09-27 命中传递语义后：印记带明确目标（_target_data）=POINT 选人路径，立即执行
+	var mark_td: Dictionary = mark_params.duplicate()
+	mark_td["_target_data"] = {"target_player_id": hr.get_instance_id()}
+	handler._do_apply_tag("player_mark_apply", mark_td, hr.get_instance_id())
+	handler._do_apply_tag("player_mark_apply", mark_td.duplicate(true), hr.get_instance_id())
 	await process_frame
 	_assert("印记阈值端到端: 2层触发 heal_flat(40→70)", absf(hr.stamina - 70.0) < 0.01 and hr.get_mark_count("healmark") == 0)
 

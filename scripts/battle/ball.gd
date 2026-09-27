@@ -528,6 +528,11 @@ func _on_body_entered(body: Node2D) -> void:
 	var effect: String = result.get("effect", "none")
 	ball_hit_player.emit(player, actual_damage)
 
+	# 命中传递（2026-09-27 修复"印记挂自己"）：随球 on-hit 标签以被命中者为目标消费
+	if tag_effect_handler:
+		tag_effect_handler.consume_hit_tags(
+			attacker_player.get_instance_id() if attacker_player else -1, player)
+
 	# 波6 #18 带人位移：命中结算附加拖拽（免控目标在 player 侧拒绝）
 	var pull_speed: float = float(ball_mods.get("carry_pull_speed", 0.0))
 	if pull_speed > 0.0 and actual_damage > 0 and player.has_method("begin_carry_push"):
@@ -670,6 +675,9 @@ func _on_ball_stopped() -> void:
 	_set_idle_visual()
 	# V1-3 停球钩子：落点/停点生成区域类技能消费（含首触地兜底）
 	_emit_stop_hooks()
+	# 命中传递：未命中耗尽 → 清空随球区（不残留到下一球）
+	if tag_effect_handler and attacker_player:
+		tag_effect_handler.clear_hit_tags(attacker_player.get_instance_id())
 
 	# === 球落地前，检查附近60px内是否有球员 ===
 	var all_players := _get_all_players_array()
@@ -1298,6 +1306,9 @@ func _stop_and_return() -> void:
 	_set_idle_visual()
 	# V1-3 停球钩子（内场停止/耗尽路径；含首触地兜底）
 	_emit_stop_hooks()
+	# 命中传递：停球回手 → 清空随球区
+	if tag_effect_handler and attacker_player:
+		tag_effect_handler.clear_hit_tags(attacker_player.get_instance_id())
 	if attacker_player and is_instance_valid(attacker_player):
 		return_to_player(attacker_player)
 

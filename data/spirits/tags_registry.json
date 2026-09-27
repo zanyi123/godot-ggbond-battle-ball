@@ -885,7 +885,8 @@
 				"duration"
 			],
 			"target_type": "player",
-			"energy_cost": 0
+			"energy_cost": 0,
+			"on_hit": true
 		},
 		{
 			"id": "player_stealth",
@@ -914,7 +915,8 @@
 				"block"
 			],
 			"target_type": "player",
-			"energy_cost": 0
+			"energy_cost": 0,
+			"on_hit": true
 		},
 		{
 			"id": "player_energy_block",
@@ -928,7 +930,8 @@
 				"duration"
 			],
 			"target_type": "player",
-			"energy_cost": 0
+			"energy_cost": 0,
+			"on_hit": true
 		},
 		{
 			"id": "player_damage_reflect",
@@ -1042,7 +1045,8 @@
 				"target"
 			],
 			"target_type": "player",
-			"energy_cost": 0
+			"energy_cost": 0,
+			"on_hit": true
 		},
 		{
 			"id": "player_combo_ready",
@@ -1079,7 +1083,8 @@
 				"duration"
 			],
 			"target_type": "player",
-			"energy_cost": 0
+			"energy_cost": 0,
+			"on_hit": true
 		},
 		{
 			"id": "player_hp_heal_pct",
@@ -1171,7 +1176,8 @@
 				"target"
 			],
 			"target_type": "player",
-			"energy_cost": 0
+			"energy_cost": 0,
+			"on_hit": true
 		},
 		{
 			"id": "player_move_slow",
@@ -1186,7 +1192,8 @@
 				"duration"
 			],
 			"target_type": "player",
-			"energy_cost": 0
+			"energy_cost": 0,
+			"on_hit": true
 		},
 		{
 			"id": "player_move_boost",
@@ -1217,7 +1224,8 @@
 			],
 			"target_type": "player",
 			"energy_cost": 0,
-			"params_note": ""
+			"params_note": "",
+			"on_hit": true
 		},
 		{
 			"id": "player_unroot",
@@ -1471,7 +1479,8 @@
 				"duration"
 			],
 			"target_type": "player",
-			"energy_cost": 0
+			"energy_cost": 0,
+			"on_hit": true
 		},
 		{
 			"id": "player_cc_immune",
@@ -1499,7 +1508,8 @@
 				"duration"
 			],
 			"target_type": "player",
-			"energy_cost": 0
+			"energy_cost": 0,
+			"on_hit": true
 		},
 		{
 			"id": "player_disarm",
@@ -1513,7 +1523,8 @@
 				"duration"
 			],
 			"target_type": "player",
-			"energy_cost": 0
+			"energy_cost": 0,
+			"on_hit": true
 		},
 		{
 			"id": "player_teleport",
