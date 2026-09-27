@@ -66,6 +66,12 @@ func _restore_switches() -> void:
 	RegistryScript.reload_switches(SWITCHES_REAL)
 
 
+func _pv(tbl: Dictionary, tag: String, param: String, raw: float) -> float:
+	## 期望计价从描述符 JSON 推导（15号定价校准后写死数值会失配；clamp 同 compute_value）
+	var dd: Dictionary = tbl[tag]
+	return clampf(raw * float(dd["value_unit"]), float(dd["value_min"]), float(dd["value_cap"]))
+
+
 func _make_manager() -> Node:
 	var sam = load("res://scripts/battle/spirit_ai_manager.gd").new()
 	sam.ai_manager = null
@@ -90,7 +96,8 @@ func _run() -> void:
 	_write_switches("{\"master_enabled\": true, \"waves\": {\"A\": true}}")
 	var entry: Dictionary = RegistryScript.get_descriptor_entry("ball_dmg_up_pct")
 	_check(not entry.is_empty() and str(entry.get("wave", "")) == "A", "S3 开波A后 entry 命中且 wave=A")
-	_check(str(entry.get("descriptor", {}).get("timing_gate", "")) == "ball_hold_engage", "S4 entry.descriptor 内容正确")
+	var desc_a: Dictionary = (JSON.parse_string(FileAccess.get_file_as_string("res://data/systems/spirit_ai/primitives_a.json")) as Dictionary)["descriptors"] as Dictionary
+	_check(str(entry.get("descriptor", {}).get("timing_gate", "")) == str((desc_a["ball_dmg_up_pct"] as Dictionary)["timing_gate"]), "S4 entry.descriptor 内容正确(与JSON一致)")
 	_check(not RegistryScript.get_descriptor("ball_dmg_up_pct").is_empty(), "S5 get_descriptor 与 entry 口径一致")
 
 	_write_switches("{\"master_enabled\": true, \"waves\": {\"B\": true}}")
@@ -112,20 +119,24 @@ func _run() -> void:
 
 	_write_switches("{\"master_enabled\": true, \"waves\": {\"A\": true}}")
 	var v1: float = sam._compute_base_value(["on_ball"] as Array[String], {"ball_dmg_up_pct": {"value": 30.0}}, 20, 10.0)
-	_check(is_equal_approx(v1, 45.0), "V3 波A命中：30×1.5=45(权重1) 实测%.4f" % v1)
+	_check(is_equal_approx(v1, _pv(desc_a, "ball_dmg_up_pct", "value", 30.0)), "V3 波A命中：params×unit(clamp) 权重1 实测%.4f" % v1)
 	var v2: float = sam._compute_base_value(["on_ball"] as Array[String], {"ball_dmg_up_pct": {"value": 100.0}}, 20, 10.0)
-	_check(is_equal_approx(v2, 90.0), "V4 clamp上限：100×1.5=150→cap90 实测%.4f" % v2)
+	_check(is_equal_approx(v2, float((desc_a["ball_dmg_up_pct"] as Dictionary)["value_cap"])), "V4 clamp上限：100×unit→value_cap 实测%.4f" % v2)
 	var v3: float = sam._compute_base_value(["on_ball"] as Array[String], {"ball_dmg_up_pct": {}}, 20, 10.0)
-	_check(is_equal_approx(v3, 15.0), "V5 缺参数回落 value_min=15 实测%.4f" % v3)
+	_check(is_equal_approx(v3, float((desc_a["ball_dmg_up_pct"] as Dictionary)["value_min"])), "V5 缺参数回落 value_min 实测%.4f" % v3)
 	var v4: float = sam._compute_base_value(["on_ball"] as Array[String], {"ball_dmg_up_pct": {"value": 30.0}, "ball_speed_up_pct": {"multiplier": 1.4}}, 25, 8.0)
-	_check(is_equal_approx(v4, 60.9), "V6 双标签权重0.7：(45+42)×0.7=60.9 实测%.4f" % v4)
+	var v6_exp: float = (_pv(desc_a, "ball_dmg_up_pct", "value", 30.0) + _pv(desc_a, "ball_speed_up_pct", "multiplier", 1.4)) * 0.7
+	_check(is_equal_approx(v4, v6_exp), "V6 双标签权重0.7：逐标签clamp和×0.7(=%.2f) 实测%.4f" % [v6_exp, v4])
 	# 部分覆盖：C 未开时 ball_range_up 按未知标签缺省 10 计
 	var v5: float = sam._compute_base_value(["on_ball"] as Array[String], {"ball_dmg_up_pct": {"value": 20.0}, "ball_range_up": {"damage_pct": 10.0}}, 20, 10.0)
-	_check(is_equal_approx(v5, 28.0), "V7 部分覆盖：A命中30+未命中10 → 40×0.7=28 实测%.4f" % v5)
+	var v7_exp: float = (_pv(desc_a, "ball_dmg_up_pct", "value", 20.0) + 10.0) * 0.7
+	_check(is_equal_approx(v5, v7_exp), "V7 部分覆盖：A命中+未命中缺省10 → ×0.7(=%.2f) 实测%.4f" % [v7_exp, v5])
 	# 混合波（A+B 同技能，冰雪_1 同参）：dmg_down 20×0.8=16 + move_slow 1.5×10=15 → 31×0.7=21.7
 	_write_switches("{\"master_enabled\": true, \"waves\": {\"A\": true, \"B\": true}}")
+	var desc_b: Dictionary = (JSON.parse_string(FileAccess.get_file_as_string("res://data/systems/spirit_ai/primitives_b.json")) as Dictionary)["descriptors"] as Dictionary
 	var v6: float = sam._compute_base_value(["on_player", "on_ball"] as Array[String], {"ball_dmg_down_pct": {"value": 20.0}, "player_move_slow": {"multiplier": 1.5, "duration": 3.0}}, 22, 9.0)
-	_check(is_equal_approx(v6, 21.7), "V8 A+B混合波逐标签分发：(16+15)×0.7=21.7 实测%.4f" % v6)
+	var v8_exp: float = (_pv(desc_a, "ball_dmg_down_pct", "value", 20.0) + _pv(desc_b, "player_move_slow", "multiplier", 1.5)) * 0.7
+	_check(is_equal_approx(v6, v8_exp), "V8 A+B混合波逐标签分发：逐标签clamp和×0.7(=%.2f) 实测%.4f" % [v8_exp, v6])
 
 	# ===== G 组：闸门 OR 语义与 bonus 取大 =====
 	print("[G] 时机闸门")

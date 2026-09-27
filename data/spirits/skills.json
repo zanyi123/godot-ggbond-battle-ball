@@ -179,7 +179,20 @@
 			"icon_path": "",
 			"id": "skill_草木_2",
 			"name": "荆棘庇佑",
-			"tag_params": {},
+			"tag_params": {
+				"field_obs_add": {
+					"shape": "rect",
+					"width": 120.0,
+					"height": 24.0,
+					"hp": 240.0,
+					"duration": 10.0,
+					"attack_consume_rate": 10.0,
+					"speed_consume_rate": 30.0,
+					"max_count": 2.0,
+					"mouse_ops": 1.0,
+					"element": "草木"
+				}
+			},
 			"tags": [
 				"field_obs_add"
 			],

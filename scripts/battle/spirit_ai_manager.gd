@@ -2,6 +2,14 @@ extends Node
 
 const AIProfile = preload("res://scripts/battle/ai_profile.gd")
 
+# ⚠ 场地方位领域知识（主人裁定 2026-09-27 永久注释，历史上多次搞混——防再混）：
+# 决竞球没有球门（得分=击中球员）。GOAL_A/GOAL_B 实为「外场方向锚点」，交叉布局：
+#   GOAL_A=(300,0)=a 队外场锚——a 队内场在左(x≤0)，但 a 队流放外场在右侧（对方内场背后，
+#   环带布局；见 field_zone.start_field_transition：流放区 a=右外场、b=左外场）；
+#   GOAL_B=(-300,0)=b 队外场锚，镜像对称。
+# 消费语义：防守提醒/保护站位/放置朝向中的 GOAL_X =「X 队自己的后方（外场）方向」，设计如此。
+# 勿按"球门/方向反了"修（2026-09-27 曾误判方向反了，主人纠正；此前也有搞混史）。
+## （双份定义暂存：合一迁移待批，见16号工单）
 const GOAL_A: Vector2 = Vector2(300.0, 0.0)
 const GOAL_B: Vector2 = Vector2(-300.0, 0.0)
 
@@ -1765,7 +1773,12 @@ func _execute_skill(sad: Dictionary, skill_info: Dictionary) -> void:
 		target_data["target_player_id"] = target.get_instance_id()
 		target_data["target_position"] = target.global_position
 	if skill_info.get("has_field_tag", false):
-		target_data["field_position"] = field_pos
+		# Q12直生+止血阀（Q14备案 2026-09-27）：field_position 仅在波D开启时下发——
+		# AI 墙/区域落地随波D能力开启（彼时放置语义=波D六意图），全关世界维持无墙锚定
+		# （实测全关直生墙入世=卡死2/8/1+seed1传球率11.1%，故挂开关走08止血阀语义）；
+		# 不下发时 handler 直生分支无坐标自动回退鼠标路径（=Q12前"白放"世界，玩家路径零影响）
+		if SpiritAIPrimitiveRegistry.is_wave_enabled("D"):
+			target_data["field_position"] = field_pos
 	
 	var success = spirit_system.use_skill(p.get_instance_id(), skill_info["skill_id"], target_data)
 

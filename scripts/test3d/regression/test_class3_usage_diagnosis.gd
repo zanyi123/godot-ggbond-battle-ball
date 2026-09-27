@@ -154,11 +154,14 @@ func _run() -> void:
 	var route_src := FileAccess.get_file_as_string("res://scripts/systems/spirit_system/handler/field_route.gd")
 	var placer_src := FileAccess.get_file_as_string("res://scripts/battle/field_zone_placer.gd")
 	var trigger_src := FileAccess.get_file_as_string("res://scripts/systems/spirit_system/spirit_skill_trigger.gd")
-	_check(route_src.contains("manager.start_placing(params, mouse_ops)"), "C1 field_obs_add 路由=start_placing（鼠标交互放置模式）")
-	_check(not route_src.contains("_target_data"), "C2 field_route 全文零 _target_data 消费（AI 传入 field_position 被丢弃）")
-	_check(placer_src.contains("MOUSE_BUTTON_LEFT") and placer_src.contains("_on_left_click"), "C3 placer 仅鼠标左键生成障碍（AI 无鼠标=永不落地）")
-	_check(trigger_src.contains("params[\"_target_data\"] = target_data"), "C4 trigger 注入 _target_data（数据到 handler 即断）")
-	_check(route_src.contains("spawn_at == \"ball_land\""), "C5 zone_danger 有 ball_land 自动路径（雷火_4 不受 C1-C3 影响）")
+	# 2026-09-27 Q12 批复实施（主人批）：C1/C2 由"断裂诊断"翻转为修复后语义——
+	# AI 链直生（_target_data.field_position → create_obstacle/create_zone 同管线），无坐标回退鼠标路径
+	_check(route_src.contains("_ai_direct_place_field") and route_src.contains("AI直生障碍"), "C1(Q12修复) field_obs_add 有 AI 直生分支（field_position→create_obstacle）")
+	_check(route_src.contains("params.get(\"_target_data\", {})") and route_src.contains("create_zone"), "C2(Q12修复) field_route 消费 _target_data + 区域直生 create_zone")
+	_check(route_src.contains("manager.start_placing(params, mouse_ops)"), "C3 无坐标回退鼠标路径保留（玩家零影响）")
+	_check(placer_src.contains("MOUSE_BUTTON_LEFT") and placer_src.contains("_on_left_click"), "C4 placer 左键=玩家放置路径不变")
+	_check(trigger_src.contains("params[\"_target_data\"] = target_data"), "C5 trigger 注入 _target_data（数据链贯通）")
+	_check(route_src.contains("spawn_at == \"ball_land\""), "C6 zone_danger 保留 ball_land 自动路径（雷火_4 不受直生影响）")
 
 	# ===== 能量环（嫌疑d）=====
 	print("[漏斗4] 能量/冷却")
@@ -173,12 +176,10 @@ func _run() -> void:
 	RegistryScript.reload_switches(SWITCHES_REAL)
 	print("\n========== 诊断结论锚点：%d 通过 / %d 失败 ==========" % [_pass, _fail])
 	print("""
-【诊断结论（证据链）】
-  根因=c 放置流断裂：AI 决策面畅通（计价/闸门/能量全部无卡口，F1~F5），
-  use_skill 返回成功并进鼠标放置模式，但 placer 只认鼠标左键（C3），
-  handler 全文不消费 _target_data.field_position（C2）→ AI 放墙/清除类必然永不落地。
-  旁证：雷火_4 走 spawn_at=ball_land 自动路径（C5），预期 sim 有释放记录。
-  修复方向（待规划窗口确认）：AI 非交互放置路径——field_position 经 _target_data
-  传入时直接生成（跳过鼠标模式），落点用 manager.create/直接构造，1-3 文件内闭环。
+【诊断结论（2026-09-27 Q12 批复后更新）】
+  原根因=c 放置流断裂（决策面全通、执行链鼠标模式 AI 永不落地）——已按 Q12 预案a修复：
+  field_route 消费 _target_data.field_position 直生（同 create_obstacle/create_zone 管线），
+  无坐标回退鼠标路径（玩家零影响）；草木_2 tag_params 数据补全（计价踩线同步消除）。
+  本套件现为回归仪器：漏斗四环+执行链六锚点，任一翻转=放置流回归。
 """)
 	quit(1 if _fail > 0 else 0)

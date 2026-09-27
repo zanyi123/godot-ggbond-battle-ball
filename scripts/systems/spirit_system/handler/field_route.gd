@@ -3,8 +3,31 @@ extends "res://scripts/systems/spirit_system/handler/player_route.gd"
 
 ## ==================== 对场地效果 (预留) ====================
 
+## Q12（11号工单"AI放置数据链补齐"，主人批 2026-09-27）：AI 直生分支。
+## AI 施法经 _execute_skill 携带 _target_data.field_position（经 trigger 注入 params._target_data），
+## 但 AI 无鼠标——原 start_placing 鼠标放置模式对 AI 永不落地（白放白烧能）。
+## 有坐标 → 直接生成（与玩家左键同一 create_obstacle/create_zone 管线）；无坐标 → 原鼠标路径不变。
+## 返回 true=直生已处理；false=走调用方原鼠标路径
+func _ai_direct_place_field(params: Dictionary, manager) -> bool:
+	var target_data: Dictionary = params.get("_target_data", {})
+	var ai_pos: Variant = target_data.get("field_position", null)
+	if not (ai_pos is Vector2):
+		return false
+	if manager == null or not manager.has_method("create_obstacle"):
+		return false
+	if params.has("obstacle_script"):
+		manager.create_obstacle(params, ai_pos, 0.0, str(params["obstacle_script"]))
+	else:
+		manager.create_obstacle(params, ai_pos)
+	print("[TagEffectHandler] AI直生障碍: pos=%s shape=%s hp=%.0f%s" % [
+		str(ai_pos), str(params.get("shape", "rect")), float(params.get("hp", 50.0)),
+		(" script=" + str(params.get("obstacle_script")) if params.has("obstacle_script") else "")
+	])
+	return true
+
+
 func _apply_field_obs_add(params: Dictionary) -> void:
-	"""创造障碍标签：进入鼠标放置模式"""
+	"""创造障碍标签：AI 直生 / 玩家进鼠标放置模式"""
 	var manager = _get_obstacle_manager()
 	if not manager:
 		push_error("[TagEffectHandler] 找不到 ObstacleManager")
@@ -23,6 +46,10 @@ func _apply_field_obs_add(params: Dictionary) -> void:
 	var caster_node = _get_caster(params.get("caster_id", 0))
 	if caster_node:
 		params["caster_position"] = caster_node.global_position
+
+	# Q12 AI直生：field_position 有坐标直接生成，跳过鼠标模式
+	if _ai_direct_place_field(params, manager):
+		return
 
 	var mouse_ops: int = int(params.get("mouse_ops", 1))
 	manager.start_placing(params, mouse_ops)
@@ -51,6 +78,10 @@ func _apply_field_drain_wall(params: Dictionary, caster_id: int) -> void:
 	if caster_node:
 		params["caster_position"] = caster_node.global_position
 	params["obstacle_script"] = "res://scripts/battle/drain_wall.gd"
+
+	# Q12 AI直生：field_position 有坐标直接生成（create_obstacle 内部走 setup_drain 注入）
+	if _ai_direct_place_field(params, manager):
+		return
 
 	var mouse_ops: int = int(params.get("mouse_ops", 1))
 	manager.start_placing(params, mouse_ops)
@@ -129,6 +160,20 @@ func _apply_field_zone_effect(params: Dictionary, zone_type: int) -> void:
 		return
 
 	var zone_params := _build_zone_params(params, zone_type)
+
+	# Q12 AI直生：field_position 有坐标直接生成区域（与 placer 左键同走 create_zone 管线；
+	# spawn_at 落点路径已在上方短路，此处兜无 spawn_at 的 AI 区域技）
+	var target_data: Dictionary = params.get("_target_data", {})
+	var ai_pos: Variant = target_data.get("field_position", null)
+	if ai_pos is Vector2:
+		manager.create_zone(zone_params, ai_pos)
+		var type_names_ai: Array = ["加速区", "减速区", "危险区", "安全区"]
+		print("[TagEffectHandler] AI直生区域: %s pos=%s size=%.0f×%.0f dur=%.1fs" % [
+			type_names_ai[zone_type], str(ai_pos), float(zone_params["width"]),
+			float(zone_params["height"]), float(zone_params["duration"])
+		])
+		return
+
 	var mouse_ops: int = int(params.get("mouse_ops", 1))
 	manager.start_placing(zone_params, mouse_ops)
 
