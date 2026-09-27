@@ -1,0 +1,20 @@
+{
+	"schema_version": 2,
+	"test_spirits": [
+		{
+			"id": "test_spirit_wave_e",
+			"name": "波E实证的元灵",
+			"element": "梦幻",
+			"skills": ["skill_e2e_we_teleport", "skill_e2e_we_copy", "skill_e2e_we_illusion", "skill_e2e_we_terra", "skill_e2e_we_vision"]
+		}
+	],
+	"loadouts": [
+		{ "slot": "A0", "character_id": "char_001", "spirit_id": "波E实证的元灵", "skills": ["skill_e2e_we_teleport"] },
+		{ "slot": "A1", "character_id": "char_002", "spirit_id": "波E实证的元灵", "skills": ["skill_e2e_we_copy"] },
+		{ "slot": "A2", "character_id": "char_003", "spirit_id": "波E实证的元灵", "skills": ["skill_e2e_we_vision"] },
+		{ "slot": "B0", "character_id": "char_004", "spirit_id": "波E实证的元灵", "skills": ["skill_e2e_we_terra"] },
+		{ "slot": "B1", "character_id": "char_005", "spirit_id": "波E实证的元灵", "skills": ["skill_e2e_we_copy"] },
+		{ "slot": "B2", "character_id": "char_006", "spirit_id": "波E实证的元灵", "skills": ["skill_e2e_we_illusion"] }
+	],
+	"_说明": "19工单任务B 波E实证装载模板（平台窗口）。与主配置 test_loadouts.json（麒麟队/工单12）互斥使用：跑平台时加 --platform-loadout=res://data/systems/spirit_ai/test_loadouts_wave_e.json。验收口径（19§二）：teleport/copy/illusion 三独立实证项出手+效果落地（探针信号判定非肉眼）；terra=handler 空壳另核上报；vision=zone 查询观察项。复制技双载（A1/B1）提高敌方快照命中率。"
+}

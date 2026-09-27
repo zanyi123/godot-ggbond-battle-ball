@@ -30,6 +30,15 @@ var _cast_times: Dictionary = {}      # skill_id -> Array[float]（释放时刻�
 var trio_window: float = 5.0          # 合击同窗秒数（麒麟火 ±N 秒内的三味真火计数）
 var _team_combo_available: bool = false  # 11工单一期 tracker 是否在位（探活守卫，落地自动激活）
 var team_combo_events: Array = []     # [{t, combo_id, members_desc}]（team_combo_formed 信号采集）
+# —— 19工单任务B：波E实证采集 ——
+var we_applicable: bool = false       # 装载含波E技时才启用相关判定（不污染其他配置的 verdict）
+var we_teleport_casts: int = 0
+var we_teleport_confirmed: int = 0    # 施放后 1.5s 内位移>120px = 效果落地
+var we_copy_events: int = 0           # SKILL_COPIED 事件数
+var we_illusion_peak: int = 0         # 幻象在场峰值
+var we_vision_zone_seen: bool = false # VISION 区(5) 在场
+var _teleport_pending: Array = []     # [{t, player, from}]等待位移确认
+var _pos_poll_accum: float = 0.0
 
 # 工单12 关注技能（打印美化用；未列出也照常采集）
 const WATCH_SKILLS := {
@@ -38,6 +47,17 @@ const WATCH_SKILLS := {
 	"skill_金刚_2": "装甲半装",
 	"skill_金刚_3": "炮击半装",
 	"skill_大地_3": "祖传秘法",
+}
+
+# 19工单任务B：波E实证关注技能（e2e_ 测试技；探测=信号/状态查询，非肉眼）
+const BattleEventBusScript = preload("res://scripts/systems/event_bus/event_bus.gd")
+
+const WATCH_WAVE_E := {
+	"skill_e2e_we_teleport": "传送",
+	"skill_e2e_we_copy": "复制",
+	"skill_e2e_we_illusion": "幻影",
+	"skill_e2e_we_terra": "地形",
+	"skill_e2e_we_vision": "迷雾",
 }
 
 
@@ -81,6 +101,22 @@ func setup(battle_manager: Node2D) -> void:
 		print("[Probe] 团队合击 tracker 未在位（11工单一期落地后自动接入）")
 
 	print("[Probe] 检测层已挂接：释放(skill_used) + 印记(mark_changed) + 合体(combo_formed/broken)")
+
+	# —— 19工单任务B：波E实证挂接 ——
+	for player in bm.team_a_players + bm.team_b_players:
+		if player == null or not is_instance_valid(player):
+			continue
+		for sid in player.get_equipped_skills():
+			if WATCH_WAVE_E.has(str(sid)):
+				we_applicable = true
+	if we_applicable:
+		var bus: Node = get_tree().get_first_node_in_group("battle_event_bus")
+		if bus != null and bus.has_method("subscribe"):
+			bus.subscribe(BattleEventBusScript.GameEvent.SKILL_COPIED, _on_we_skill_copied)
+			print("[Probe] 波E实证：SKILL_COPIED 事件已订阅")
+		print("[Probe] 波E实证：已启用（装载含波E技 %d 项）" % WATCH_WAVE_E.size())
+	else:
+		print("[Probe] 波E实证：未启用（装载不含波E技）")
 
 
 func _find_state_manager(root_node: Node) -> Node:
@@ -142,6 +178,32 @@ func _process(delta: float) -> void:
 							_factor_stats[sid][k] = int(_factor_stats[sid].get(k, 0)) + 1
 					if not bool(sam._should_use_energy(sad, info, 100.0)):
 						_factor_stats[sid]["energy"] = int(_factor_stats[sid].get("energy", 0)) + 1
+	# 波E轮询（独立0.5s）：传送位移确认 / 幻象峰值 / 迷雾区在场
+	_pos_poll_accum += delta
+	if we_applicable and _pos_poll_accum >= 0.5:
+		_pos_poll_accum = 0.0
+		var still_pending: Array = []
+		for entry in _teleport_pending:
+			var pl = entry["player"]
+			if not is_instance_valid(pl):
+				continue
+			var jumped: bool = float(pl.global_position.distance_to(entry["from"])) > 120.0
+			if jumped:
+				we_teleport_confirmed += 1
+				print("[Probe] 🔥 传送落地: %s 位移 %0.fpx" % [str(pl.char_data.get("name", "?")), float(pl.global_position.distance_to(entry["from"]))])
+			elif _elapsed - float(entry["t"]) < 1.5:
+				still_pending.append(entry)
+		_teleport_pending = still_pending
+		var ill = bm.illusion_manager
+		if ill != null and ill.has_method("get_illusion_count"):
+			we_illusion_peak = maxi(we_illusion_peak, int(ill.get_illusion_count()))
+		var zmgr = bm.field_zone_manager
+		if zmgr != null and "zones" in zmgr:
+			for zone in zmgr.zones:
+				if is_instance_valid(zone) and int(zone.get("zone_type")) == 5:
+					if not we_vision_zone_seen:
+						print("[Probe] 🔥 迷雾落地: VISION 区在场")
+					we_vision_zone_seen = true
 
 
 # ==================== 信号处理 ====================
@@ -153,8 +215,32 @@ func _on_skill_used(skill_id: String, _caster_id: int, success: bool) -> void:
 		if not _cast_times.has(skill_id):
 			_cast_times[skill_id] = []
 		_cast_times[skill_id].append(_elapsed)
+		# 波E：传送施放→挂位移确认pending（1.5s 内跳>120px=落地）
+		if we_applicable and str(skill_id) == "skill_e2e_we_teleport":
+			var caster = _player_by_id(_caster_id)
+			if caster != null:
+				_teleport_pending.append({"t": _elapsed, "player": caster, "from": caster.global_position})
 	else:
 		cast_failed[skill_id] = int(cast_failed.get(skill_id, 0)) + 1
+
+
+func _player_by_id(caster_id: int) -> Node:
+	if bm == null:
+		return null
+	for player in bm.team_a_players + bm.team_b_players:
+		if player != null and is_instance_valid(player) and player.get_instance_id() == caster_id:
+			return player
+	return null
+
+
+func _on_we_skill_copied(payload: Dictionary) -> void:
+	we_copy_events += 1
+	var who := "?"
+	var src := str(payload.get("source_skill_id", "?"))
+	var copier = payload.get("copier")
+	if copier != null and is_instance_valid(copier):
+		who = str(copier.char_data.get("name", copier.name))
+	print("[Probe] 🔥 复制落地: %s ← %s" % [who, src])
 
 
 ## 麒麟队合击判定（主人 09-27 澄清原作设计）：每次麒麟火释放时刻 t0，
@@ -217,6 +303,11 @@ func build_verdict() -> Dictionary:
 	var mark_chain_ok: bool = mark_skills_cast.size() >= 2 and mark_max_stack >= 2
 	var combo_ok: bool = not combo_formed_events.is_empty()
 	var trio_best := best_kirin_trio()
+	# 19工单任务B：波E三独立实证项（出手+效果落地）
+	var we_teleport_ok: bool = we_applicable and int(casts.get("skill_e2e_we_teleport", 0)) > 0 and we_teleport_confirmed > 0
+	var we_copy_ok: bool = we_applicable and int(casts.get("skill_e2e_we_copy", 0)) > 0 and we_copy_events > 0
+	var we_illusion_ok: bool = we_applicable and int(casts.get("skill_e2e_we_illusion", 0)) > 0 and we_illusion_peak > 0
+	var we_pass: bool = we_teleport_ok and we_copy_ok and we_illusion_ok
 	return {
 		"elapsed": _elapsed,
 		"cast_total": cast_total,
@@ -237,7 +328,12 @@ func build_verdict() -> Dictionary:
 		"team_combo_formed": team_combo_events.size(),
 		# 11工单维度：tracker 未在位=不适用（不拦判定）；在位后要求至少成立 1 次
 		"team_combo_ok": (not _team_combo_available) or not team_combo_events.is_empty(),
-		"pass": mark_ok and combo_ok and trio_best >= 2 and ((not _team_combo_available) or not team_combo_events.is_empty()),
+		"we_applicable": we_applicable,
+		"we_teleport_ok": we_teleport_ok,
+		"we_copy_ok": we_copy_ok,
+		"we_illusion_ok": we_illusion_ok,
+		"we_pass": we_pass,
+		"pass": mark_ok and combo_ok and trio_best >= 2 and ((not _team_combo_available) or not team_combo_events.is_empty()) and ((not we_applicable) or we_pass),
 	}
 
 
@@ -263,6 +359,15 @@ func print_final_report() -> Dictionary:
 			" | 成员=" + str(team_combo_events[0]["members"]) if not team_combo_events.is_empty() else ""])
 	else:
 		print("[Probe] 团队合击框架（11工单）：tracker 未在位，探针就绪待接入")
+	# —— 19工单任务B：波E实证报告 ——
+	if we_applicable:
+		print("[Probe] ---- 波E实证（19工单任务B：出手+效果落地）----")
+		print("[Probe]   · 传送: 出手%d 效果落地%d %s" % [int(casts.get("skill_e2e_we_teleport", 0)), we_teleport_confirmed, "✅" if bool(v["we_teleport_ok"]) else "❌"])
+		print("[Probe]   · 复制: 出手%d SKILL_COPIED事件%d %s" % [int(casts.get("skill_e2e_we_copy", 0)), we_copy_events, "✅" if bool(v["we_copy_ok"]) else "❌"])
+		print("[Probe]   · 幻影: 出手%d 幻象峰值%d %s%s" % [int(casts.get("skill_e2e_we_illusion", 0)), we_illusion_peak, "✅" if bool(v["we_illusion_ok"]) else "❌", "" if we_illusion_peak > 0 else "（放置路径无AI自动放置=观察项）"])
+		print("[Probe]   · 迷雾: 出手%d VISION区在场%s（观察项）" % [int(casts.get("skill_e2e_we_vision", 0)), "✅" if we_vision_zone_seen else "—"])
+		print("[Probe]   · 地形: 出手%d（handler 空壳=另核上报，不计判定）" % int(casts.get("skill_e2e_we_terra", 0)))
+		print("[Probe]   · 波E三独立项: %s" % ("✅ 达成" if bool(v["we_pass"]) else "❌ 未达成"))
 	_dump_player_pools()
 	print("[Probe] ---- 赛中因子采样（每秒×全场；score_pos=得分>0 的采样占比）----")
 	for sid in WATCH_SKILLS:
@@ -289,6 +394,8 @@ func print_final_report() -> Dictionary:
 			missing.append("麒麟队三人合击未达成（最佳同窗麒麟火+%d 道三味——查能量闸门/独立决策时序）" % trio_best)
 		if bool(v["team_combo_available"]) and int(v["team_combo_formed"]) == 0:
 			missing.append("团队合击框架信号未触发（team_combo_formed=0——查 team_combos.json 成员配置/窗口判定）")
+		if bool(v["we_applicable"]) and not bool(v["we_pass"]):
+			missing.append("波E三独立实证项未达成（teleport/copy/illusion 需出手+效果落地，见场终逐项）")
 		print("[Probe] ❌ VERDICT: FAIL —— " + "；".join(missing))
 	return v
 
@@ -314,9 +421,9 @@ func _dump_player_pools() -> void:
 			for info in pool:
 				pool_ids.append(str(info.get("skill_id", "?")))
 			var watched_in_pool: Array[String] = []
-			for sid in WATCH_SKILLS:
-				if sid in pool_ids:
-					watched_in_pool.append(str(WATCH_SKILLS[sid]))
+			for sid in pool_ids:
+				if WATCH_SKILLS.has(sid) or WATCH_WAVE_E.has(sid):
+					watched_in_pool.append(_watch_name(sid))
 			var dump_line := ""
 			if _dump_samples.has(str(player.name)):
 				var sample: Dictionary = _dump_samples[str(player.name)]
@@ -337,7 +444,7 @@ func _dump_player_pools() -> void:
 			if not watched_in_pool.is_empty() and int(casts.size()) >= 0:
 				for info in pool:
 					var sid := str(info.get("skill_id", ""))
-					if not WATCH_SKILLS.has(sid):
+					if not WATCH_SKILLS.has(sid) and not WATCH_WAVE_E.has(sid):
 						continue
 					var base := float(info.get("base_value", -1))
 					var intent := float(sam._compute_intent_match(sad, info))
@@ -358,12 +465,20 @@ func _dump_player_pools() -> void:
 					if not energy_ok:
 						zeroed.append("energy_gate")
 					print("[Probe]   · %s: base=%0.1f intent=%0.2f situ=%0.2f stam=%0.2f time=%0.2f comm=%0.2f elem=%0.2f combo=%0.2f team=%0.2f energy_gate=%s%s" % [
-						str(WATCH_SKILLS[sid]), base, intent, situ, stam, timef, comm, elem, combo, teamf,
+						_watch_name(sid), base, intent, situ, stam, timef, comm, elem, combo, teamf,
 						"过" if energy_ok else "拒",
 						"  ←⚠归零因子: " + str(zeroed) if not zeroed.is_empty() else ""])
 			break
 		if not found:
 			print("[Probe] %s[%s] ⚠ spirit_ai_data 无登记（技能AI未挂接该球员）" % [who, str(player.team).to_upper()])
+
+
+func _watch_name(sid: String) -> String:
+	if WATCH_SKILLS.has(sid):
+		return str(WATCH_SKILLS[sid])
+	if WATCH_WAVE_E.has(sid):
+		return "波E·" + str(WATCH_WAVE_E[sid])
+	return sid
 
 
 func _dict_line(d: Dictionary) -> String:
