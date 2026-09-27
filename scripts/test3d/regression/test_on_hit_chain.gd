@@ -67,13 +67,13 @@ func _run() -> void:
 	var c4: int = handler.consume_hit_tags(cid, victim)
 	_assert("⑤: 清空后消费=0", c4 == 0)
 
-	# ===== ⑥ 过期不传递（TTL 防陈旧）=====
-	handler._do_apply_tag("player_mark_apply", {"mark_id": "frost", "max_stacks": 5, "duration": 6.0}, cid)
+	# ===== ⑥ 过期不传递（TTL 防陈旧）：暂存后推时钟过 8s TTL → 消费=0（2026-09-27 分流语义后用无 target 的 mark 验证）=====
+	var frost_before: int = victim.get_mark_count("frost")
+	handler._do_apply_tag("player_mark_apply", {"mark_id": "stale", "max_stacks": 3, "duration": 6.0}, cid)
 	handler._match_clock += 9.0   # 推过 8s TTL
-	handler._do_apply_tag("player_root", {"duration": 2.0, "target": "enemies"}, cid)   # 新球技正常暂存
 	var c5: int = handler.consume_hit_tags(cid, victim)
 	await process_frame
-	_assert("⑥: 过期标签不消费/新标签正常（TTL 生效）", c5 == 1 and victim.is_status_active("rooted") and victim.get_mark_count("frost") == 1)
+	_assert("⑥: 过期标签不消费（TTL 生效，不污染目标）", c5 == 0 and victim.get_mark_count("stale") == 0 and victim.get_mark_count("frost") == frost_before)
 
 	# ===== 22-2 on-hit 矩阵：11 条逐条"暂存→消费→按各自落地方式断言"（2026-09-27 工单）=====
 	# 每条独立轮：登记（无目标→暂存）→consume 到 victim→真行为断言→复位
