@@ -455,7 +455,7 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 	# 立即执行例外：①消费期 _consuming_hit ②球命中注入 _hit_victim_id ③选人技带具体目标
 	# （POINT 技/AI 选人 _target_data.target_player_id——冰封粒子类直接作用于选中目标）
 	var _td: Dictionary = params.get("_target_data", {})
-	var _has_explicit_target: bool = params.has("_hit_victim_id") or _td.has("target_player_id")
+	var _has_explicit_target: bool = params.has("_hit_victim_id") or _td.has("target_player_id") or params.has("target")
 	if not _consuming_hit and not _has_explicit_target:
 		var reg: Dictionary = {}
 		if Engine.get_main_loop() != null and (Engine.get_main_loop() as SceneTree).root.has_node("DataManager"):

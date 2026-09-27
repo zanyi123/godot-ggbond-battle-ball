@@ -509,6 +509,12 @@ func _on_body_entered(body: Node2D) -> void:
 		return
 	_hit_player_ids[pid] = true
 
+	# 命中传递（2026-09-27 修复"印记挂自己"）：随球 on-hit 标签以被命中者为目标消费——
+	# 挂在所有命中分支的公共必经点（追踪球归受击者/伤害/接球语义都先落地 on-hit）
+	if tag_effect_handler:
+		tag_effect_handler.consume_hit_tags(
+			attacker_player.get_instance_id() if attacker_player else -1, player)
+
 	# === 同队队友 → 直接接球,不造成伤害 ===
 	if attacker_player and player.team == attacker_player.team:
 		_catch_ball(player)
@@ -527,11 +533,6 @@ func _on_body_entered(body: Node2D) -> void:
 	var actual_damage: int = result.get("damage", 0)
 	var effect: String = result.get("effect", "none")
 	ball_hit_player.emit(player, actual_damage)
-
-	# 命中传递（2026-09-27 修复"印记挂自己"）：随球 on-hit 标签以被命中者为目标消费
-	if tag_effect_handler:
-		tag_effect_handler.consume_hit_tags(
-			attacker_player.get_instance_id() if attacker_player else -1, player)
 
 	# 波6 #18 带人位移：命中结算附加拖拽（免控目标在 player 侧拒绝）
 	var pull_speed: float = float(ball_mods.get("carry_pull_speed", 0.0))
