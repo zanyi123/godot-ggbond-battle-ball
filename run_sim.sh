@@ -56,7 +56,12 @@ for ((i=0; i<COUNT; i++)); do
   # --fixed-fps 60：固定步长，消除帧节奏扰动导致的轨迹分岔（2026-09-25 前置地基工单：
   # 实证管道捕获的写阻塞会扰动实时帧节奏，把 seed=1 推入"全场零接球"病态轨迹；
   # 配合技能AI确定性骰子后，同种子跨运行逐位一致，存量"卡死偶发"同源根因一并消除）
-  OUTPUT=$("$GODOT" --headless --fixed-fps 60 --sim --speed=$SPEED --seed=$SEED --half=$HALF "$SCENE" 2>&1)
+  # 2026-09-27 集成窗口：捕获方式由命令替换(管道)改为文件重定向——15号统计表上线后逐场输出量增大，
+  # 管道写阻塞老坑复发（实证 seed=2 管道下两遍 0-0 僵死、文件重定向直跑 4-2 与锚定逐位），
+  # 与 02工单/波A备案"套件运行须文件重定向"同一纪律；原始 stdout 留档 sim_results/ 供取证
+  MATCH_OUT="$RESULT_DIR/_match_stdout_seed$SEED.log"
+  "$GODOT" --headless --fixed-fps 60 --sim --speed=$SPEED --seed=$SEED --half=$HALF "$SCENE" > "$MATCH_OUT" 2>&1
+  OUTPUT=$(cat "$MATCH_OUT")
 
   # 提取指标（用报告行独有格式作锚点）
   SCORE_LINE=$(echo "$OUTPUT" | grep "比分: 队A" | head -1)
