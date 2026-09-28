@@ -1,0 +1,37 @@
+{
+	"schema_version": 1,
+	"combos": [
+		{
+			"combo_id": "kirin_trio",
+			"trigger": {
+				"mode": "burst_window",
+				"window_seconds": 12.0,
+				"members": [
+					{
+						"skill_id": "skill_雷火_5",
+						"role": "main",
+						"required": 1
+					},
+					{
+						"skill_id": "skill_雷火_6",
+						"role": "assist",
+						"required": 2
+					}
+				]
+			},
+			"settlement": [
+				{
+					"timing": "on_formed",
+					"tag": "player_atk_up_pct",
+					"params": {
+						"value": 30.0,
+						"duration": 8.0
+					},
+					"scope": "allies"
+				}
+			],
+			"_备注": "11框架一期首实例（0928-2 批准）。窗口 12s=主人令\"多人技能出现频率调高\"取向（实测5s概率1/3、8s概率1/3过稀；12s 频率优先，D9 三期观感收紧）；结算倍率 1.0 只通链路——on_formed 施全员攻击增益表意，伤害倍率随 D9 定版追加；成员经 skill_id 反向索引，零改 skills.json。"
+		}
+	],
+	"_说明": "11框架一期 团队合击框架表（平台窗口代操球轨道维护，0928-2 批）。tracker 启动加载本表建 skill_id→combo 反向索引，监听 spirit_system.skill_used 登记；窗口秒内 distinct 施法者按 role 计数达 required 即合击成立（emit team_combo_formed，同窗冷却防重复）；settlement 引用既有标签经 handler.apply_tag_effect 施加（timing=on_formed/on_ball_hit/on_caught，scope=allies/enemies，ball 类载体二期）。确定性纪律：窗口=累积秒（固定步长），禁墙钟禁 randf。"
+}

@@ -61,6 +61,13 @@ for ((i=0; i<COUNT; i++)); do
   # 与 02工单/波A备案"套件运行须文件重定向"同一纪律；原始 stdout 留档 sim_results/ 供取证
   MATCH_OUT="$RESULT_DIR/_match_stdout_seed$SEED.log"
   "$GODOT" --headless --fixed-fps 60 --sim --speed=$SPEED --seed=$SEED --half=$HALF "$SCENE" > "$MATCH_OUT" 2>&1
+  # 2026-09-28 平台窗口（0928-7 批准）：headless 随机闪退口径——进程 exit≠0 且无脚本错误时
+  # 同输入复跑一次（15号/增益实证复跑即过、与改动面无关）；两连败=真失败按原样进解析
+  MATCH_EXIT=$?
+  if [ "$MATCH_EXIT" -ne 0 ]; then
+    echo "  ⚠ 进程中途退出(exit=$MATCH_EXIT)——0928-7 口径自动复跑一次"
+    "$GODOT" --headless --fixed-fps 60 --sim --speed=$SPEED --seed=$SEED --half=$HALF "$SCENE" > "$MATCH_OUT" 2>&1
+  fi
   OUTPUT=$(cat "$MATCH_OUT")
 
   # 提取指标（用报告行独有格式作锚点）

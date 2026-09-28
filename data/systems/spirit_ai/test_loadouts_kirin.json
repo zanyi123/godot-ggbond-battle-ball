@@ -1,0 +1,38 @@
+{
+	"schema_version": 2,
+	"test_spirits": [
+		{
+			"id": "test_spirit_molin",
+			"name": "墨麟的元灵",
+			"element": "雷火",
+			"skills": ["skill_雷火_5", "skill_雷火_6"]
+		},
+		{
+			"id": "test_spirit_hulai",
+			"name": "狐赖的元灵",
+			"element": "金刚",
+			"skills": ["skill_金刚_2"]
+		},
+		{
+			"id": "test_spirit_huyu",
+			"name": "狐宇的元灵",
+			"element": "金刚",
+			"skills": ["skill_金刚_3"]
+		},
+		{
+			"id": "test_spirit_xiaodaidai",
+			"name": "小呆呆的元灵",
+			"element": "冰雪",
+			"skills": ["skill_冰雪_1"]
+		}
+	],
+	"loadouts": [
+		{ "slot": "A0", "character_id": "char_001", "spirit_id": "小呆呆的元灵", "skills": [] },
+		{ "slot": "A1", "character_id": "char_002", "spirit_id": "狐赖的元灵", "skills": [] },
+		{ "slot": "A2", "character_id": "char_003", "spirit_id": "狐宇的元灵", "skills": [] },
+		{ "slot": "B0", "character_id": "char_004", "spirit_id": "墨麟的元灵", "skills": ["skill_雷火_6"] },
+		{ "slot": "B1", "character_id": "char_005", "spirit_id": "墨麟的元灵", "skills": ["skill_雷火_5"] },
+		{ "slot": "B2", "character_id": "char_006", "spirit_id": "墨麟的元灵", "skills": ["skill_雷火_6"] }
+	],
+	"_说明": "11框架一期专用装载（平台窗口）：麒麟队三人合击试金石（B1麒麟火主+B0/B2三味辅）+重型坦克合体对（A1/A2）作第二试金石。与主配置 test_loadouts.json（操控测试用）/test_loadouts_wave_e.json 互斥切换——跑法：--platform-loadout=res://data/systems/spirit_ai/test_loadouts_kirin.json。各工单场景各一份装载文件，避免共享主配置互相覆盖（09-28 实录教训）。"
+}

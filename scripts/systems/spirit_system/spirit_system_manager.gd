@@ -32,6 +32,18 @@ func _ready() -> void:
 	# 获取标签效果处理器引用
 	tag_effect_handler = skill_trigger._effect_handler
 
+	# 11框架一期：团队合击追踪器挂载（0928-2 批准；登记/聚合/结算见 team_combo_tracker.gd；
+	# 负载式新增——加载失败跳过不影响 S1 协调器与既有链路）
+	var team_combo_script: GDScript = load("res://scripts/systems/spirit_system/team_combo_tracker.gd")
+	if team_combo_script != null:
+		var tracker_script_ref: GDScript = team_combo_script
+		if tracker_script_ref.can_instantiate():
+			var tracker: Node = tracker_script_ref.new()
+			tracker.name = "TeamComboTracker"
+			add_child(tracker)
+			tracker.setup(self)
+			print("[SpiritSystemManager] 团队合击追踪器已挂载")
+
 	# 连接效果处理器信号
 	if tag_effect_handler:
 		tag_effect_handler.add_to_group("spirit_system")
