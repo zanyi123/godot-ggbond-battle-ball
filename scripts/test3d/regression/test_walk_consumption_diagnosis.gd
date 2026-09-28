@@ -100,6 +100,22 @@ func _run() -> void:
 	# 一致性对照组：真外场点两套判定一致
 	_check(aim._is_pos_in_outer(Vector2(420, 0), "a") and str(FieldZone.knowledge_zone_of(Vector2(420, 0), "a")) == "outer_own", "D2b 真外场点(420,0)两套判定一致（分歧仅凹口带）")
 
+	# ===== D6：第二真相漂移守卫（私有常量 vs 知识库权威值）=====
+	print("[D6] 常量漂移守卫")
+	var am_inner_x_min: float = aim.FIELD_X_MIN
+	var kz_inner: Dictionary = FieldZone.INNER
+	_check(is_equal_approx(am_inner_x_min, float(kz_inner["x"])) , "D6a FIELD_X_MIN==knowledge INNER.x")
+	var kz_r: Dictionary = FieldZone.RIGHT_OUTER
+	var am_r_xmin: float = aim.RIGHT_OUTER_X_MIN
+	var kz_r_xmin: float = minf(float(kz_r["main"]["x"]), float(kz_r["top_arm"]["x"]))
+	_check(is_equal_approx(am_r_xmin, kz_r_xmin), "D6b RIGHT_OUTER_X_MIN==知识库凹字形包围(min)")
+	var kz_l: Dictionary = FieldZone.LEFT_OUTER
+	var am_l_xmax: float = aim.LEFT_OUTER_X_MAX
+	var kz_l_xmax: float = maxf(float(kz_l["main"]["x"]) + float(kz_l["main"]["width"]), float(kz_l["top_arm"]["x"]) + float(kz_l["top_arm"]["width"]))
+	_check(is_equal_approx(am_l_xmax, kz_l_xmax), "D6c LEFT_OUTER_X_MAX==知识库凹字形包围(max)")
+	var gap_am_ok: bool = is_equal_approx(aim.GAP_Y_MIN, -float(kz_inner["height"]) / 2.0) and is_equal_approx(aim.GAP_Y_MAX, float(kz_inner["height"]) / 2.0)
+	_check(gap_am_ok, "D6d GAP_Y==内场y半高（凹口口径一致）")
+
 	# ===== D3：行为取证——流放球员对凹口球的误就位 =====
 	print("[D3] 行为取证：流放球员 × 凹口球（内场点被当外场球追）")
 	var exile: StubPlayer = _make_player("t_exile", "a", Vector2(420, 0), true)

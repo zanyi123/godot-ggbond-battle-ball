@@ -1088,9 +1088,14 @@ func _decide_penalty_move(ap: Dictionary) -> void:
 		# 观察期未满：在外场内游走寻找机会
 		ap.hold_timer += profile.think_interval
 		if ap.hold_timer < ap.hold_duration and ap.total_carry_time < profile.max_carry_time:
-			var random_dir: Vector2 = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized()
+			# 确定性骰子（02纪律补漏 2026-09-28）：外场游走方向改 _dodge_roll 范式——
+			# 原 randf_range 消耗全局随机流（顺序耦合：任一处增删 randf 都改他人结果）；
+			# 骰子输入=character_id 哈希+游走档位（hold_timer 量化），同场面恒同方向
+			var wander_step: int = int(ap.hold_timer / maxf(profile.think_interval, 0.01))
+			var wander_angle: float = _dodge_roll(hash(str(p.character_id) + "_wander"), wander_step) * TAU
+			var wander_dir: Vector2 = Vector2.from_angle(wander_angle)
 			ap.state = State.PENALTY_MOVE
-			ap.target_pos = _clamp_to_outer_field(my_pos + random_dir * 50.0, team)
+			ap.target_pos = _clamp_to_outer_field(my_pos + wander_dir * 50.0, team)
 			return
 
 		# 效用计算：pass_utility vs shoot_utility
