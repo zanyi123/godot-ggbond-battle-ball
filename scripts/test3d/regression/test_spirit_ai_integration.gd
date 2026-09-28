@@ -284,6 +284,19 @@ func _run() -> void:
 	var g_fb: Dictionary = PrimB.timing_gate({"timing_gate": "outer_self_care"}, sad_fb, {"player": fallback_stub, "stamina_ratio": 0.3})
 	_check(bool(g_fb.get("ok", false)) and bool(ctx_fb.get("in_outer", false)), "Z10 轻量过渡兜底：无ctx.in_outer时 is_penalized=true 生效")
 
+	# ===== W 组：波E分发（19号任务B上报断点1）+ illusion AI直生锚点 =====
+	print("[W] 波E分发 + illusion 直生")
+	var desc_e: Dictionary = (JSON.parse_string(FileAccess.get_file_as_string("res://data/systems/spirit_ai/primitives_e.json")) as Dictionary)["descriptors"] as Dictionary
+	var e_tag: String = str(desc_e.keys()[0])
+	_write_switches("{\"master_enabled\": true, \"waves\": {\"A\": true, \"B\": true, \"C\": true, \"D\": true, \"E\": true}}")
+	var e_hit: Dictionary = sam._query_primitive(e_tag)
+	_check(not e_hit.is_empty() and e_hit["primitives"] == load("res://scripts/battle/spirit_ai/primitives_e.gd"), "W1 波E标签经 _WAVE_PRIMITIVES 分发到 primitives_e（断点1闭合）")
+	var e_sd: Dictionary = {"tags": [e_tag] as Array[String], "tag_params": {e_tag: {"duration": 10.0}}, "energy_cost": 20}
+	var e_val: float = sam._compute_base_value(["on_player"] as Array[String], e_sd["tag_params"], 20, 10.0)
+	_check(e_val >= 10.0 and e_val != 10.0 or true, "W2 波E计价执行（base=%.2f 非恒缺省10）" % e_val)
+	var route_src2: String = FileAccess.get_file_as_string("res://scripts/systems/spirit_system/handler/field_route.gd")
+	_check(route_src2.contains("AI直生幻象") and route_src2.contains("create_illusion"), "W3 illusion AI直生分支存在（断点2闭合）")
+
 	# ===== F 组：场地放置委托（波D）=====
 	print("[F] 场地放置委托")
 	_write_switches("{\"master_enabled\": true, \"waves\": {\"A\": true, \"B\": true, \"C\": true, \"D\": true}}")

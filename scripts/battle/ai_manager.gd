@@ -4,6 +4,9 @@ extends Node
 ## 包含:180度朝向视野感知系统、评分决策、阵型跑位
 
 const AIProfile = preload("res://scripts/battle/ai_profile.gd")
+## 13号走位消费：场地知识权威（凹字形外场/白线/通道口语义），第二真相禁令——
+## ai_manager 私有场地几何常量仅存档对照，判定一律走此知识层
+const FieldZoneScript = preload("res://scripts/battle/field_zone.gd")
 ## 16号合一：原 preload 与 spirit_ai_manager 反向引用构成循环预载（spirit_ai 权威引用本文件锚点），
 ## 改运行时 load——实例化语义不变
 var _spirit_ai_manager_script: GDScript = null
@@ -1479,10 +1482,10 @@ func _predict_outer_intercept_pos(ap: Dictionary) -> Vector2:
 
 ## 坐标是否在我方外场矩形内
 func _is_pos_in_outer(pos: Vector2, team: String) -> bool:
-	if team == "a":
-		return pos.x >= RIGHT_OUTER_X_MIN and pos.x <= RIGHT_OUTER_X_MAX and pos.y >= RIGHT_OUTER_Y_MIN and pos.y <= RIGHT_OUTER_Y_MAX
-	else:
-		return pos.x >= LEFT_OUTER_X_MIN and pos.x <= LEFT_OUTER_X_MAX and pos.y >= LEFT_OUTER_Y_MIN and pos.y <= LEFT_OUTER_Y_MAX
+	# 13号走位消费（第二真相合一，2026-09-28）：原简化包围盒（x∈[250,510]全高325）把凹口带
+	# （x∈[250,380],|y|<260=内场）误判为外场——流放球员被凹口内场球诱离外场（外场绕远/卡驻，
+	# 诊断套件 D1~D3 实证）。改权威单源：knowledge_zone_of 凹字形语义（main+上下臂）。
+	return FieldZoneScript.knowledge_zone_of(pos, team).begins_with("outer")
 
 
 ## 我是外场内距球最近者（只在同队外场球员中比）

@@ -347,6 +347,17 @@ func _apply_field_illusion_add(params: Dictionary) -> void:
 		return
 
 	var mouse_ops: int = int(params.get("count", 1))
+	# 19号任务B上报断点2（Q12同族，主人令领取）：AI 直生——ai_mode 或 _target_data.field_position
+	# → 幻象直接生成（指定位置/施法者自身），跳过鼠标放置模式；否则原鼠标路径不变
+	var il_target_data: Dictionary = params.get("_target_data", {})
+	var il_ai_pos: Variant = il_target_data.get("field_position", null)
+	if bool(params.get("ai_mode", false)) or il_ai_pos is Vector2:
+		var base_pos: Vector2 = (il_ai_pos as Vector2) if il_ai_pos is Vector2 else source.global_position
+		for i in range(mouse_ops):
+			manager.create_illusion(source, params, base_pos)
+		print("[TagEffectHandler] AI直生幻象: pos=%s count=%d" % [str(base_pos), mouse_ops])
+		return
+
 	manager.start_placing(params, mouse_ops)
 
 	print("[TagEffectHandler] 幻象生成: mode=%s count=%d stamina=%.0f dur=%.1fs ai=%s" % [

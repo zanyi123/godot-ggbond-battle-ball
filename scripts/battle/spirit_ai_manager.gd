@@ -28,11 +28,12 @@ const PRIMITIVES_A := preload("res://scripts/battle/spirit_ai/primitives_a.gd")
 const PRIMITIVES_B := preload("res://scripts/battle/spirit_ai/primitives_b.gd")
 const PRIMITIVES_C := preload("res://scripts/battle/spirit_ai/primitives_c.gd")
 const PRIMITIVES_D := preload("res://scripts/battle/spirit_ai/primitives_d.gd")
+const PRIMITIVES_E := preload("res://scripts/battle/spirit_ai/primitives_e.gd")
 const EVENT_HOOKS_SCRIPT := preload("res://scripts/battle/spirit_ai/event_hooks.gd")
 const AI_INPUT_SOURCE := preload("res://scripts/battle/spirit_ai/ai_input_source.gd")
 
 ## wave 字母 → 契约函数表分发（registry 按 JSON 顶层 wave 打标；波E 未交付=无条目=未命中）
-const _WAVE_PRIMITIVES := {"A": PRIMITIVES_A, "B": PRIMITIVES_B, "C": PRIMITIVES_C, "D": PRIMITIVES_D}
+const _WAVE_PRIMITIVES := {"A": PRIMITIVES_A, "B": PRIMITIVES_B, "C": PRIMITIVES_C, "D": PRIMITIVES_D, "E": PRIMITIVES_E}
 
 ## 原语 ctx 默认威胁半径（06§三 self_threatened 判定，manager 组装时可调）
 const PRIMITIVE_THREAT_RADIUS := 200.0
