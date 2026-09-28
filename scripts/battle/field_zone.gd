@@ -436,8 +436,9 @@ func _rect_center(r: Dictionary) -> Vector2:
 ##   个体场地语义（my_zone/in_outer 等）仍走 ctx 单口由 manager 组装（红线延伸，Q9）
 ## - 语义口径：own/enemy 以执法权威（check_midline/check_field_boundary）为准：
 ##   队a半场=x≤0（左）、队b半场=x≥0（右）；流放区 a=右外场、b=左外场（start_field_transition）
-## - 球门锚点（GOAL_A/GOAL_B）现存 ai_manager/spirit_ai_manager 两份重复定义且与中线规则
-##   存在语义疑点（a锚(300,0)在敌半侧），知识库暂不收录，待集成窗口统一后迁移（Q9登记）
+## - 外场方向锚点（SIDE_ANCHOR_A/B，原误称 GOAL_X）语义已裁定（主人 2026-09-27/28，16号工单）：
+##   决竞球无球门；SIDE_ANCHOR_X=X 队外场方向锚（交叉布局：a 内场在左、a 流放区在右=对方内场背后）。
+##   方向正确非 bug，勿修；已正名合一（ai_manager 权威），知识库收录见 knowledge_side_anchor()
 
 ## 区域通行规则语义表（zone 语义名 → 规则一句话；AI 可查询）
 const KNOWLEDGE_ZONE_RULES: Dictionary = {
@@ -449,7 +450,7 @@ const KNOWLEDGE_ZONE_RULES: Dictionary = {
 	"out_of_bounds": "蓝色禁区：越界失分",
 }
 
-## 球门区纵深默认值（放置语义用，像素=GD单位铁律）
+## 己方底线纵深默认值（放置语义用，像素=GD单位铁律；历史命名 GOAL_DEPTH，决竞球无球门）
 const KNOWLEDGE_GOAL_DEPTH: float = 60.0
 ## 己方白线内侧默认贴线内缩
 const KNOWLEDGE_LINE_INSET: float = 12.0
@@ -566,11 +567,36 @@ static func knowledge_nearest_gate(pos: Vector2) -> Dictionary:
 	return {"pos": right, "side": "right", "dist": pos.distance_to(right)}
 
 
-## 球门区纵深点：己方半场底线内侧 depth 处（执法权威口径：a=左底线、b=右底线）
+## 己方底线纵深点：己方半场底线内侧 depth 处（执法权威口径：a=左底线、b=右底线；
+## 历史命名 goal_area——决竞球无球门，语义=底线纵深防御带）
 static func knowledge_goal_area_point(team: String, depth: float = KNOWLEDGE_GOAL_DEPTH) -> Vector2:
 	if team == "a":
 		return Vector2(INNER.x + depth, 0)
 	return Vector2(INNER.x + INNER.width - depth, 0)
+
+
+## 外场方向锚点收录（16号余项③，主人 2026-09-27/28 裁定）：X 队自己的后方（流放外场）方向锚。
+## 权威定义=ai_manager.SIDE_ANCHOR_A/B（16号已合一），此处运行时读取不复制常量（第二真相禁令）；
+## 读取失败回落裁定值 (300,0)/(-300,0)（与权威恒等）；非法 team 返回 Vector2.ZERO（fail-closed）
+static var _k_anchor_cache: Dictionary = {}
+
+static func knowledge_side_anchor(team: String) -> Vector2:
+	if _k_anchor_cache.is_empty():
+		var scr: GDScript = load("res://scripts/battle/ai_manager.gd")
+		var sa: Variant = scr.get("SIDE_ANCHOR_A") if scr != null else null
+		var sb: Variant = scr.get("SIDE_ANCHOR_B") if scr != null else null
+		_k_anchor_cache = {
+			"a": sa if sa is Vector2 else Vector2(300.0, 0.0),
+			"b": sb if sb is Vector2 else Vector2(-300.0, 0.0),
+		}
+	return _k_anchor_cache.get(team, Vector2.ZERO)
+
+
+## 敌方外场锚（对方后方方向；"朝敌方锚"类放置/走位语义用；非法 team fail-closed 回 ZERO）
+static func knowledge_enemy_side_anchor(team: String) -> Vector2:
+	if team != "a" and team != "b":
+		return Vector2.ZERO
+	return knowledge_side_anchor("b") if team == "a" else knowledge_side_anchor("a")
 
 
 ## 贴己方白线内侧点（沿己方底线内缩 inset；y 跟随目标点并夹回内场纵深带）

@@ -56,7 +56,7 @@ func _run() -> void:
 	_assert("G6: 最近口（(400,100)→右口√(150²+100²)≈180.3px）", str(near2.get("side")) == "right" and absf(float(near2.get("dist")) - 180.2776) < 0.01)
 
 	# ===== Q-关键位置与规则问答 =====
-	_assert("Q1: 球门区纵深点（a→(-320,0)/b→(320,0)）", Knowledge.knowledge_goal_area_point("a").distance_to(Vector2(-320, 0)) < 0.001 and Knowledge.knowledge_goal_area_point("b").distance_to(Vector2(320, 0)) < 0.001)
+	_assert("Q1: 底线纵深点（a→(-320,0)/b→(320,0)）", Knowledge.knowledge_goal_area_point("a").distance_to(Vector2(-320, 0)) < 0.001 and Knowledge.knowledge_goal_area_point("b").distance_to(Vector2(320, 0)) < 0.001)
 	_assert("Q2: 球门区纵深点自定义深度（b,100→(280,0)）", Knowledge.knowledge_goal_area_point("b", 100.0).distance_to(Vector2(280, 0)) < 0.001)
 	_assert("Q3: 贴己方白线内侧（y跟随并夹回纵深带 a,y300→(-368,220)/b,y-300→(368,-220)）", Knowledge.knowledge_own_line_inner_point("a", 300.0).distance_to(Vector2(-368, 220)) < 0.001 and Knowledge.knowledge_own_line_inner_point("b", -300.0).distance_to(Vector2(368, -220)) < 0.001)
 	_assert("Q4: 走位违规=越中线（a穿右）", Knowledge.knowledge_would_violate("a", Vector2(-100, 0), Vector2(100, 0)) == "cross_midline")
@@ -67,6 +67,11 @@ func _run() -> void:
 	_assert("Q9: 合规走位零违规", Knowledge.knowledge_would_violate("a", Vector2(0, 0), Vector2(-100, 0)) == "")
 	_assert("Q10: 救援回流规则当前未实装（false=预留接入点）", Knowledge.knowledge_rescue_rule_active() == false)
 	_assert("Q11: 实例侧旧判定零改动（get_zone_at 仍为枚举口径）", Knowledge.new().get_zone_at(Vector2(0, 0)) == Knowledge.ZoneType.INNER_FIELD)
+
+	# ===== Q12~Q14：外场方向锚点收录（16号余项③，D12 已批准执行） =====
+	_assert("Q12: 己方外场锚（a→(300,0)=己方后方/b→(-300,0)，与ai_manager.SIDE_ANCHOR恒等）", Knowledge.knowledge_side_anchor("a").distance_to(Vector2(300, 0)) < 0.001 and Knowledge.knowledge_side_anchor("b").distance_to(Vector2(-300, 0)) < 0.001)
+	_assert("Q13: 敌方外场锚（a→(-300,0)/b→(300,0)，交叉布局互指）", Knowledge.knowledge_enemy_side_anchor("a").distance_to(Vector2(-300, 0)) < 0.001 and Knowledge.knowledge_enemy_side_anchor("b").distance_to(Vector2(300, 0)) < 0.001)
+	_assert("Q14: 非法team fail-closed回ZERO", Knowledge.knowledge_side_anchor("").is_zero_approx() and Knowledge.knowledge_enemy_side_anchor("x").is_zero_approx())
 
 	_finish()
 

@@ -2,7 +2,7 @@
 	"schema_version": 3,
 	"wave": "D",
 	"updated": "2026-09-26",
-	"_说明": "波D场地族10标签描述符。schema基座照06规约v1（冻结字段原样）；schema_version=3=波B family扩展(Q1)+波D扩展(Q4，登记于进度看板问题区待批)：①target_mode新增field_position②family新增field_area/field_obstacle③描述符新增position_intent字段(纯分类元数据，契约三函数不消费，仅供select_field_position分发)。timing_gate全部使用06§三现有12键零扩展。计价口径：compute_value=params[value_param]×value_unit后clamp[value_min,value_cap]，value_param逐一核对tags_registry.json params数组。position_intent语义：goal_ball_line=球门-球连线(精化_select_wall_position防守支0.6系数cap80)；enemy_carrier_path=敌持球路径(精化进攻支0.4系数cap60)；enemy_cluster=敌集群(精化_select_aoe_position，defense=最近敌/其余=最残血敌)；shoot_line_block=挡射手视线(球门→持球敌连线0.5系数cap100，敌人朝向信息从ctx取)；advance_lane=己方推进道(自位朝敌门60px)；defensive_anchor=己方球门前锚点(精化_select_area_position防守支+20y)；【13号工单升级三语义(知识库field_zone.gd静态查询，执法权威口径a=左半场)】goal_area_depth=球门区纵深(己方底线内侧60px，safe/heal已迁移)；own_line_inner=贴己方白线内侧(y跟随球位)；outer_gate_block=堵敌方流放区入口(a堵左口/b堵右口，当前无标签映射、预留给集成/主人后续指派)。缺ctx键一律fail-closed回落施法者自站位。",
+	"_说明": "波D场地族10标签描述符。schema基座照06规约v1（冻结字段原样）；schema_version=3=波B family扩展(Q1)+波D扩展(Q4，已批)：①target_mode新增field_position②family新增field_area/field_obstacle③描述符新增position_intent字段(纯分类元数据，契约三函数不消费，仅供select_field_position分发)。timing_gate全部使用06§三现有12键零扩展。计价口径：compute_value=params[value_param]×value_unit后clamp[value_min,value_cap]，value_param逐一核对tags_registry.json params数组。position_intent语义【术语依16号裁定订正：决竞球无球门，GOAL_X=外场方向锚SIDE_ANCHOR_X(交叉布局，a锚=己方后方(300,0))】：goal_ball_line=己方外场锚-球连线(后方防线,精化_select_wall_position防守支0.6系数cap80)；enemy_carrier_path=敌持球路径(己方外场锚→敌持球者,精化进攻支0.4系数cap60)；enemy_cluster=敌集群(精化_select_aoe_position，defense=最近敌/其余=最残血敌)；shoot_line_block=挡射手视线(己方外场锚→持球敌连线0.5系数cap100，敌人朝向信息从ctx取)；advance_lane=己方推进道(自位朝敌方外场锚60px)；defensive_anchor=己方后方锚点(legacy枚举,精化_select_area_position防守支+20y)；【13号工单升级三语义(知识库field_zone.gd静态查询，执法权威口径a=左半场)】goal_area_depth=底线纵深防御带(历史命名goal_area非球门，己方底线内侧60px，safe/heal已迁移)；own_line_inner=贴己方白线内侧(y跟随球位)；outer_gate_block=堵敌方流放区入口(a堵左口/b堵右口，当前无标签映射、预留给集成/主人后续指派)。缺ctx键一律fail-closed回落施法者自站位。",
 	"descriptors": {
 		"field_vision_block": {
 			"family": "field_area",
@@ -30,7 +30,7 @@
 			"intent_strength": 0.6,
 			"target_mode": "field_position",
 			"position_intent": "advance_lane",
-			"notes": "加速区：持球推进期朝敌门铺加速道"
+			"notes": "加速区：持球推进期朝敌方外场锚方向铺加速道（历史注释'敌门'订正，16号）"
 		},
 		"field_zone_slow": {
 			"family": "field_area",
@@ -72,7 +72,7 @@
 			"intent_strength": 0.7,
 			"target_mode": "field_position",
 			"position_intent": "goal_area_depth",
-			"notes": "安全区：13号升级→球门区纵深免疫区(己方底线内侧60px，执法权威口径a=左半场)；旧版defensive_anchor锚点依赖GOAL_A语义疑点(见Q9)"
+			"notes": "安全区：13号升级→底线纵深免疫区(己方底线内侧60px，执法权威口径a=左半场)；旧defensive_anchor依赖的GOAL语义疑点已经16号裁定落定(外场方向锚,方向无误,已正名SIDE_ANCHOR)"
 		},
 		"field_zone_heal": {
 			"family": "field_area",
@@ -86,7 +86,7 @@
 			"intent_strength": 0.7,
 			"target_mode": "field_position",
 			"position_intent": "goal_area_depth",
-			"notes": "治疗区：13号升级→回血锚点放己方球门区纵深(与safe同语义，执法权威口径)；registry：走公开heal，禁疗自动生效"
+			"notes": "治疗区：13号升级→回血锚点放己方底线纵深(与safe同语义，执法权威口径)；registry：走公开heal，禁疗自动生效"
 		},
 		"field_obs_add": {
 			"family": "field_obstacle",

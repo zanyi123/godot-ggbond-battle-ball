@@ -156,7 +156,7 @@ static func select_field_position(descriptor: Dictionary, sad: Dictionary, ctx: 
 
 	match intent:
 		"goal_ball_line":
-			# 精化自 _select_wall_position 防守支：球门-球连线方向，0.6 系数上限 80
+			# 精化自 _select_wall_position 防守支：己方外场锚-球连线（后方防线）方向，0.6 系数上限 80
 			if typeof(ball_pos) != TYPE_VECTOR2 or typeof(own_goal) != TYPE_VECTOR2:
 				return self_pos
 			var to_ball: Vector2 = ball_pos - own_goal
@@ -164,7 +164,7 @@ static func select_field_position(descriptor: Dictionary, sad: Dictionary, ctx: 
 				return self_pos
 			return own_goal + to_ball.normalized() * minf(to_ball.length() * 0.6, 80.0)
 		"enemy_carrier_path":
-			# 精化自 _select_wall_position 进攻支：球门→敌持球者连线，0.4 系数上限 60（07§③：drain_wall=敌持球路径）
+			# 精化自 _select_wall_position 进攻支：己方外场锚→敌持球者连线，0.4 系数上限 60（07§③：drain_wall=敌持球路径）
 			var carrier: Variant = _pick_carrier(ctx, enemies)
 			if carrier == null or typeof(own_goal) != TYPE_VECTOR2:
 				return self_pos
@@ -177,7 +177,7 @@ static func select_field_position(descriptor: Dictionary, sad: Dictionary, ctx: 
 			var target_enemy: Variant = _pick_aoe_enemy(str(descriptor.get("intent", "")), self_pos, enemies)
 			return target_enemy.global_position if target_enemy != null else self_pos
 		"shoot_line_block":
-			# 新增语义（07§③：vision_block=挡射手视线）：球门→持球敌（无则最近敌）连线中段
+			# 新增语义（07§③：vision_block=挡射手视线）：己方外场锚→持球敌（无则最近敌）连线中段
 			var shooter: Variant = _pick_carrier(ctx, enemies)
 			if shooter == null:
 				shooter = _pick_closest_enemy(self_pos, enemies)
@@ -188,7 +188,7 @@ static func select_field_position(descriptor: Dictionary, sad: Dictionary, ctx: 
 				return self_pos
 			return own_goal + to_shooter.normalized() * minf(to_shooter.length() * 0.5, 100.0)
 		"advance_lane":
-			# 精化自 _select_wall_position 进攻无持球者支：自位朝敌门方向铺区
+			# 精化自 _select_wall_position 进攻无持球者支：自位朝敌方外场锚方向铺区（历史注释"敌门"订正，16号）
 			if typeof(enemy_goal) != TYPE_VECTOR2:
 				return self_pos
 			var to_goal: Vector2 = enemy_goal - self_pos
@@ -196,12 +196,12 @@ static func select_field_position(descriptor: Dictionary, sad: Dictionary, ctx: 
 				return self_pos
 			return self_pos + to_goal.normalized() * 60.0
 		"defensive_anchor":
-			# 精化自 _select_area_position 防守支：己方球门前锚点
+			# 精化自 _select_area_position 防守支：己方后方锚点（历史注释"球门前"订正，16号）
 			if typeof(own_goal) != TYPE_VECTOR2:
 				return self_pos
 			return own_goal + Vector2(0, 20)
 		"goal_area_depth":
-			# 13号工单升级：球门区纵深——按执法权威口径（a=左半场底线）取己方底线内侧60px
+			# 13号工单升级：底线纵深防御带（历史命名 goal_area，决竞球无球门）——执法权威口径（a=左半场底线）取己方底线内侧60px
 			var team_depth := str(p.team)
 			if team_depth != "a" and team_depth != "b":
 				return self_pos

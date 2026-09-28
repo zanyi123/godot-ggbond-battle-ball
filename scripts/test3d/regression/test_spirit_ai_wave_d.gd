@@ -255,9 +255,9 @@ func _run() -> void:
 	var desc_heal: Dictionary = descriptors.get("field_zone_heal", {})         # defensive_anchor
 
 	var pos_wall: Vector2 = prim.select_field_position(desc_wall, sad, ctx_full)
-	_assert("P1a: goal_ball_line=球门-球连线0.6系数cap80（obs_add）", pos_wall.distance_to(Vector2(-420, 0)) < 0.001)
+	_assert("P1a: goal_ball_line=己方外场锚-球连线（后方防线）0.6系数cap80（obs_add）", pos_wall.distance_to(Vector2(-420, 0)) < 0.001)
 	var pos_drain: Vector2 = prim.select_field_position(desc_drain, sad, ctx_full)
-	_assert("P1b: enemy_carrier_path=球门→持球敌0.4系数cap60（drain_wall）", pos_drain.distance_to(Vector2(-440, 0)) < 0.001)
+	_assert("P1b: enemy_carrier_path=己方外场锚→持球敌0.4系数cap60（drain_wall）", pos_drain.distance_to(Vector2(-440, 0)) < 0.001)
 
 	var ctx_aoe_def: Dictionary = ctx_full.duplicate(true)
 	ctx_aoe_def["visible_enemies"] = [carrier, weak]
@@ -271,12 +271,12 @@ func _run() -> void:
 	_assert("P2b: enemy_cluster 其余=最残血敌（精化aoe雏形）", pos_cluster_atk.distance_to(weak.global_position) < 0.001)
 
 	var pos_vision: Vector2 = prim.select_field_position(desc_vision, sad, ctx_full)
-	_assert("P3: shoot_line_block=球门→持球敌0.5系数cap100（vision_block）", pos_vision.distance_to(Vector2(-400, 0)) < 0.001)
+	_assert("P3: shoot_line_block=己方外场锚→持球敌0.5系数cap100（vision_block）", pos_vision.distance_to(Vector2(-400, 0)) < 0.001)
 	var pos_lane: Vector2 = prim.select_field_position(desc_boost_pos, sad, ctx_full)
-	_assert("P4: advance_lane=自位朝敌门60px（zone_boost）", pos_lane.distance_to(Vector2(60, 0)) < 0.001)
+	_assert("P4: advance_lane=自位朝敌方外场锚60px（zone_boost）", pos_lane.distance_to(Vector2(60, 0)) < 0.001)
 	var pos_safe: Vector2 = prim.select_field_position(desc_safe, sad, ctx_full)
 	var pos_heal: Vector2 = prim.select_field_position(desc_heal, sad, ctx_full)
-	_assert("P5: goal_area_depth=球门区纵深（13号升级：a队→己方左底线内侧60px(-320,0)）", pos_safe.distance_to(Vector2(-320, 0)) < 0.001 and pos_heal.distance_to(Vector2(-320, 0)) < 0.001)
+	_assert("P5: goal_area_depth=底线纵深（13号升级：a队→己方左底线内侧60px(-320,0)，历史命名goal_area非球门）", pos_safe.distance_to(Vector2(-320, 0)) < 0.001 and pos_heal.distance_to(Vector2(-320, 0)) < 0.001)
 
 	var ctx_min: Dictionary = {"player": caster}
 	var pos_fallback_wall: Vector2 = prim.select_field_position(desc_wall, sad, ctx_min)
