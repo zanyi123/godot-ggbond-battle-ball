@@ -1726,6 +1726,57 @@ func _calc_separation(ap: Dictionary) -> Vector2:
 	return sep.limit_length(profile.speed_move * 1.5)
 
 
+## Q14-A（0928-11 批，主人令）：AI 墙体滑行绕行——探到前方 AI 墙 → 保留推进+朝最近墙端
+## 侧向偏置（发球/走位自动寻新路径）。数据源=obstacle_manager.obstacles 权威清单；
+## 判定纯几何（确定无随机）；无墙/无管理器 fail-open=原速度
+func _calc_wall_slide(ap: Dictionary, base_vel: Vector2) -> Vector2:
+	var p: CharacterBody2D = ap.player
+	if base_vel.length_squared() < 1.0:
+		return base_vel
+	var tree_ref := p.get_tree()
+	if tree_ref == null:
+		return base_vel
+	var manager = tree_ref.get_first_node_in_group("obstacle_managers")
+	if manager == null:
+		return base_vel
+	var walls = manager.get("obstacles")
+	if walls == null or (walls as Array).is_empty():
+		return base_vel
+	var probe: Vector2 = p.global_position + base_vel.normalized() * 120.0
+	for w in walls:
+		if w == null or not is_instance_valid(w):
+			continue
+		var w_pos: Vector2 = w.global_position
+		var w_size: Vector2 = _wall_size_of(w)
+		if w_size == Vector2.ZERO:
+			continue
+		var hw: float = w_size.x * 0.5 + 8.0
+		var hh: float = w_size.y * 0.5 + 8.0
+		if absf(probe.x - w_pos.x) < hw and absf(probe.y - w_pos.y) < hh:
+			# 朝短轴（墙端）绕行：保留原推进分量 + 0.8 倍侧向分量
+			var my: Vector2 = p.global_position
+			# 绕行端=墙长轴两端（横墙走左右端=轴向x；纵墙走上下端=轴向y）
+			if w_size.x >= w_size.y:
+				var end_x: float = w_pos.x + (w_size.x * 0.5 + 14.0) * (1.0 if my.x >= w_pos.x else -1.0)
+				return Vector2(signf(end_x - my.x) * absf(base_vel.length()) * 0.8, base_vel.y).limit_length(base_vel.length())
+			else:
+				var end_y: float = w_pos.y + (w_size.y * 0.5 + 14.0) * (1.0 if my.y >= w_pos.y else -1.0)
+				return Vector2(base_vel.x, signf(end_y - my.y) * absf(base_vel.length()) * 0.8).limit_length(base_vel.length())
+	return base_vel
+
+
+## 墙体尺寸读取：CollisionShape2D.shape.size 优先，缓存字段兜底（fail=ZERO 跳过）
+func _wall_size_of(w: Node) -> Vector2:
+	for child in w.get_children():
+		if child is CollisionShape2D and child.shape is RectangleShape2D:
+			return (child.shape as RectangleShape2D).size
+	var cw = w.get("_cached_width")
+	var ch = w.get("_cached_height")
+	if cw != null and ch != null:
+		return Vector2(float(cw), float(ch))
+	return Vector2.ZERO
+
+
 ## 带球碰撞预测绕行：预测前方 avoid_lookahead 秒会撞到的敌人，提前偏转
 ## 参考 GSAIAvoidCollisions：计算 time_to_collision，加侧向避让力
 func _calc_avoid_velocity(ap: Dictionary, base_vel: Vector2) -> Vector2:
@@ -1775,6 +1826,8 @@ func _apply_steering(ap: Dictionary, base_velocity: Vector2, use_avoid: bool = f
 	# 带球时额外做碰撞预测绕行
 	if use_avoid and ap.player.is_carrying_ball:
 		vel = _calc_avoid_velocity(ap, vel)
+	# Q14-A（0928-11 批）：墙体滑行绕行——探到前方 AI 墙→朝最近墙端偏置（发球/走位寻新路径）
+	vel = _calc_wall_slide(ap, vel)
 	# 保持原速度上限（不超速）
 	var max_speed: float = buffed_velocity.length()
 	if max_speed > 1.0:

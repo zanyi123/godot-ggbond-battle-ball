@@ -30,6 +30,10 @@ class StubPlayer extends CharacterBody2D:
 	var resilience: float = 10.0
 
 
+class StubObstacleManager extends Node:
+	var obstacles: Array = []
+
+
 class StubBall extends Area2D:
 	var is_active: bool = false
 	var owner_player: CharacterBody2D = null
@@ -187,4 +191,31 @@ func _run() -> void:
   D1~D3 翻转为修复后语义=回归仪；外场游走 randf_range 残留另案（确定性纪律）；
   卡线/贴边 clamp 纯函数稳定（D4/D5），如见残余源头在决策分支另诊。
 """)
+	# ===== W：墙体滑行绕行（0928-11 选A：教AI绕墙+发球寻新路径）=====
+	print("[W] 墙体滑行绕行")
+	var no_mgr_aim: Node = RealAim.new()
+	var pre_runner: StubPlayer = _make_player("t_pre", "a", Vector2(0, 0))
+	var sad_w0 := {"player": pre_runner, "team": "a", "profile": profile, "skill_decide_count": 0}
+	var vel_nomgr: Vector2 = no_mgr_aim._calc_wall_slide(sad_w0, Vector2(200, 0))
+	_check(vel_nomgr == Vector2(200, 0), "W3 无墙管理器 fail-open=原速度")
+	var wall_mgr := StubObstacleManager.new()
+	wall_mgr.add_to_group("obstacle_managers")
+	root.add_child(wall_mgr)
+	var wall := StaticBody2D.new()   # 几何体即可（_calc_wall_slide 只读位置/尺寸；不挂 obstacle.gd 避免其 _process 依赖真实世界）
+	wall.position = Vector2(100, 0)
+	var wall_cs := CollisionShape2D.new()
+	var wshape := RectangleShape2D.new()
+	wshape.size = Vector2(28, 140)   # 纵墙（短轴=x → 绕行朝墙端 x 方向）
+	wall_cs.shape = wshape
+	wall.add_child(wall_cs)
+	wall.set("_cached_width", 28.0)
+	wall.set("_cached_height", 140.0)
+	wall_mgr.obstacles = [wall]
+	var runner: StubPlayer = _make_player("t_runner", "a", Vector2(0, 0))
+	var sad_w := {"player": runner, "team": "a", "profile": profile, "skill_decide_count": 0}
+	var vel_out: Vector2 = aim._calc_wall_slide(sad_w, Vector2(200, 0))
+	print("  直行(200,0) × 纵墙(28×140@100,0) → 滑行输出=%s" % [str(vel_out)])
+	_check(absf(vel_out.x) > 1.0 and signf(vel_out.x) == 1.0 and absf(vel_out.y) > 1.0, "W1 滑行=保留推进+朝墙端侧偏（x正+侧向分量）")
+	var vel_far: Vector2 = aim._calc_wall_slide(sad_w, Vector2(0, 200))
+	_check(is_equal_approx(vel_far.y, 200.0) and vel_far.x == 0.0, "W2 不朝墙方向 fail-open=原速度")
 	quit(1 if _fail > 0 else 0)
