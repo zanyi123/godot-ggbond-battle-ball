@@ -296,6 +296,20 @@ func _run() -> void:
 	_check(e_val >= 10.0 and e_val != 10.0 or true, "W2 波E计价执行（base=%.2f 非恒缺省10）" % e_val)
 	var route_src2: String = FileAccess.get_file_as_string("res://scripts/systems/spirit_system/handler/field_route.gd")
 	_check(route_src2.contains("AI直生幻象") and route_src2.contains("create_illusion"), "W3 illusion AI直生分支存在（断点2闭合）")
+	var PrimE: GDScript = load("res://scripts/battle/spirit_ai/primitives_e.gd")
+	var gate_ctx_e := {"player": outer_stub, "ally_skill_cast_recent": true}
+	var g_copy: Dictionary = PrimE.timing_gate({"timing_gate": "ally_skill_cast_recent"}, sad_outer, gate_ctx_e)
+	_check(bool(g_copy.get("ok", false)), "W4 ally_skill_cast_recent：快照有敌方施法 → 复制时机放行")
+	var g_copy2: Dictionary = PrimE.timing_gate({"timing_gate": "ally_skill_cast_recent"}, sad_outer, {"player": outer_stub})
+	_check(not bool(g_copy2.get("ok", true)), "W5 快照缺省 fail-closed")
+	var gate_ctx_tp := {"player": outer_stub, "ball_in_flight": true, "ball_out_predicted": true}
+	var g_tp: Dictionary = PrimE.timing_gate({"timing_gate": "ball_out_predicted"}, sad_outer, gate_ctx_tp)
+	_check(bool(g_tp.get("ok", false)), "W6 ball_out_predicted：预测球出外场 → teleport 救球放行")
+	var g_tp2: Dictionary = PrimE.timing_gate({"timing_gate": "ball_out_predicted"}, sad_outer, {"player": outer_stub})
+	_check(not bool(g_tp2.get("ok", true)), "W7 预测缺省 fail-closed")
+	# JSON 换键对账（0928-9 批准后：copy×2=ally_skill_cast_recent / teleport=ball_out_predicted）
+	var e_json: Dictionary = (JSON.parse_string(FileAccess.get_file_as_string("res://data/systems/spirit_ai/primitives_e.json")) as Dictionary)["descriptors"] as Dictionary
+	_check(str((e_json["skill_copy_last"] as Dictionary)["timing_gate"]) == "ally_skill_cast_recent" and str((e_json["player_teleport"] as Dictionary)["timing_gate"]) == "ball_out_predicted", "W8 E JSON 时机表已换键（0928-9）")
 
 	# ===== F 组：场地放置委托（波D）=====
 	print("[F] 场地放置委托")

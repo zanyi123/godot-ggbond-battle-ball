@@ -27,6 +27,7 @@ var team_b_players: Array[CharacterBody2D] = []
 
 # 子系统
 var input_mgr: Node  # InputManager
+var skill_state_manager: Node  # Q15收口：SkillStateManager 全局实例（AI 输入源/操控链共用）
 var ai_mgr: Node     # AIManager
 var comm_system: Node  # AICommunication
 var preparation_ui: Control  # 备战界面
@@ -245,6 +246,16 @@ func _setup_input_manager() -> void:
 	input_mgr.name = "InputManager"
 	input_mgr.set_script(input_script)
 	add_child(input_mgr)
+
+	# Q15收口（0928-10 主人批）：SkillStateManager 全局唯一实例挂 battle_manager——
+	# 全 AI（无人类接管）场景 input_manager 的懒建永不触发，AI 输入源登记链需它存在；
+	# 注入给 input_manager 复用（其懒建保留兜底，信号连接幂等由彼侧守卫）
+	var ssm_script := load("res://scripts/systems/spirit_system/skill_state_manager.gd")
+	skill_state_manager = Node.new()
+	skill_state_manager.name = "SkillStateManager"
+	skill_state_manager.set_script(ssm_script)
+	add_child(skill_state_manager)
+	input_mgr.skill_state_manager = skill_state_manager
 
 	input_mgr.player_switch_requested.connect(_on_player_switch)
 	input_mgr.throw_requested.connect(_on_throw_requested)

@@ -506,9 +506,12 @@ func _init_skill_state_manager() -> void:
 		skill_state_manager = SkillStateManager.new()
 		add_child(skill_state_manager)
 
-		# 连接信号
+	# 连接信号（幂等：Q15收口后 battle_manager 可能已注入全局实例，懒建分支不再触发）
+	if not skill_state_manager.skill_activated.is_connected(_on_skill_activated):
 		skill_state_manager.skill_activated.connect(_on_skill_activated)
+	if not skill_state_manager.skill_cancelled.is_connected(_on_skill_cancelled):
 		skill_state_manager.skill_cancelled.connect(_on_skill_cancelled)
+	if not skill_state_manager.skill_released.is_connected(_on_skill_released):
 		skill_state_manager.skill_released.connect(_on_skill_released)
 
 	# 每次切换主控球员都重新设置该球员的技能（按 player_id 索引，安全可重复调用）

@@ -66,6 +66,9 @@ func initialize(battle_mgr: Node2D, spirit_sys: SpiritSystemManager, ai_mgr: Nod
 	spirit_system = spirit_sys
 	ai_manager = ai_mgr
 	_load_element_counters()
+	# Q9b 波E复制族：敌方施法快照喂数（event_hooks record_skill_cast；仅 success 施法入账）
+	if spirit_system and not spirit_system.skill_used.is_connected(_on_skill_used_for_hooks):
+		spirit_system.skill_used.connect(_on_skill_used_for_hooks)
 	print("[SpiritAI] 初始化完成")
 
 func _load_element_counters() -> void:
@@ -1001,6 +1004,17 @@ func _get_available_skills(sad: Dictionary) -> Array[Dictionary]:
 	return result
 
 ## 决策明细 dump 只读口（10工单P3观测层，observe_layer 探活 get_decision_dump 自动点亮）
+## Q9b 波E复制族：技能释放快照喂数（hooks 头注处方；caster 经本表实例反查）
+func _on_skill_used_for_hooks(skill_id: String, caster_id: int, success: bool) -> void:
+	if not success or _event_hooks == null:
+		return
+	for sad in spirit_ai_data:
+		var caster = sad.get("player")
+		if caster != null and is_instance_valid(caster) and caster.get_instance_id() == caster_id:
+			_event_hooks.record_skill_cast(caster, skill_id)
+			return
+
+
 func get_decision_dump() -> Dictionary:
 	return last_decision_dump
 
@@ -1043,10 +1057,12 @@ func _setup_event_hooks() -> void:
 func _attach_ai_input_source(player: CharacterBody2D) -> void:
 	if battle_manager == null:
 		return
-	var input_manager = battle_manager.get("input_manager")
-	if input_manager == null:
-		return
-	var state_manager = input_manager.get("skill_state_manager")
+	# Q15收口（0928-10）：优先 battle 级全局实例（全 AI 场景 input_manager 懒建不触发）
+	var state_manager = battle_manager.get("skill_state_manager")
+	if state_manager == null:
+		var input_manager = battle_manager.get("input_manager")
+		if input_manager != null:
+			state_manager = input_manager.get("skill_state_manager")
 	if state_manager == null:
 		return
 	AI_INPUT_SOURCE.attach(state_manager, player.get_instance_id(), player)
@@ -1158,6 +1174,15 @@ func _build_primitive_ctx(sad: Dictionary) -> Dictionary:
 	# Q10 RC2 配套：己方持球判定（outer_support gate 用；与 enemy_carrier 对偶）
 	var ball_owner = ball_node.owner_player if (ball_node and is_instance_valid(ball_node)) else null
 	ctx["own_team_has_ball"] = ball_owner != null and is_instance_valid(ball_owner) and ball_owner.team == p.team
+	# Q9b 波E时机（0928-9 批准）：复制族快照 + 救球弹道预测（纯增量，无引用前零行为）
+	if _event_hooks:
+		ctx["ally_skill_cast_recent"] = not _event_hooks.get_recent_enemy_cast(p).is_empty()
+	var bop := false
+	if ai_manager and ai_manager.has_method("_is_ball_heading_to_outer") 			and ball_node and is_instance_valid(ball_node) and bool(ball_node.is_active) 			and bool(ai_manager._is_ball_heading_to_outer(str(p.team))):
+		var pred: Vector2 = ball_node.global_position + (ball_node.ball_direction * ball_node.ball_speed) * 1.5
+		var fz: GDScript = load("res://scripts/battle/field_zone.gd")
+		bop = str(fz.knowledge_zone_of(pred, str(p.team))).begins_with("outer")
+	ctx["ball_out_predicted"] = bop
 	return ctx
 
 
