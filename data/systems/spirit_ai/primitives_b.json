@@ -1,5 +1,5 @@
 {
-	"schema_version": 2,
+	"schema_version": 3,
 	"wave": "B",
 	"updated": "2026-09-26",
 	"_说明": "波B生存/控制族27标签描述符。schema基座照06规约v1（字段冻结）；schema_version=2仅因family枚举扩展申请（player_status/player_hp/player_motion/player_control四族，登记于进度看板问题列待规划窗口批）。timing_gate全部使用06§三现有12键零扩展。计价口径：compute_value=params[value_param]×value_unit后clamp[value_min,value_cap]；duration类=每秒价值；multiplier类注意move_slow为除数语义(1.0/multiplier，越大越狠线性正确)。value_param='none'表示该标签无数值参数(如on_hit_expire/unroot)，compute_value恒回落value_min（06§2.2缺键回落规定的合规用法）。",
@@ -189,7 +189,7 @@
 		"player_hp_damage_pct": {
 			"family": "player_hp",
 			"direction": "enemy",
-			"timing_gate": "enemy_visible",
+			"timing_gate": "enemy_low_hp",
 			"value_param": "value",
 			"value_unit": 1.8,
 			"value_min": 15.0,
@@ -197,7 +197,7 @@
 			"intent": "attack",
 			"intent_strength": 0.7,
 			"target_mode": "enemy_visible",
-			"notes": "体力族：敌向扣血（enemy_low_hp收割时机增强已登记看板）"
+			"notes": "体力族：敌向扣血（enemy_low_hp收割时机增强已登记看板） | Q2批准：残血收割时机（原enemy_visible）"
 		},
 		"player_hp_heal_flat": {
 			"family": "player_hp",
@@ -215,7 +215,7 @@
 		"player_hp_damage_flat": {
 			"family": "player_hp",
 			"direction": "enemy",
-			"timing_gate": "enemy_visible",
+			"timing_gate": "enemy_low_hp",
 			"value_param": "value",
 			"value_unit": 0.7,
 			"value_min": 15.0,
@@ -223,7 +223,7 @@
 			"intent": "attack",
 			"intent_strength": 0.7,
 			"target_mode": "enemy_visible",
-			"notes": "体力族：敌向固定扣血"
+			"notes": "体力族：敌向固定扣血 | Q2批准：残血收割时机（原enemy_visible）"
 		},
 		"player_hp_regen": {
 			"family": "player_hp",
@@ -241,7 +241,7 @@
 		"player_hp_dot": {
 			"family": "player_hp",
 			"direction": "enemy",
-			"timing_gate": "enemy_visible",
+			"timing_gate": "enemy_low_hp",
 			"value_param": "value",
 			"value_unit": 5.0,
 			"value_min": 15.0,
@@ -249,7 +249,7 @@
 			"intent": "attack",
 			"intent_strength": 0.7,
 			"target_mode": "enemy_visible",
-			"notes": "体力族：敌向每秒伤害"
+			"notes": "体力族：敌向每秒伤害 | Q2批准：残血收割时机（原enemy_visible）"
 		},
 		"player_move_slow": {
 			"family": "player_motion",
@@ -293,7 +293,7 @@
 		"player_unroot": {
 			"family": "player_motion",
 			"direction": "self",
-			"timing_gate": "self_threatened",
+			"timing_gate": "self_rooted",
 			"value_param": "none",
 			"value_unit": 0.0,
 			"value_min": 15.0,
@@ -301,7 +301,7 @@
 			"intent": "defense",
 			"intent_strength": 0.6,
 			"target_mode": "self",
-			"notes": "运动族：解定身；params仅player_id无数值参数，value_param=none恒value_min；理想gate=self_rooted（已登记看板申请）"
+			"notes": "运动族：解定身；params仅player_id无数值参数，value_param=none恒value_min；理想gate=self_rooted（已登记看板申请） | Q2批准：解定身理想时机=已处于定身（原self_threatened）"
 		},
 		"player_stun": {
 			"family": "player_control",

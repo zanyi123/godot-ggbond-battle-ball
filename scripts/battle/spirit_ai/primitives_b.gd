@@ -120,6 +120,19 @@ static func timing_gate(descriptor: Dictionary, sad: Dictionary, ctx: Dictionary
 		"ally_cast_setup":
 			# 本波不用，预留给⑤协议；ctx.combo_setup_active 缺省 fail-closed
 			return {"ok": bool(ctx.get("combo_setup_active", false)), "bonus": 1.0}
+		"self_rooted":
+			# Q2①（已批 09-27）：已处于定身 → 解定身技理想时机（status 系统判定，无感知依赖）
+			if player != null and is_instance_valid(player) and player.has_method("is_status_active"):
+				return {"ok": bool(player.is_status_active("rooted")), "bonus": 1.0}
+			return {"ok": false, "bonus": 1.0}
+		"enemy_low_hp":
+			# Q2②（已批 09-27）：可见敌有残血(<0.35) → 收割技理想时机
+			for enemy in visible_enemies:
+				if is_instance_valid(enemy):
+					var er: float = float(enemy.stamina) / float(max(enemy.max_stamina, 1.0))
+					if er < 0.35:
+						return {"ok": true, "bonus": 1.0}
+			return {"ok": false, "bonus": 1.0}
 		"outer_self_care":
 			# Q10/14号RC2（主人批）：流放且残血/低能 → 自护/恢复/增益类时机。
 			# in_outer 走 ctx（Q9a① 13号口径），轻量过渡兜底=player.is_penalized 直查

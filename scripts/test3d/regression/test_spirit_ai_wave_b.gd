@@ -51,7 +51,8 @@ func _run() -> void:
 		"player_status", "player_hp", "player_motion", "player_control"]
 	var valid_gates: Array = ["always", "ball_hold", "ball_hold_engage", "enemy_visible",
 		"enemy_carrying_visible", "self_threatened", "self_injured", "ally_injured",
-		"calm_state", "pre_burst", "ball_flight", "ally_cast_setup"]
+		"calm_state", "pre_burst", "ball_flight", "ally_cast_setup", 
+		"self_rooted", "enemy_low_hp"]   # Q2批准增补（0928 实施）
 	var fields_ok: bool = true
 	var constrain_ok: bool = true
 	var param_ok: bool = true
