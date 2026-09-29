@@ -704,6 +704,17 @@ func _on_phase_changed(new_phase: int) -> void:
 			if _is_half_time_prep:
 				_is_half_time_prep = false
 				_hide_half_time_prep()
+				# 2026-09-28 平台窗口修复（主人实机报告"下半场卡死"）：--fullai/平台双队全 AI
+				# 无人点击备战面板，解锁+球恢复住在 _on_prep_match_started 点击流——此处对
+				# 全 AI 观察态补恢复，否则 match_started=false 使 AI 总闸停摆+ball is_active=false，
+				# 下半场全场冻结至终场（实测三种子 88~91s 起僵死，探针僵死检测抓取）
+				if not auto_simulate and input_mgr != null and input_mgr.controlled_player == null:
+					match_started = true
+					input_mgr.match_started = true
+					if ball_node != null and "is_active" in ball_node:
+						ball_node.is_active = true
+					if ai_mgr != null and ai_mgr.has_method("refresh_all_speeds"):
+						ai_mgr.refresh_all_speeds()
 		GameManager.MatchPhase.RESULTS:
 			print("[Match] 比赛结束! 最终比分: %d - %d" % [GameManager.score_team_a, GameManager.score_team_b])
 			# 锁定输入（防止结算期间玩家继续操作）

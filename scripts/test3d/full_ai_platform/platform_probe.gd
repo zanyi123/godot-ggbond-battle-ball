@@ -39,6 +39,10 @@ var we_illusion_peak: int = 0         # 幻象在场峰值
 var we_vision_zone_seen: bool = false # VISION 区(5) 在场
 var _teleport_pending: Array = []     # [{t, player, from}]等待位移确认
 var _pos_poll_accum: float = 0.0
+var _stall_accum: float = 0.0
+var _stall_seconds: float = 0.0
+var _stall_reports: int = 0
+var _stall_baseline: Dictionary = {}
 
 # 工单12 关注技能（打印美化用；未列出也照常采集）
 const WATCH_SKILLS := {
@@ -178,6 +182,42 @@ func _process(delta: float) -> void:
 							_factor_stats[sid][k] = int(_factor_stats[sid].get(k, 0)) + 1
 					if not bool(sam._should_use_energy(sad, info, 100.0)):
 						_factor_stats[sid]["energy"] = int(_factor_stats[sid].get("energy", 0)) + 1
+	# 僵死检测（1s 节拍；主人 0928 报告"测试卡死"）——全员+球 5s 位移<25px = 疑似僵死
+	_stall_accum += delta
+	if _stall_accum >= 1.0:
+		_stall_accum = 0.0
+		if bm != null and bm.ball_node != null:
+			var moved := 0.0
+			var all_players: Array = bm.team_a_players + bm.team_b_players
+			var poses: Array = []
+			for pl2 in all_players:
+				if pl2 != null and is_instance_valid(pl2):
+					poses.append([pl2, pl2.global_position])
+			poses.append([bm.ball_node, bm.ball_node.global_position])
+			if not _stall_baseline.is_empty() and _stall_baseline.size() == poses.size():
+				var max_move := 0.0
+				for entry in poses:
+					var node = entry[0]
+					var base = _stall_baseline.get(node)
+					if base == null:
+						max_move = 999.0
+						break
+					max_move = maxf(max_move, float(node.global_position.distance_to(base)))
+				if max_move < 25.0:
+					_stall_seconds += 1.0
+					if _stall_seconds >= 5.0 and _stall_seconds - int(_stall_seconds) < 1.0:
+						_stall_reports += 1
+						var desc: Array[String] = []
+						for entry in poses:
+							if entry[0] != bm.ball_node:
+								desc.append("%s@%s" % [str(entry[0].char_data.get("name", "?")), str((entry[1] as Vector2).round())])
+						print("[Probe] ⚠ 疑似僵死 %0.fs（第%d次报告）：全员+球 5s 位移<25px | %s" % [_elapsed, _stall_reports, " ".join(desc)])
+				else:
+					_stall_seconds = 0.0
+			_stall_baseline.clear()
+			for entry in poses:
+				_stall_baseline[entry[0]] = entry[1]
+
 	# 波E轮询（独立0.5s）：传送位移确认 / 幻象峰值 / 迷雾区在场
 	_pos_poll_accum += delta
 	if we_applicable and _pos_poll_accum >= 0.5:
