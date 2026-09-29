@@ -1092,7 +1092,6 @@
 			"reverse": "player_stealth",
 			"description": "强制显现敌人",
 			"params": [
-				"target",
 				"target_id",
 				"duration"
 			],
@@ -1202,7 +1201,6 @@
 			"reverse": "player_move_boost",
 			"description": "移动速度降低",
 			"params": [
-				"target",
 				"multiplier",
 				"duration"
 			],
@@ -1502,7 +1500,6 @@
 			"reverse": "player_cc_immune",
 			"description": "无法行动",
 			"params": [
-				"target",
 				"duration"
 			],
 			"target_type": "player",
@@ -1532,7 +1529,6 @@
 			"reverse": "",
 			"description": "无法使用技能",
 			"params": [
-				"target",
 				"duration"
 			],
 			"target_type": "player",
@@ -1548,7 +1544,6 @@
 			"reverse": "",
 			"description": "无法投球",
 			"params": [
-				"target",
 				"duration"
 			],
 			"target_type": "player",

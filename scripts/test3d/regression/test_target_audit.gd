@@ -25,24 +25,39 @@ func _run() -> void:
 	for i in range(3):
 		await process_frame
 
-	# ===== ① registry：29 条全部登记 target =====
-	var reg: Dictionary = {}
+	# ===== ① registry：语义分流（2026-09-28 终裁）=====
+	# on-hit 8条（纯随球）：无 target 参数（杜绝误配成立即全体）
+	# 直接减益 13条：有 target 参数（面板可填 enemies/self/allies）
+	# 支援 8条：有 target 参数（预填 self）
+	var direct_enemy := ["player_atk_down_pct","player_atk_down_flat","player_def_down_pct","player_def_down_flat",
+		"player_spd_down_pct","player_spd_down_flat","player_res_down_pct","player_res_down_flat",
+		"player_vulnerable","player_energy_max_down_pct","player_energy_max_down_flat",
+		"player_heal_block","player_energy_block"]
+	var reg_view: Dictionary = {}
 	for t in DevDataSync.load_tags():
-		reg[str(t.get("id", ""))] = t
+		reg_view[str(t.get("id", ""))] = t
 	var reg_ok := true
-	for tid in ENEMY_PRESET + SUPPORT_PRESET:
-		if not reg.has(tid) or not ("target" in (reg[tid].get("params", []) as Array)):
+	for tid in direct_enemy:
+		var pp: Array = reg_view[tid].get("params", []) as Array
+		if not ("target" in pp):
 			reg_ok = false
-			print("  ✗ 缺登记: ", tid)
-	_assert("① registry: %d 条目标可选标签全部登记 target" % (ENEMY_PRESET.size() + SUPPORT_PRESET.size()), reg_ok)
+			print("  ✗ 缺: ", tid)
+	_assert("① registry: 13 条直接减益登记 target", reg_ok)
+	var onhit_ok := true
+	for tid in ["player_move_slow","player_stun","player_silence","player_disarm","player_reveal"]:
+		var pp2: Array = reg_view[tid].get("params", []) as Array
+		if "target" in pp2:
+			onhit_ok = false
+			print("  ✗ on-hit 误登记: ", tid)
+	_assert("① registry: on-hit 8 条无 target（纯随球语义）", onhit_ok)
 
-	# ===== ② 面板预填：减益=enemies / 支援=self =====
+	# ===== ② 面板预填：直接减益=enemies / 支援=self / on-hit 无 target 框 =====
 	var panel_script: GDScript = load("res://scripts/dev_tools/dev_spirit_panel.gd")
 	var panel: Node = panel_script.new()
 	root.add_child(panel)
 	await process_frame
 	var fill_ok := true
-	for tid in ENEMY_PRESET:
+	for tid in direct_enemy:
 		if str(panel._get_param_default(tid, "target")) != "enemies":
 			fill_ok = false
 			print("  ✗ 预填错: ", tid, " = ", panel._get_param_default(tid, "target"))
@@ -50,7 +65,11 @@ func _run() -> void:
 		if str(panel._get_param_default(tid, "target")) != "self":
 			fill_ok = false
 			print("  ✗ 预填错: ", tid, " = ", panel._get_param_default(tid, "target"))
-	_assert("② 面板: 29 条预填正确（减益=enemies/支援=self）", fill_ok)
+	for tid in ["player_move_slow","player_stun","player_silence","player_disarm","player_reveal"]:
+		if str(panel._get_param_default(tid, "target")) != "":
+			fill_ok = false
+			print("  ✗ on-hit 误带 target: ", tid)
+	_assert("② 面板: 预填正确（直接减益=enemies/支援=self/on-hit 无框）", fill_ok)
 
 	# ===== ③ handler 缺省语义：无 target → self（向后兼容）=====
 	var caster: CharacterBody2D = load("res://scripts/battle/player.gd").new()
