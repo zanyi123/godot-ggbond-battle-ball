@@ -21,7 +21,7 @@ SCENE = "res://scenes/battle/battle_arena.tscn"
 SANDBOX = os.path.join(PROJECT, "data/systems/spirit_ai/sandbox_profile.json")
 CKPT = os.path.join(PROJECT, "tools/spsa_state.json")
 CSV = os.path.join(PROJECT, "tools/spsa_log.csv")
-SEEDS = [1, 2, 3, 4, 5]
+SEEDS = [1, 2, 3, 4, 5, 6, 7, 8]  # 0930-1 主人批：扩到 8 种子（训练轮换池）
 HALF = 80.0
 
 # ===== S1a 参数向量（默认值=当前主线；bounds 防越界；sigma=SPSA 扰动步长）=====

@@ -1,0 +1,68 @@
+{
+ "best": [
+  {
+   "seed": 9,
+   "score": 63.76,
+   "coverage": 100.0,
+   "pass_rate": 66.7,
+   "switches": 89,
+   "stuck": 0,
+   "goals_a": 3,
+   "goals_b": 0
+  },
+  {
+   "seed": 10,
+   "score": 74.38,
+   "coverage": 100.0,
+   "pass_rate": 97.5,
+   "switches": 494,
+   "stuck": 0,
+   "goals_a": 3,
+   "goals_b": 0
+  },
+  {
+   "seed": 11,
+   "score": 75.12,
+   "coverage": 100.0,
+   "pass_rate": 99.0,
+   "switches": 595,
+   "stuck": 0,
+   "goals_a": 3,
+   "goals_b": 0
+  }
+ ],
+ "default": [
+  {
+   "seed": 9,
+   "score": 73.42,
+   "coverage": 100.0,
+   "pass_rate": 95.6,
+   "switches": 552,
+   "stuck": 0,
+   "goals_a": 3,
+   "goals_b": 0
+  },
+  {
+   "seed": 10,
+   "score": 66.76,
+   "coverage": 100.0,
+   "pass_rate": 71.4,
+   "switches": 97,
+   "stuck": 0,
+   "goals_a": 3,
+   "goals_b": 0
+  },
+  {
+   "seed": 11,
+   "score": 0.0,
+   "coverage": 100.0,
+   "pass_rate": 33.3,
+   "switches": 62,
+   "stuck": 0,
+   "goals_a": 3,
+   "goals_b": 0
+  }
+ ],
+ "avg_best": 71.08666666666666,
+ "avg_default": 46.72666666666667
+}

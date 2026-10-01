@@ -1,31 +1,31 @@
 {
- "round": 10,
+ "round": 50,
  "theta": {
-  "skill_use_threshold": 22.20748724589653,
-  "skill_expected_future_score": 11.036310551997257,
-  "skill_uncertainty_discount": 0.9,
+  "skill_use_threshold": 9.66615551654322,
+  "skill_expected_future_score": 28.238284150235714,
+  "skill_uncertainty_discount": 0.2,
   "skill_think_interval": 0.3,
-  "skill_late_game_bonus": 2.5,
+  "skill_late_game_bonus": 1.0,
   "skill_losing_bonus": 1.0,
-  "skill_leading_penalty": 1.0,
+  "skill_leading_penalty": 0.3,
   "skill_element_counter_bonus": 1.0,
   "skill_element_counter_penalty": 0.4,
-  "skill_energy_min": 20.0
+  "skill_energy_min": 9.66615551654322
  },
  "best": {
-  "score": 77.1275,
+  "score": 79.39,
   "theta": {
-   "skill_use_threshold": 22.20748724589653,
-   "skill_expected_future_score": 11.036310551997257,
-   "skill_uncertainty_discount": 0.9,
+   "skill_use_threshold": 5.0,
+   "skill_expected_future_score": 25.297960535844894,
+   "skill_uncertainty_discount": 0.2,
    "skill_think_interval": 0.3,
    "skill_late_game_bonus": 2.5,
    "skill_losing_bonus": 1.0,
-   "skill_leading_penalty": 1.0,
+   "skill_leading_penalty": 0.3,
    "skill_element_counter_bonus": 1.0,
-   "skill_element_counter_penalty": 0.4,
-   "skill_energy_min": 20.0
+   "skill_element_counter_penalty": 1.0,
+   "skill_energy_min": 5.0
   }
  },
- "rng": 159588919
+ "rng": 781410956
 }
