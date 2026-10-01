@@ -35,6 +35,19 @@ enum GameEvent {
 	SKILL_COPIED,          ## 技能被复制 {copier, source_caster, source_skill_id}
 	# Action.* 操作类（操控规划操1）
 	ACTION_JUMPED,         ## 玩家跳跃 {player}
+	# 23-F2 事件登记表 v2（工单23 主人批 2026-09-30；草案=23a，挂接点唯一）
+	# Defend.* 受击拦截/属性瓦解类
+	DEFEND_INTERCEPT,        ## 受击拦截 {defender, attacker, blocked_damage, item}
+	DEFEND_ATTRIBUTE_BREAK,  ## 属性瓦解 {defender, attacker, element, skill_id}
+	# Item.* 道具类（F3 battle_item_granter 发出）
+	ITEM_ACQUIRED,         ## 道具获得 {player, item_id, source}
+	ITEM_USED,             ## 道具使用 {player, item_id, target}
+	# Summon.* 召唤物类（F1 summon_manager 发出）
+	SUMMON_SPAWNED,        ## 召唤物生成 {type_id, owner_id, node}
+	SUMMON_DESPAWNED,      ## 召唤物注销 {type_id, owner_id, node, reason}
+	SUMMON_MERGED,         ## 召唤物融合 {result_type, members, params}（与20号 on_formed 并行不混用）
+	# Ball.* 球强制控制类（消费端自 emit）
+	BALL_FORCED_CONTROL,   ## 球强制吸附/停球/改线 {ball, by_player, mode}
 }
 
 ## 持久化开关：开启后事件流写入 _log（dump_log 取出；E6 接 sim_results 文件落盘）

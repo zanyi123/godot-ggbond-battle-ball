@@ -109,6 +109,8 @@ func _ready() -> void:
 	_setup_preparation_ui()
 	_setup_field_physics_manager()
 	_setup_obstacle_manager()
+	_setup_summon_manager()   # 23-F1 召唤物系统（工单23 时期1）
+	_setup_item_granter()     # 23-F3 道具兑换口
 	_setup_field_zone_manager()
 	_setup_illusion_manager()
 	_setup_spirit_system()
@@ -1382,6 +1384,24 @@ func _on_friction_changed(new_friction: float, source: String) -> void:
 func _on_bounciness_changed(new_bounciness: float, source: String) -> void:
 	"""弹性系数改变回调"""
 	print("[BattleManager] 场地弹性改变: e=%.2f (来源: %s)" % [new_bounciness, source])
+
+
+func _setup_summon_manager() -> void:
+	"""23-F1：召唤物系统管理器（组 summon_managers；类型表驱动，缺表 fail-closed）"""
+	var sm_script := load("res://scripts/systems/summon/summon_manager.gd")
+	var sm := Node.new()
+	sm.name = "SummonManager"
+	sm.set_script(sm_script)
+	add_child(sm)
+
+
+func _setup_item_granter() -> void:
+	"""23-F3：道具兑换口（组 battle_item_granters；比赛内临时账本）"""
+	var ig_script := load("res://scripts/battle/battle_item_granter.gd")
+	var ig := Node.new()
+	ig.name = "BattleItemGranter"
+	ig.set_script(ig_script)
+	add_child(ig)
 
 
 func _setup_obstacle_manager() -> void:

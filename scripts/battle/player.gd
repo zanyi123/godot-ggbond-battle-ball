@@ -62,6 +62,11 @@ var max_endurance: float = 100.0
 # 状态灯（第2步：控制状态系统）
 var _status_lights: Dictionary = {}  # { "stunned": { "remaining": 2.0, ... }, ... }
 
+# 23-F2 防御拦截旗标（工单23，默认关=零行为；置位方=23c 锅装备/F1 守鲨实体）
+var defend_intercept_ready: bool = false   # 受击拦截态（take_damage 前置口消费）
+var defend_intercept_item: String = ""     # 拦截源标识（payload 用；耐久由拦截源自管）
+var defend_break_element: String = ""      # 属性瓦解：被该元素球命中即瓦解（空=无；撕咬="雷火"）
+
 # 状态指示器基础色（由 enter_catch / set_carrying_ball 设置，状态灯/技能激活可覆盖）
 var _base_indicator_color: Color = Color.TRANSPARENT
 
@@ -1192,6 +1197,14 @@ func take_damage(amount: float, attacker: CharacterBody2D = null, attacker_eleme
 	# 无敌检查：灯亮则不受伤
 	if is_status_active("invincible"):
 		return {"damage": 0, "effect": "none"}
+
+	# 23-F2 受击拦截分发点（唯一，23a草案§2.1）：防御拦截态→拦下本次伤害并广播；
+	# 限度/耐久由拦截源实体订阅 DEFEND_INTERCEPT 自行扣减（本口只管"拦与不拦"）
+	if defend_intercept_ready:
+		var _ib = get_tree().get_first_node_in_group("battle_event_bus") if is_inside_tree() else null
+		if _ib:
+			_ib.emit_event(_ib.GameEvent.DEFEND_INTERCEPT, {"defender": self, "attacker": attacker, "blocked_damage": amount, "item": defend_intercept_item})
+		return {"damage": 0, "effect": "none", "intercepted": true}
 
 	# 易伤倍率
 	var dmg_mult: float = 1.0

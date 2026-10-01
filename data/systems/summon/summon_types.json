@@ -1,0 +1,50 @@
+{
+	"schema_version": 1,
+	"_说明": "23-F1 召唤物类型表（工单23 主人批骨架）。字段：kind(大类)/hitbox(碰撞规格)/lifespan(寿命秒)/active_limit(在场上限,每队计)/on_ball(球接近行为)/controllable(操控通道,19号链)/burrow(潜地配置,null=不支持)。",
+	"types": {
+		"fenny_magic_ball_att": {
+			"kind": "magic_ball",
+			"hitbox": "circle:18",
+			"lifespan": 20.0,
+			"active_limit": 6,
+			"on_ball": { "mode": "carry_with_ball", "explode_on_enemy": true, "damage": 30.0 },
+			"controllable": "steer"
+		},
+		"fenny_magic_ball_def": {
+			"kind": "magic_ball",
+			"hitbox": "circle:18",
+			"lifespan": 25.0,
+			"active_limit": 6,
+			"on_ball": { "mode": "grant_item", "item_pool": ["fenny_pan", "fenny_potion", "fenny_firework"] },
+			"controllable": "mark"
+		},
+		"shuimu_shark_att": {
+			"kind": "shark",
+			"hitbox": "circle:22",
+			"lifespan": 15.0,
+			"active_limit": 2,
+			"burrow": { "burrow_energy_cost_per_s": 2.0, "jump_key": true },
+			"on_ball": { "mode": "merge_with_ball" },
+			"controllable": "steer"
+		},
+		"shuimu_shark_def": {
+			"kind": "shark",
+			"hitbox": "circle:22",
+			"lifespan": 18.0,
+			"active_limit": 2,
+			"burrow": null,
+			"on_ball": { "mode": "intercept", "weak_to_element": "雷火", "stop_limit": 2 },
+			"controllable": "auto"
+		},
+		"shuimu_shark_bomb": {
+			"kind": "shark",
+			"hitbox": "circle:26",
+			"lifespan": 12.0,
+			"active_limit": 1,
+			"burrow": null,
+			"on_ball": { "mode": "merge_with_ball", "damage_mult": 2.0 },
+			"controllable": "steer",
+			"_备注": "组合鲨鱼炸弹=融合产物型（23b §三）：伤害翻倍由 SUMMON_MERGED 消费端配置"
+		}
+	}
+}

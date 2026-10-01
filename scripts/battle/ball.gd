@@ -529,6 +529,17 @@ func _on_body_entered(body: Node2D) -> void:
 		return
 
 	# === 对方球员 → 击中造成伤害 ===
+	# 23-F2 属性瓦解分发点（唯一，23a草案§2.2）：被击者撕咬防御态 且 来袭=其克制元素 → 瓦解
+	# （零伤+事件广播；停球/改线由撕咬实体订阅 DEFEND_ATTRIBUTE_BREAK 自行处理）
+	var _att_el: String = _attacker_element()
+	var _def_break_el: String = str(player.get("defend_break_element")) if player.has_method("get") else ""
+	if _att_el != "" and _def_break_el == _att_el:
+		var _bb = _event_bus()
+		if _bb:
+			_bb.emit_event(BattleEventBus.GameEvent.DEFEND_ATTRIBUTE_BREAK, {"defender": player, "attacker": attacker_player, "element": _att_el, "skill_id": ""})
+		ball_hit_player.emit(player, 0)
+		print("[Ball] 属性瓦解: %s 拦截 %s 系来球" % [str(player.name), _att_el])
+		return
 	var result: Dictionary = player.take_damage(ball_damage, attacker_player, _attacker_element())
 	var actual_damage: int = result.get("damage", 0)
 	var effect: String = result.get("effect", "none")
