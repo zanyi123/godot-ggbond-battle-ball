@@ -14,17 +14,20 @@ const LoadoutLoader := preload("res://scripts/test3d/full_ai_platform/loadout_lo
 const ObserveLayerScript := preload("res://scripts/test3d/full_ai_platform/observe_layer.gd")
 const RosterPanelScript := preload("res://scripts/test3d/full_ai_platform/roster_panel.gd")
 const PlatformProbeScript := preload("res://scripts/test3d/full_ai_platform/platform_probe.gd")
+const TraceRecorderScript := preload("res://scripts/test3d/full_ai_platform/play_trace_recorder.gd")
 
 var battle_manager: Node2D = null
 var observe_layer: CanvasLayer = null
 var roster_panel: CanvasLayer = null
 var probe: Node = null             # 工单12 检测层（信号判定，非肉眼）
+var trace_recorder: Node = null    # 22-C S1 轨迹采集器（主人操控模式自动启用）
 var auto_matches: int = 0          # --platform-auto=N：headless 自动跑满 N 场后退出（0=交互观战）
 var platform_speed: float = 1.0    # --platform-speed=F：Engine.time_scale（auto 模式默认 6）
 var platform_seed: int = 0         # --platform-seed=N（0=不设种子）
 var loadout_path: String = ""      # --platform-loadout=path（缺省用出厂配置）
 var force_observe: bool = false    # --platform-force-observe=1：headless 下也构建观测层（UI 冒烟用）
 var probe_enabled: bool = true     # --platform-probe=0 关闭检测层（默认开）
+var human_slot: int = -1           # --platform-human=N（0-5）：该槽由主人亲自操控（22-C 轨迹采集模式），其余全 AI
 var _finished_matches: int = 0
 
 
@@ -82,10 +85,27 @@ func _platform_start() -> void:
 func _begin_match() -> void:
 	if battle_manager == null or not is_instance_valid(battle_manager):
 		return
-	# === 双队全 AI（复用 sim 清位路径；否则队A0号位无人操作会僵死）===
+	# 主人操控勾选（排表面板）优先于 CLI 参数（F6 无命令行入口；确认时面板尚在）
+	if roster_panel != null and is_instance_valid(roster_panel):
+		human_slot = int(roster_panel.get("human_slot_choice"))
+	# === 控制位：默认双队全 AI（复用 sim 清位路径）；--platform-human=N 时该槽归主人 ===
 	if battle_manager.input_mgr:
-		battle_manager.input_mgr.set_controlled_player(null)
-		print("[Platform] 已清空玩家控制位，双队全 AI")
+		if human_slot >= 0:
+			var all_p: Array = battle_manager.team_a_players + battle_manager.team_b_players
+			if human_slot < all_p.size():
+				battle_manager.input_mgr.set_controlled_player(all_p[human_slot])
+				print("[Platform] 🎮 主人操控模式：槽位 %s 由您亲自驾驶（其余全 AI），轨迹采集中…" % [
+					"A%d" % human_slot if human_slot < 3 else "B%d" % (human_slot - 3)])
+			else:
+				battle_manager.input_mgr.set_controlled_player(null)
+		else:
+			battle_manager.input_mgr.set_controlled_player(null)
+			print("[Platform] 已清空玩家控制位，双队全 AI")
+	# === 22-C S1 轨迹采集（主人操控模式自动启用；终场 finalize 由探针同批退出路径触发）===
+	if human_slot >= 0 and battle_manager.input_mgr != null and battle_manager.input_mgr.controlled_player != null:
+		trace_recorder = TraceRecorderScript.new()
+		add_child(trace_recorder)
+		trace_recorder.setup(battle_manager)
 
 	GameManager.match_ended.connect(_on_platform_match_ended)
 	# === 工单12 检测层：信号判定印记/合体是否运行时真实发生（21表对照信号，非肉眼）===
@@ -126,11 +146,15 @@ func _parse_platform_args() -> void:
 			force_observe = true
 		elif arg == "--platform-probe=0":
 			probe_enabled = false
+		elif arg.begins_with("--platform-human="):
+			human_slot = clampi(int(arg.substr(17)), 0, 5)
 
 
 func _on_platform_match_ended(score_a: int, score_b: int, result: String) -> void:
 	_finished_matches += 1
 	print("[Platform] 场次#%d 结束 比分 %d-%d（%s）" % [_finished_matches, score_a, score_b, result])
+	if trace_recorder != null and is_instance_valid(trace_recorder):
+		trace_recorder.finalize_and_save()
 	if probe != null and is_instance_valid(probe):
 		var verdict: Dictionary = probe.print_final_report()
 		if auto_matches > 0:

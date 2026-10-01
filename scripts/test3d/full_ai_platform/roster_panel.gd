@@ -7,6 +7,7 @@ extends CanvasLayer
 signal confirmed
 
 var bm: Node2D = null
+var human_slot_choice: int = -1   # 主人操控模式勾选（-1=全AI；0=A0猪猪侠亲自驾驶+轨迹采集）
 var _slots: Dictionary = {}       # slot -> {char, spirit_id, spirit_name, element, skills, fallback}
 var _root: Control = null
 var _viewer: PopupPanel = null
@@ -79,6 +80,15 @@ func _build_ui() -> void:
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.modulate = Color(1, 0.9, 0.5, 0.9)
 	vbox.add_child(hint)
+
+	var human_row := HBoxContainer.new()
+	human_row.add_theme_constant_override("separation", 8)
+	vbox.add_child(human_row)
+	var human_box := CheckBox.new()
+	human_box.text = "🎮 主人亲自驾驶 A0（猪猪侠）——其余全 AI，自动采集轨迹（22-C 学主人打法）"
+	human_box.add_theme_font_size_override("font_size", 13)
+	human_box.toggled.connect(func(on: bool) -> void: human_slot_choice = 0 if on else -1)
+	human_row.add_child(human_box)
 
 	var btn := Button.new()
 	btn.text = "✅ 确认开始比赛"
