@@ -112,6 +112,15 @@ func _on_path_depleted(zone: Area2D) -> void:
 	path_depleted.emit(zone)
 
 
+## 工单23 F4 查询口收尾：坐标是否处于任一能量快道内（F1 try_merge 融合判定消费；23a §四承诺）
+func is_in_energy_path(pos: Vector2) -> bool:
+	_cleanup()
+	for zone in zones:
+		if is_instance_valid(zone) and int(zone.get("zone_type")) == 6 and zone.contains_point(pos):
+			return true
+	return false
+
+
 ## 波6 #9：查询某坐标处敌方感知倍率（站在视野迷雾内 <1；多重迷雾取最小）
 func get_perception_scale_at(pos: Vector2, viewer_team: String = "") -> float:
 	## 波6 #9（P1 修正）：viewer_team==施法者队伍 → 不受本方迷雾影响（返回 1.0）

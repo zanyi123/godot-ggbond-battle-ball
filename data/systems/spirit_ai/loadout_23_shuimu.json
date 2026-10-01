@@ -2,9 +2,9 @@
 	"schema_version": 2,
 	"_说明": "工单23时期2 水木队装载（布场窗口，首批=shuimu_3猎杀快道；阿朗姆/阿雷斯的快牙系待召唤标签registry登记后续批）。test_spirits 内联本文件（loader只注册装载文件自带清单）。阿克维=快道施放者；阿朗姆/阿雷斯暂无技能（快牙系等标签），作对抗性在场单位；B队=既有测试元灵三人。",
 	"test_spirits": [
-		{"id": "test_spirit_shuimu_alangmu", "name": "阿朗姆的元灵", "element": "冰雪", "skills": []},
+		{"id": "test_spirit_shuimu_alangmu", "name": "阿朗姆的元灵", "element": "冰雪", "skills": ["shuimu_1", "shuimu_2"]},
 		{"id": "test_spirit_shuimu_akewei", "name": "阿克维的元灵", "element": "冰雪", "skills": ["shuimu_3"]},
-		{"id": "test_spirit_shuimu_aleisi", "name": "阿雷斯的元灵", "element": "草木", "skills": []},
+		{"id": "test_spirit_shuimu_aleisi", "name": "阿雷斯的元灵", "element": "草木", "skills": ["shuimu_4", "shuimu_5"]},
 		{"id": "test_spirit_xiaodaidai", "name": "小呆呆的元灵", "element": "冰雪", "skills": ["skill_冰雪_1"]},
 		{"id": "test_spirit_bobi", "name": "波比的元灵", "element": "草木", "skills": ["skill_草木_1", "skill_草木_2"]},
 		{"id": "test_spirit_mihu", "name": "迷糊老师的元灵", "element": "梦幻", "skills": ["skill_梦幻_1"]}

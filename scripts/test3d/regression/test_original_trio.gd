@@ -76,7 +76,7 @@ func _run() -> void:
 		_finish()
 		return
 	var skills: Array = skills_data.get("skills", [])
-	_assert("J2: 技能总数 24（工单12五技+波E实证四技+工单19操控两技等演进）", skills.size() == 24)
+	_assert("J2: 技能总数 34（工单23演进：水木6+芬尼4）", skills.size() == 34)
 	var by_id: Dictionary = {}
 	for s in skills:
 		if typeof(s) == TYPE_DICTIONARY:
@@ -95,7 +95,7 @@ func _run() -> void:
 		for t in reg.get("tags", []):
 			if typeof(t) == TYPE_DICTIONARY:
 				reg_by_id[str(t.get("id", ""))] = t
-	_assert("J4: tags_registry 104 条（103+combo_ready）", reg_by_id.size() == 104)
+	_assert("J4: tags_registry 107 条（工单23时期2增量：summon_spawn/merge/energy_path）", reg_by_id.size() == 107)
 	_assert("J5: 新标签 player_combo_ready 已注册（19b10）", reg_by_id.has("player_combo_ready") and str(reg_by_id.get("player_combo_ready", {}).get("code", "")) == "19b10")
 
 	var tags_ok := true

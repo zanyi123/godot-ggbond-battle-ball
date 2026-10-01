@@ -1,0 +1,96 @@
+{
+	"schema_version": 2,
+	"_说明": "工单23时期2 芬尼队装载（操球窗口，4技全配：fenny_1杯桑/fenny_2杯艾/fenny_3杯崔/fenny_4三人共技各带）。test_spirits 内联本文件（loader只注册装载文件自带清单）。B队=既有测试三人作对抗。⚠ summon_spawn/summon_limit_up/enhance_next 三标签=配置草案名，registry 登记批次归增益窗口、handler 分发口归集成窗口（照 shuimu_3 先例上报）；描述符批次出手率归增益。",
+	"test_spirits": [
+		{
+			"id": "test_spirit_fenny_beisang",
+			"name": "杯桑的元灵",
+			"element": "梦幻",
+			"skills": [
+				"fenny_1",
+				"fenny_4"
+			]
+		},
+		{
+			"id": "test_spirit_fenny_beiai",
+			"name": "杯艾的元灵",
+			"element": "梦幻",
+			"skills": [
+				"fenny_2",
+				"fenny_4"
+			]
+		},
+		{
+			"id": "test_spirit_fenny_beicui",
+			"name": "杯崔的元灵",
+			"element": "梦幻",
+			"skills": [
+				"fenny_3",
+				"fenny_4"
+			]
+		},
+		{
+			"id": "test_spirit_xiaodaidai",
+			"name": "小呆呆的元灵",
+			"element": "冰雪",
+			"skills": [
+				"skill_冰雪_1"
+			]
+		},
+		{
+			"id": "test_spirit_bobi",
+			"name": "波比的元灵",
+			"element": "草木",
+			"skills": [
+				"skill_草木_1",
+				"skill_草木_2"
+			]
+		},
+		{
+			"id": "test_spirit_mihu",
+			"name": "迷糊老师的元灵",
+			"element": "梦幻",
+			"skills": [
+				"skill_梦幻_1"
+			]
+		}
+	],
+	"loadouts": [
+		{
+			"slot": "A0",
+			"character_id": "char_001",
+			"spirit_id": "杯桑的元灵",
+			"skills": []
+		},
+		{
+			"slot": "A1",
+			"character_id": "char_002",
+			"spirit_id": "杯艾的元灵",
+			"skills": []
+		},
+		{
+			"slot": "A2",
+			"character_id": "char_003",
+			"spirit_id": "杯崔的元灵",
+			"skills": []
+		},
+		{
+			"slot": "B0",
+			"character_id": "char_004",
+			"spirit_id": "小呆呆的元灵",
+			"skills": []
+		},
+		{
+			"slot": "B1",
+			"character_id": "char_005",
+			"spirit_id": "波比的元灵",
+			"skills": []
+		},
+		{
+			"slot": "B2",
+			"character_id": "char_006",
+			"spirit_id": "迷糊老师的元灵",
+			"skills": []
+		}
+	]
+}

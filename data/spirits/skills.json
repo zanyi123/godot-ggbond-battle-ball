@@ -751,6 +751,235 @@
 			"type": "active",
 			"unlock_cost": 0,
 			"unlock_level": 1
+		},
+		{
+			"base_description": "水木联盟·阿朗姆（队长）",
+			"cooldown": 15.0,
+			"description": "快牙猎杀\n召唤水鲨鱼，可潜入地下遁形（地下额外耗能维持），可融入决竞球进攻或单独操控进攻（工单23水木#1，原作逐字）",
+			"detail": "攻鲨：steer操控+空格跳出潜地（types表burrow配置）；球接近自动融入",
+			"element": "冰雪",
+			"energy_cost": 30,
+			"icon_color": "#2E86C1",
+			"icon_path": "",
+			"id": "shuimu_1",
+			"name": "快牙猎杀",
+			"operator": "OP_STEER",
+			"tag_params": {
+				"summon_spawn": {
+					"count": 1,
+					"summon_type": "shuimu_shark_att"
+				}
+			},
+			"tags": [
+				"summon_spawn"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
+		},
+		{
+			"base_description": "水木联盟·阿朗姆",
+			"cooldown": 18.0,
+			"description": "多重快牙猎杀\n召唤多条水鲨鱼（子分身不含决竞球），可融球或单独进攻（工单23水木#2，原作逐字）",
+			"detail": "数量对齐types表active_limit=2/队",
+			"element": "冰雪",
+			"energy_cost": 45,
+			"icon_color": "#2E86C1",
+			"icon_path": "",
+			"id": "shuimu_2",
+			"name": "多重快牙猎杀",
+			"operator": "OP_STEER",
+			"tag_params": {
+				"summon_spawn": {
+					"count": 2,
+					"summon_type": "shuimu_shark_att"
+				}
+			},
+			"tags": [
+				"summon_spawn"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
+		},
+		{
+			"base_description": "水木联盟·阿雷斯（防御手）",
+			"cooldown": 15.0,
+			"description": "快牙猎杀\n召唤水鲨鱼，可潜入地下遁形，可融入决竞球进攻或单独操控进攻（工单23水木#4=防御手版，同#1复用）",
+			"detail": "攻鲨：同shuimu_1（types表同型）",
+			"element": "冰雪",
+			"energy_cost": 30,
+			"icon_color": "#2E86C1",
+			"icon_path": "",
+			"id": "shuimu_4",
+			"name": "快牙猎杀",
+			"operator": "OP_STEER",
+			"tag_params": {
+				"summon_spawn": {
+					"count": 1,
+					"summon_type": "shuimu_shark_att"
+				}
+			},
+			"tags": [
+				"summon_spawn"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
+		},
+		{
+			"base_description": "水木联盟·阿雷斯（防御手）",
+			"cooldown": 15.0,
+			"description": "快牙撕咬\n召唤防御水鲨鱼（不可潜地）：抵御攻击；雷火系决竞球进攻技瞬间瓦解；限度内让球停下，超限改球路线（工单23水木#5，原作逐字）",
+			"detail": "守鲨：拦截态（DEFEND_INTERCEPT消费）+雷火属性瓦解（DEFEND_ATTRIBUTE_BREAK）+停球上限2（types表）",
+			"element": "草木",
+			"energy_cost": 30,
+			"icon_color": "#58B368",
+			"icon_path": "",
+			"id": "shuimu_5",
+			"name": "快牙撕咬",
+			"operator": "OP_AUTO",
+			"tag_params": {
+				"summon_spawn": {
+					"count": 1,
+					"summon_type": "shuimu_shark_def"
+				}
+			},
+			"tags": [
+				"summon_spawn"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
+		},
+		{
+			"base_description": "水木联盟·三人【组合】",
+			"cooldown": 20.0,
+			"description": "组合鲨鱼炸弹\n两条水鲨鱼在快道里融合为一条鲨鱼，伤害翻倍（工单23水木#6【组合】，原作逐字）",
+			"detail": "融合产物=shuimu_shark_bomb（types表damage_mult 2.0）；需场上有双鲨且双在能量路径内（F4查询口）；首版=同主双鲨融合，三人协同归20号二期（备案）",
+			"element": "冰雪",
+			"energy_cost": 30,
+			"icon_color": "#1B4F72",
+			"icon_path": "",
+			"id": "shuimu_6",
+			"name": "组合鲨鱼炸弹",
+			"operator": "OP_AUTO",
+			"tag_params": {
+				"summon_merge": {
+					"need_count": 2,
+					"result_type": "shuimu_shark_bomb"
+				}
+			},
+			"tags": [
+				"summon_merge"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
+		},
+		{
+			"base_description": "芬尼队·杯桑（队长）",
+			"cooldown": 18.0,
+			"description": "魔术无上限\n场上爆炸球/道具球上限 6+6 → 10+10（此后每5秒自动无耗生成一个）",
+			"detail": "工单23芬尼#1（原作逐字：上限状态改写+定时生成器归 summon_manager 5s/个/人）。tag 名为配置草案，registry 登记批次（增益窗口）可平移改名",
+			"element": "梦幻",
+			"energy_cost": 30.0,
+			"icon_color": "#E0B0FF",
+			"icon_path": "",
+			"id": "fenny_1",
+			"name": "魔术无上限",
+			"operator": "OP_AUTO",
+			"tag_params": {
+				"summon_limit_up": {
+					"att_limit": 10.0,
+					"def_limit": 10.0,
+					"duration": 20.0
+				}
+			},
+			"tags": [
+				"summon_limit_up"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"base_description": "芬尼队·杯艾",
+			"cooldown": 15.0,
+			"description": "魔术白球-攻\n外场上空生成多个白色爆炸魔术球，操控该球携带决竞球飞向对方进攻爆炸",
+			"detail": "工单23芬尼#2（types: fenny_magic_ball_att carry_with_ball+explode_on_enemy；操控=OP_STEER 19号链 controllable）",
+			"element": "梦幻",
+			"energy_cost": 35.0,
+			"icon_color": "#DDA0DD",
+			"icon_path": "",
+			"id": "fenny_2",
+			"name": "魔术白球-攻",
+			"operator": "OP_STEER",
+			"tag_params": {
+				"summon_spawn": {
+					"spawn_count": 3.0,
+					"type_id": "fenny_magic_ball_att"
+				}
+			},
+			"tags": [
+				"summon_spawn"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"base_description": "芬尼队·杯崔",
+			"cooldown": 15.0,
+			"description": "魔术白球-守\n生成道具魔术球，操控飞向自己获得道具：平底锅(防御+免负面)/药水(回血+能量恢复)/烟花(吸附球+球速伤害增)",
+			"detail": "工单23芬尼#3（types: fenny_magic_ball_def grant_item 三道具池；操控=OP_MARK；道具兑换=F3 battle_item_granter）",
+			"element": "梦幻",
+			"energy_cost": 35.0,
+			"icon_color": "#C8A2C8",
+			"icon_path": "",
+			"id": "fenny_3",
+			"name": "魔术白球-守",
+			"operator": "OP_MARK",
+			"tag_params": {
+				"summon_spawn": {
+					"spawn_count": 3.0,
+					"type_id": "fenny_magic_ball_def"
+				}
+			},
+			"tags": [
+				"summon_spawn"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"base_description": "芬尼队·三人共技",
+			"cooldown": 20.0,
+			"description": "能量强化\n强化接下来魔术球：爆炸伤害翻倍+可破敌障碍；锅防×3；药水×2；烟花伤×2",
+			"detail": "工单23芬尼#4（消费计数强化态：ITEM_USED 前置态消费=F2域；charges 分道具口径照原作倍数）",
+			"element": "梦幻",
+			"energy_cost": 25.0,
+			"icon_color": "#FFD700",
+			"icon_path": "",
+			"id": "fenny_4",
+			"name": "能量强化",
+			"operator": "OP_AUTO",
+			"tag_params": {
+				"enhance_next": {
+					"damage_mult": 2.0,
+					"firework_mult": 2.0,
+					"pan_charges": 3.0,
+					"potion_charges": 2.0,
+					"duration": 15.0
+				}
+			},
+			"tags": [
+				"enhance_next"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
 		}
 	]
 }

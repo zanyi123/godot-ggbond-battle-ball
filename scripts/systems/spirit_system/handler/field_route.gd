@@ -144,6 +144,60 @@ func _apply_field_zone_mark(params: Dictionary) -> void:
 	pass
 func _apply_field_zone_clear(params: Dictionary) -> void:
 	pass
+
+
+## 工单23 水木快牙系：召唤物生成分发（registry summon_spawn；F1 接口照 23b 定稿，布场代+集成复核）
+## count 默认1；位置=施法者环绕确定性散布（i*90°+45°，半径40——零随机）；上限由 manager 内置截断
+func _apply_summon_spawn(params: Dictionary, caster_id: int) -> void:
+	var sm = _get_summon_manager()
+	if not sm:
+		push_error("[TagEffectHandler] 找不到 SummonManager")
+		return
+	var caster := _get_caster(caster_id)
+	if not caster:
+		print("[TagEffectHandler] 召唤: 找不到施法者")
+		return
+	var type_id := str(params.get("summon_type", ""))
+	if type_id.is_empty():
+		push_error("[TagEffectHandler] 召唤: 缺 summon_type")
+		return
+	var count: int = maxi(int(params.get("count", 1)), 1)
+	var spawned: Array = []
+	for i in range(count):
+		var angle: float = PI * 0.25 + float(i) * PI * 0.5
+		var pos: Vector2 = caster.global_position + Vector2(cos(angle), sin(angle)) * 40.0
+		var ent: Node = sm.spawn(type_id, caster_id, pos)
+		if ent != null:
+			spawned.append(ent)
+	print("[TagEffectHandler] 召唤 %s×%d → 成功%d (上限截断于 manager)" % [type_id, count, spawned.size()])
+
+
+## 工单23 组合鲨鱼炸弹：同主双鲨在能量路径内融合（registry summon_merge；F1 try_merge+F4 查询口）
+## 语义简化备案：首版=单施法者双鲨融合；"三人协同"归20号框架二期
+func _apply_summon_merge(params: Dictionary, caster_id: int) -> void:
+	var sm = _get_summon_manager()
+	if not sm:
+		push_error("[TagEffectHandler] 找不到 SummonManager")
+		return
+	var result_type := str(params.get("result_type", ""))
+	if result_type.is_empty():
+		push_error("[TagEffectHandler] 融合: 缺 result_type")
+		return
+	var need: int = maxi(int(params.get("need_count", 2)), 2)
+	var candidates: Array = sm.get_summons_of(caster_id).filter(func(e: Node) -> bool:
+		return str(e.get("summon_type")) != result_type)
+	if candidates.size() < need:
+		print("[TagEffectHandler] 融合: 同主可融召唤物不足 (%d<%d)" % [candidates.size(), need])
+		return
+	var result: Node = sm.try_merge(candidates[0], candidates[1], result_type)
+	print("[TagEffectHandler] 融合 %s: %s" % [result_type, "成立" if result != null else "未成立(需双方在能量路径内)"])
+
+
+## 召唤物管理器查找（battle_manager 下 SummonManager，23-F1 挂载）
+func _get_summon_manager() -> Node:
+	if battle_manager and battle_manager.has_node("SummonManager"):
+		return battle_manager.get_node("SummonManager")
+	return null
 func _apply_field_zone_effect(params: Dictionary, zone_type: int) -> void:
 	"""区域效果标签通用函数
 	zone_type: 0=加速 1=减速 2=危险 3=安全
