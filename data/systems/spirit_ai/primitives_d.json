@@ -186,20 +186,5 @@
 			"position_intent": "advance_lane",
 			"notes": "工单23水木#3猎杀快道：8s×4=32；持续注能成本经cap压低；路径增益(path_buffs)经F4下发召唤物"
 		}
-	},
-	"descriptors_keys": [
-		"field_vision_block",
-		"field_zone_boost",
-		"field_zone_slow",
-		"field_zone_danger",
-		"field_zone_safe",
-		"field_zone_heal",
-		"field_obs_add",
-		"field_obs_clear",
-		"player_shield_obstacle",
-		"field_drain_wall",
-		"summon_spawn",
-		"summon_merge",
-		"field_zone_energy_path"
-	]
+	}
 }
