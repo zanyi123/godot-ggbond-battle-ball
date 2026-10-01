@@ -589,6 +589,9 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 		"field_zone_heal":
 			call("_apply_field_zone_effect", params, 4)  # 波5 #3 治疗区
 			success = true
+		"field_zone_energy_path":
+			call("_apply_field_zone_effect", params, 6)  # 工单23 F4 能量快道（条带+持续注能+路径增益下发召唤物）
+			success = true
 		# 对球员标签暂不实现（第1步只做buff堆栈）
 		# === 球员标签 - 属性(01-16) ===
 		"player_atk_up_pct":

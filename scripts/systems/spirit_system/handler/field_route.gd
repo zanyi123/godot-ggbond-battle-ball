@@ -161,15 +161,27 @@ func _apply_field_zone_effect(params: Dictionary, zone_type: int) -> void:
 
 	var zone_params := _build_zone_params(params, zone_type)
 
+	# 工单23 F4 能量快道：注能主体/条带起点注入（施法者=起点；AI 直生落点=终点）
+	if zone_type == 6:
+		var caster_for_path = _get_caster(params.get("caster_id", 0))
+		if caster_for_path:
+			zone_params["owner_node"] = caster_for_path
+			zone_params["owner_team"] = str(caster_for_path.team)
+			if not zone_params.has("path_from"):
+				zone_params["path_from"] = caster_for_path.global_position
+
 	# Q12 AI直生：field_position 有坐标直接生成区域（与 placer 左键同走 create_zone 管线；
 	# spawn_at 落点路径已在上方短路，此处兜无 spawn_at 的 AI 区域技）
 	var target_data: Dictionary = params.get("_target_data", {})
 	var ai_pos: Variant = target_data.get("field_position", null)
 	if ai_pos is Vector2:
+		if zone_type == 6 and zone_params.has("owner_node"):
+			zone_params["path_to"] = ai_pos  # F4：AI 快道终点=放置语义落点，起点=施法者（23a §三）
 		manager.create_zone(zone_params, ai_pos)
-		var type_names_ai: Array = ["加速区", "减速区", "危险区", "安全区"]
+		var type_names_ai: Array = ["加速区", "减速区", "危险区", "安全区", "治疗区", "视野迷雾", "能量快道"]
 		print("[TagEffectHandler] AI直生区域: %s pos=%s size=%.0f×%.0f dur=%.1fs" % [
-			type_names_ai[zone_type], str(ai_pos), float(zone_params["width"]),
+			type_names_ai[zone_type] if zone_type < type_names_ai.size() else str(zone_type),
+			str(ai_pos), float(zone_params["width"]),
 			float(zone_params["height"]), float(zone_params["duration"])
 		])
 		return
@@ -177,9 +189,9 @@ func _apply_field_zone_effect(params: Dictionary, zone_type: int) -> void:
 	var mouse_ops: int = int(params.get("mouse_ops", 1))
 	manager.start_placing(zone_params, mouse_ops)
 
-	var type_names: Array = ["加速区", "减速区", "危险区", "安全区"]
+	var type_names: Array = ["加速区", "减速区", "危险区", "安全区", "治疗区", "视野迷雾", "能量快道"]
 	print("[TagEffectHandler] 区域效果: %s size=%.0f×%.0f dur=%.1fs mouse_ops=%d" % [
-		type_names[zone_type],
+		type_names[zone_type] if zone_type < type_names.size() else str(zone_type),
 		zone_params["width"], zone_params["height"],
 		zone_params["duration"], mouse_ops
 	])
@@ -209,6 +221,14 @@ func _build_zone_params(params: Dictionary, zone_type: int) -> Dictionary:
 			zone_params["effect_value"] = 0.0
 		4:
 			zone_params["effect_value"] = float(params.get("heal_per_sec", 5.0))  # 波5 #3 治疗区
+		6:
+			# 工单23 F4 能量快道：条带/注能/增益参数透传（owner_node 由 _apply_field_zone_effect 注入）
+			zone_params["effect_value"] = 0.0
+			zone_params["path_width"] = maxf(float(params.get("path_width", 48.0)), 12.0)
+			zone_params["energy_per_sec"] = maxf(float(params.get("energy_per_sec", 2.0)), 0.0)
+			var buffs_v: Variant = params.get("path_buffs", null)
+			if buffs_v is Dictionary and not (buffs_v as Dictionary).is_empty():
+				zone_params["path_buffs"] = buffs_v
 	# 波5 #12 zone 作用于球：affect_ball 透传（可选）
 	if params.has("affect_ball"):
 		zone_params["affect_ball"] = params.get("affect_ball")

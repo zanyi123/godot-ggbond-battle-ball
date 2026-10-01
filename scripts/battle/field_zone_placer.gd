@@ -23,6 +23,9 @@ var selected_for_clear: Array = []
 
 var preview_node: Node2D = null
 var highlight_nodes: Array = []
+# 工单23 F4：能量快道两点绘制（OP_PLACE：第一次点击=起点，第二次=终点生成；预览实时拉伸）
+var _preview_fill: ColorRect = null
+var _preview_line: Line2D = null
 
 ## ==================== 信号 ====================
 
@@ -72,6 +75,7 @@ func _create_preview(params: Dictionary) -> void:
 	fill.position = Vector2(-half_w, -half_h)
 	fill.color = fill_color
 	preview_node.add_child(fill)
+	_preview_fill = fill
 
 	# 边框
 	var line := Line2D.new()
@@ -86,6 +90,7 @@ func _create_preview(params: Dictionary) -> void:
 	]
 	line.points = points
 	preview_node.add_child(line)
+	_preview_line = line
 
 	# 标签
 	var label := Label.new()
@@ -130,6 +135,27 @@ func _process(_delta: float) -> void:
 func _process_placing() -> void:
 	if preview_node and is_instance_valid(preview_node):
 		preview_node.global_position = _get_mouse_position()
+		# 工单23 F4：能量快道第二阶段——预览从起点拉伸到鼠标（条带实时跟随）
+		if _is_path_mode() and place_params.has("path_from") and _preview_fill and is_instance_valid(_preview_fill):
+			var from: Vector2 = place_params["path_from"]
+			var seg: Vector2 = _get_mouse_position() - from
+			var length: float = maxf(seg.length(), 1.0)
+			var width: float = maxf(float(place_params.get("path_width", 48.0)), 12.0)
+			preview_node.rotation = seg.angle()
+			preview_node.global_position = from + seg * 0.5
+			_preview_fill.size = Vector2(length, width)
+			_preview_fill.position = Vector2(-length * 0.5, -width * 0.5)
+			if _preview_line and is_instance_valid(_preview_line):
+				var hw: float = length * 0.5
+				var hh: float = width * 0.5
+				_preview_line.points = PackedVector2Array([
+					Vector2(-hw, -hh), Vector2(hw, -hh), Vector2(hw, hh), Vector2(-hw, hh), Vector2(-hw, -hh),
+				])
+
+
+## 工单23 F4：能量快道模式判定（zone_type=6 → 两点绘制语义）
+func _is_path_mode() -> bool:
+	return int(place_params.get("zone_type", -1)) == 6
 
 
 func _process_clearing() -> void:
@@ -180,6 +206,12 @@ func _place_zone() -> void:
 	var mouse_pos: Vector2 = _get_mouse_position()
 	var manager = _get_manager()
 	if not manager:
+		return
+
+	# 工单23 F4：能量快道两点绘制——第一次点击=记起点（不消耗操作数），第二次=终点生成
+	if _is_path_mode() and not place_params.has("path_from"):
+		place_params["path_from"] = mouse_pos
+		print("[ZonePlacer] 能量快道起点 (%.0f,%.0f) — 再点一次确认终点" % [mouse_pos.x, mouse_pos.y])
 		return
 
 	manager.create_zone(place_params, mouse_pos)

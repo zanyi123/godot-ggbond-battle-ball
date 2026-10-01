@@ -13,6 +13,10 @@ var placer: Node = null
 var ball_ref: Node2D = null  # 波5 #12：球引用（battle_manager 注入，转发给各 zone 做穿越感应）
 # 波5 #12：zone 穿越信号聚合转发（zone 动态创建，外部只需连 manager 一条线）
 signal zone_ball_passed(zone_type: int, mods: Dictionary)
+# 工单23 F4：能量快道聚合转发（summon_manager/F1 只订 manager 一处，23a §2.5 A 案已批）
+signal entity_entered_path(entity: Node2D)
+signal entity_exited_path(entity: Node2D)
+signal path_depleted(zone: Area2D)
 
 ## ==================== 初始化 ====================
 
@@ -56,6 +60,8 @@ func create_zone(params: Dictionary, position: Vector2) -> Area2D:
 				params["effect_value"] = float(params.get("heal_per_sec", 5.0))  # 波5 #3 治疗区
 			5:
 				params["effect_value"] = 1.0  # 波6 #9 视野迷雾无数值（perception_scale 单独存）
+			6:
+				params["effect_value"] = 1.0  # 工单23 F4 能量快道无数值（energy_per_sec/path_buffs 单独存）
 
 	var zone_script := load("res://scripts/battle/field_effect_zone.gd")
 	var zone := Area2D.new()
@@ -69,6 +75,11 @@ func create_zone(params: Dictionary, position: Vector2) -> Area2D:
 	# 波5 #12：注入球引用（zone 穿越感应用）+ 转发穿越信号到 manager
 	zone.ball_ref = ball_ref
 	zone.zone_ball_passed.connect(_on_zone_ball_passed)
+	# 工单23 F4：能量快道三信号聚合转发（23a §2.5 A 案）
+	if int(params.get("zone_type", 0)) == 6:  # ZoneType.ENERGY_PATH
+		zone.entity_entered_path.connect(_on_entity_entered_path)
+		zone.entity_exited_path.connect(_on_entity_exited_path)
+		zone.path_depleted.connect(_on_path_depleted)
 
 	zone.zone_expired.connect(_on_zone_expired)
 	zones.append(zone)
@@ -86,6 +97,19 @@ func create_zone(params: Dictionary, position: Vector2) -> Area2D:
 
 func _on_zone_ball_passed(zone_type: int, mods: Dictionary) -> void:
 	zone_ball_passed.emit(zone_type, mods)
+
+
+## 工单23 F4：能量快道三信号转发（summon_manager/F1 消费口）
+func _on_entity_entered_path(entity: Node2D) -> void:
+	entity_entered_path.emit(entity)
+
+
+func _on_entity_exited_path(entity: Node2D) -> void:
+	entity_exited_path.emit(entity)
+
+
+func _on_path_depleted(zone: Area2D) -> void:
+	path_depleted.emit(zone)
 
 
 ## 波6 #9：查询某坐标处敌方感知倍率（站在视野迷雾内 <1；多重迷雾取最小）

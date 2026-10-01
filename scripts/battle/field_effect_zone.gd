@@ -19,6 +19,7 @@ enum ZoneType {
 	SAFE,     # 安全区（免疫伤害）
 	HEAL,     # 波5 #3 治疗区（持续回血）
 	VISION,   # 波6 #9 视野迷雾（敌方 AI 感知削弱；视觉迷雾归美术）
+	ENERGY_PATH,  # 工单23 F4 能量快道（条带型带方向；持续注能维持；路径增益下发召唤物）
 }
 
 ## ==================== 配置 ====================
@@ -30,6 +31,7 @@ const ZONE_COLORS: Dictionary = {
 	ZoneType.SAFE: {"fill": Color(0.2, 0.8, 0.8, 0.25), "border": Color(0.3, 1.0, 1.0, 0.8)},
 	ZoneType.HEAL: {"fill": Color(0.4, 0.9, 0.4, 0.22), "border": Color(0.5, 1.0, 0.5, 0.8)},
 	ZoneType.VISION: {"fill": Color(0.15, 0.1, 0.25, 0.35), "border": Color(0.4, 0.3, 0.6, 0.8)},
+	ZoneType.ENERGY_PATH: {"fill": Color(0.1, 0.55, 0.75, 0.22), "border": Color(0.35, 0.9, 1.0, 0.85)},
 }
 
 const ZONE_NAMES: Dictionary = {
@@ -39,10 +41,17 @@ const ZONE_NAMES: Dictionary = {
 	ZoneType.SAFE: "安全区",
 	ZoneType.HEAL: "治疗区",
 	ZoneType.VISION: "视野迷雾",
+	ZoneType.ENERGY_PATH: "能量快道",
 }
 
 # 波5 #12 zone 作用于球：穿越信号（皮影原则——zone 只发信号，球侧消费）
 signal zone_ball_passed(zone_type: int, mods: Dictionary)
+
+# 工单23 F4：能量快道——召唤物进出转发信号（entity=入 "summon" 分组的实体，F1 定稿前约定）
+# 球员/球不广播（路径增益对象=召唤物）；manager 层聚合转发（F1 只订一处）
+signal entity_entered_path(entity: Node2D)
+signal entity_exited_path(entity: Node2D)
+signal path_depleted(zone: FieldEffectZone)  # 注能耗尽/施法者失效 → 提前消散（23a §2.4 已批语义）
 
 ## ==================== 状态 ====================
 
@@ -62,6 +71,15 @@ var ball_ref: Node2D = null              # 球引用（manager 注入）
 var _ball_inside: bool = false           # 球在区内状态（重复穿越判定）
 var perception_scale: float = 0.5        # 波6 #9：雾内敌方感知倍率
 var caster_team: String = ""             # 波6 #9 P1修正：施法者队伍（本方不受迷雾影响）
+
+## 工单23 F4 能量快道参数
+var path_from: Vector2 = Vector2.ZERO    # 条带起点（世界坐标）
+var path_to: Vector2 = Vector2.ZERO      # 条带终点
+var path_width: float = 48.0             # 条带宽
+var energy_per_sec: float = 2.0          # 持续注能速率（从施法者 spirit_energy 扣）
+var path_buffs: Dictionary = {}          # 路径增益参数表（原样下发 summon_manager，zone 不解释）
+var owner_node: Node2D = null            # 注能主体（施法者；失效/被击败=路径消散）
+var has_owner: bool = false              # 是否曾有主（区分"无主自然到期"与"有主已失效消散"——freed 对象 == null 恒真，不能靠空判）
 
 ## 正在区域内的球员 → 挂载的效果数据
 var _players_inside: Dictionary = {}  # player_instance_id → {buff_id, ...}
@@ -90,6 +108,27 @@ func setup(params: Dictionary) -> void:
 	# 波6 #9 视野迷雾：雾内感知倍率（<1 削弱）
 	perception_scale = float(params.get("perception_scale", 0.5))
 	caster_team = str(params.get("caster_team", ""))
+
+	# 工单23 F4 能量快道：条带化（缺 path 参数 → 退化短道 fail-closed，不崩）
+	if zone_type == ZoneType.ENERGY_PATH:
+		var pf: Variant = params.get("path_from", null)
+		var pt: Variant = params.get("path_to", null)
+		path_from = pf if typeof(pf) == TYPE_VECTOR2 else global_position
+		path_to = pt if typeof(pt) == TYPE_VECTOR2 else global_position + Vector2(0, -120.0)
+		path_width = maxf(float(params.get("path_width", 48.0)), 12.0)
+		energy_per_sec = maxf(float(params.get("energy_per_sec", 2.0)), 0.0)
+		path_buffs = params.get("path_buffs", {}) if params.get("path_buffs", {}) is Dictionary else {}
+		var on: Variant = params.get("owner_node", null)
+		owner_node = on if on != null and is_instance_valid(on) and on is Node2D else null
+		has_owner = owner_node != null
+		# 条带：中心=(from+to)/2，长=|to-from|，宽=path_width，rotation 对齐连线
+		var seg: Vector2 = path_to - path_from
+		if seg.length() < 1.0:
+			path_to = path_from + Vector2(0, -120.0)  # 零长防退化
+			seg = path_to - path_from
+		zone_size = Vector2(seg.length(), path_width)
+		rotation = seg.angle()
+		global_position = (path_from + path_to) * 0.5
 
 	# 碰撞设置：检测 layer 1 (球员)
 	collision_layer = 0
@@ -133,7 +172,8 @@ func _parse_zone_type(val) -> int:
 			return ZoneType.HEAL
 		"vision", "迷雾", "视野迷雾":
 			return ZoneType.VISION
-			return ZoneType.SAFE
+		"energy_path", "energy", "快道", "能量快道":
+			return ZoneType.ENERGY_PATH
 	return ZoneType.BOOST
 
 
@@ -187,6 +227,19 @@ func _build_visual() -> void:
 	_timer_label.add_theme_color_override("font_color", Color.WHITE)
 	add_child(_timer_label)
 
+	# 工单23 F4：能量快道方向箭头（本地 x 正向两枚 V 形，指示 from→to 流向）
+	if zone_type == ZoneType.ENERGY_PATH:
+		for ax in [zone_size.x * 0.2, zone_size.x * 0.42]:
+			var arrow := Line2D.new()
+			arrow.width = 2.0
+			arrow.default_color = colors.border
+			arrow.z_index = 1
+			var s: float = minf(path_width * 0.28, 12.0)
+			arrow.points = PackedVector2Array([
+				Vector2(ax - s, -s), Vector2(ax + s, 0), Vector2(ax - s, s),
+			])
+			add_child(arrow)
+
 
 func _update_visual() -> void:
 	"""更新倒计时显示"""
@@ -216,6 +269,9 @@ func _process(delta: float) -> void:
 	# 波5 #3 治疗区：每帧回血（走 player 公开 heal，禁疗自动生效）
 	elif zone_type == ZoneType.HEAL:
 		_process_heal_tick(delta)
+	# 工单23 F4 能量快道：持续注能维持（耗尽/施法者失效=提前消散，23a §2.4 已批）
+	elif zone_type == ZoneType.ENERGY_PATH:
+		_process_energy_path_tick(delta)
 
 	# 波5 #12 zone 作用于球：球穿越感应（一次性；离开后可重复触发）
 	if not affect_ball.is_empty() and ball_ref and is_instance_valid(ball_ref) and ball_ref.is_active:
@@ -260,11 +316,59 @@ func _process_heal_tick(delta: float) -> void:
 			player.heal(effect_value * delta)
 
 
+## 工单23 F4 能量快道：持续注能维持（23a §2.4 已批语义）
+## 施法者 spirit_energy 每秒扣 energy_per_sec；扣尽/施法者失效或被击败 → 路径提前消散
+## 无 owner_node（fail-closed 缺引用）→ 不扣能，按 duration 自然到期
+func _process_energy_path_tick(delta: float) -> void:
+	if not has_owner:
+		return  # 无主路径（建道即无引用）：不扣能，自然到期
+	if not is_instance_valid(owner_node) or owner_node.is_defeated:
+		_deplete("施法者失效")
+		return
+	var energy: float = float(owner_node.get("spirit_energy"))
+	if energy <= 0.0:
+		_deplete("能量耗尽")
+		return
+	var left := maxf(energy - energy_per_sec * delta, 0.0)
+	owner_node.set("spirit_energy", left)
+	if left <= 0.0:
+		_deplete("能量耗尽")
+
+
+## 注能终止 → 提前消散（走统一 _expire 管线：先清球员效果再 emit expired）
+func _deplete(reason: String) -> void:
+	path_depleted.emit(self)
+	var oname := "?"
+	if owner_node != null and is_instance_valid(owner_node):
+		oname = str(owner_node.get("character_id"))
+	print("[FieldZone] 能量快道消散: %s (owner=%s)" % [reason, oname])
+	_expire()
+
+
+## 条带几何查询（纯几何，供 summon_manager/融合判定调用；to_local 自带旋转）
+func contains_point(pos: Vector2) -> bool:
+	if zone_type != ZoneType.ENERGY_PATH:
+		return false
+	var local: Vector2 = to_local(pos)
+	return absf(local.x) <= zone_size.x * 0.5 and absf(local.y) <= zone_size.y * 0.5
+
+
+## 路径方向（from→to 单位向量；零长防护）
+func direction() -> Vector2:
+	var seg: Vector2 = path_to - path_from
+	return seg.normalized() if seg.length() >= 1.0 else Vector2.UP
+
+
 ## ==================== 进出区域 ====================
 
 func _on_body_entered(body: Node2D) -> void:
 	"""球员进入区域"""
 	if not zone_active:
+		return
+	# 工单23 F4：召唤物进入能量快道 → 转发信号（summon 分组约定=F1 实体入组；球员/球不广播）
+	if zone_type == ZoneType.ENERGY_PATH and body.is_in_group("summon"):
+		entity_entered_path.emit(body)
+		print("[FieldZone] 召唤物进入能量快道: %s" % body.name)
 		return
 	if not body is CharacterBody2D:
 		return
@@ -302,6 +406,10 @@ func _check_initial_overlaps() -> void:
 
 func _on_body_exited(body: Node2D) -> void:
 	"""球员离开区域"""
+	# 工单23 F4：召唤物离开能量快道 → 转发信号（与 entered 对称；不进球员移除逻辑）
+	if zone_type == ZoneType.ENERGY_PATH and body.is_in_group("summon"):
+		entity_exited_path.emit(body)
+		return
 	if not body is CharacterBody2D:
 		return
 	var player: CharacterBody2D = body
