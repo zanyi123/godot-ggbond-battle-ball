@@ -55,6 +55,35 @@ var _hooks_attached := false
 ## 决策评分明细 dump（10工单P3观测层；get_decision_dump 只读口，_decide_skill 每周期刷新，纯观测零行为）
 var last_decision_dump: Dictionary = {}
 
+## 22-B 投球窗口事件钩子连接标志（幂等；仅 event_hook_priority 开时连接）
+var _catch_hook_connected := false
+
+
+## 22-B S2 钩子连接（幂等；开关 event_hook_priority 默认关=不连接=轮询旧路径逐位一致）
+func _ensure_catch_hook() -> void:
+	if _catch_hook_connected:
+		return
+	if not SpiritAIPrimitiveRegistry.get_extra_flag("event_hook_priority"):
+		return
+	if ball_node == null or not is_instance_valid(ball_node) or not ball_node.has_signal("ball_caught"):
+		return
+	_catch_hook_connected = true
+	ball_node.ball_caught.connect(_on_ball_caught_hook)
+
+
+## 22-B：持球开始 → 立即技能评估（旁路轮询时钟；非注册/无效/受控者静默跳过）
+func _on_ball_caught_hook(catcher) -> void:
+	if catcher == null or not is_instance_valid(catcher):
+		return
+	for sad in spirit_ai_data:
+		if sad.get("player") != catcher:
+			continue
+		if not _is_valid(sad):
+			return
+		_decide_skill(sad)
+		sad.skill_think_timer = 0.0   # 立即评估后重置轮询相位（防同窗口双评）
+		return
+
 ## ===== 工单15交付物1：技能释放统计表（纯观察零决策影响；run_sim/平台报告聚合源）=====
 ## skill_id -> {"name","cat"(BALL/PLAYER/FIELD),"ok","miss","registered"}
 ## 15工单验收口径：覆盖率=出手技能数/实配技能数（基线3/9），三分类各≥1出手，失误率可见
@@ -823,12 +852,20 @@ func _physics_process(delta: float) -> void:
 	if not ball_node:
 		return
 
+	# 22-B S2（工单22 主人批"继续主线B"）：投球窗口事件钩子（连接逻辑见 _ensure_catch_hook）
+	_ensure_catch_hook()
+
 	for sad in spirit_ai_data:
 		if not _is_valid(sad):
 			continue
 
 		sad.skill_think_timer += delta
-		if sad.skill_think_timer >= sad.profile.skill_think_interval:
+		# 22-B（P2修复）：事件钩子开时，持球者 think 提频
+		# （持球窗口<0.5s 时轮询一次都轮不到的错拍修复；关=轮询旧路径逐位一致）
+		var cadence: float = sad.profile.skill_think_interval
+		if SpiritAIPrimitiveRegistry.is_event_hook_priority() and sad.player.is_carrying_ball:
+			cadence = minf(cadence, 0.1)  # 持球期 100ms 档（10次/秒，覆盖 0.1s 级持球窗口）
+		if sad.skill_think_timer >= cadence:
 			sad.skill_think_timer = 0.0
 			_decide_skill(sad)
 			_try_send_need_buff(sad)

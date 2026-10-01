@@ -58,10 +58,23 @@ static func is_wave_enabled(wave: String) -> bool:
 	return v is bool and bool(v)
 
 
+## 22-B：事件钩子开关读取（默认关=轮询旧路径）
+static func is_event_hook_priority() -> bool:
+	_ensure_switches(SWITCHES_PATH)
+	return bool(_switches.get("event_hook_priority", false))
+
+
 ## 重载开关（开发者热改 switches.json 后调用；path 参数供测试注入临时文件）
 static func reload_switches(path: String = SWITCHES_PATH) -> void:
 	_switches = _load_switches(path)
 	_switches_loaded = true
+
+
+## 通用旗标读取（22-B：event_hook_priority 等扩展开关；严格 bool true 才算开，fail-closed）
+static func get_extra_flag(key: String) -> bool:
+	_ensure_switches(SWITCHES_PATH)
+	var v = _switches.get(key, false)
+	return v is bool and bool(v)
 
 
 ## 开关状态只读快照（10工单P3观测层显示用；fail-closed 同口径）
@@ -131,4 +144,12 @@ static func _load_switches(path: String) -> Dictionary:
 		out["master_enabled"] = bool(raw.get("master_enabled"))
 	if raw.get("waves") is Dictionary:
 		out["waves"] = raw.get("waves")
+	# 22-B 修复（平台窗口，撞车收敛实录）：扩展 bool 键透传——原白名单只保留 master/waves，
+	# 致 event_hook_priority 等扩展开关"文件有键、加载即丢"（22-B 正主钩子 get_extra_flag
+	# 与提频口 is_event_hook_priority 双双恒 false=开关通道不存在）。严格 bool 才透传（fail-closed 不变）。
+	for key in raw.keys():
+		if key == "master_enabled" or key == "waves":
+			continue
+		if raw.get(key) is bool:
+			out[key] = bool(raw.get(key))
 	return out
