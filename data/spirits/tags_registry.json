@@ -1,317 +1,316 @@
 {
 	"tags": [
 		{
-			"id": "ball_dmg_up_pct",
+			"category": "BALL",
 			"code": "01",
-			"category": "BALL",
-			"sub_category": "数值",
-			"name": "增伤(%)",
-			"reverse": "ball_dmg_down_pct",
 			"description": "伤害提升X%",
+			"energy_cost": 0,
+			"id": "ball_dmg_up_pct",
+			"name": "增伤(%)",
 			"params": [
 				"value"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_dmg_down_pct",
+			"sub_category": "数值",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_dmg_down_pct",
+			"category": "BALL",
 			"code": "02",
-			"category": "BALL",
-			"sub_category": "数值",
-			"name": "减伤(%)",
-			"reverse": "ball_dmg_up_pct",
 			"description": "伤害降低X%",
+			"energy_cost": 0,
+			"id": "ball_dmg_down_pct",
+			"name": "减伤(%)",
 			"params": [
 				"value"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_dmg_up_pct",
+			"sub_category": "数值",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_dmg_up_flat",
+			"category": "BALL",
 			"code": "03",
-			"category": "BALL",
-			"sub_category": "数值",
-			"name": "增伤(固定)",
-			"reverse": "ball_dmg_down_flat",
 			"description": "伤害+固定值",
+			"energy_cost": 0,
+			"id": "ball_dmg_up_flat",
+			"name": "增伤(固定)",
 			"params": [
 				"value"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_dmg_down_flat",
+			"sub_category": "数值",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_dmg_down_flat",
+			"category": "BALL",
 			"code": "04",
-			"category": "BALL",
-			"sub_category": "数值",
-			"name": "减伤(固定)",
-			"reverse": "ball_dmg_up_flat",
 			"description": "伤害-固定值",
+			"energy_cost": 0,
+			"id": "ball_dmg_down_flat",
+			"name": "减伤(固定)",
 			"params": [
 				"value"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_dmg_up_flat",
+			"sub_category": "数值",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_speed_up_pct",
+			"category": "BALL",
 			"code": "05",
-			"category": "BALL",
-			"sub_category": "数值",
-			"name": "加速(%)",
-			"reverse": "ball_speed_down_pct",
 			"description": "球速×百分比",
+			"energy_cost": 0,
+			"id": "ball_speed_up_pct",
+			"name": "加速(%)",
 			"params": [
 				"multiplier"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_speed_down_pct",
+			"sub_category": "数值",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_speed_down_pct",
+			"category": "BALL",
 			"code": "06",
-			"category": "BALL",
-			"sub_category": "数值",
-			"name": "减速(%)",
-			"reverse": "ball_speed_up_pct",
 			"description": "球速÷百分比",
+			"energy_cost": 0,
+			"id": "ball_speed_down_pct",
+			"name": "减速(%)",
 			"params": [
 				"multiplier"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_speed_up_pct",
+			"sub_category": "数值",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_speed_up_flat",
+			"category": "BALL",
 			"code": "07",
-			"category": "BALL",
-			"sub_category": "数值",
-			"name": "加速(固定)",
-			"reverse": "ball_speed_down_flat",
 			"description": "球速+固定值",
+			"energy_cost": 0,
+			"id": "ball_speed_up_flat",
+			"name": "加速(固定)",
 			"params": [
 				"value"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
-		},
-		{
-			"id": "ball_speed_down_flat",
-			"code": "08",
-			"category": "BALL",
+			"reverse": "ball_speed_down_flat",
 			"sub_category": "数值",
-			"name": "减速(固定)",
-			"reverse": "ball_speed_up_flat",
+			"target_type": "ball"
+		},
+		{
+			"category": "BALL",
+			"code": "08",
 			"description": "球速-固定值",
+			"energy_cost": 0,
+			"id": "ball_speed_down_flat",
+			"name": "减速(固定)",
 			"params": [
 				"value"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_speed_up_flat",
+			"sub_category": "数值",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_tracking",
-			"code": "09",
 			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "追踪",
-			"reverse": "ball_avoid",
+			"code": "09",
 			"description": "球追踪目标飞行（持续转向）",
+			"energy_cost": 0,
+			"id": "ball_tracking",
+			"name": "追踪",
 			"params": [
 				"turn_speed"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_avoid",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_avoid",
+			"category": "BALL",
 			"code": "10",
-			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "避障",
-			"reverse": "ball_tracking",
 			"description": "球自动避开障碍",
+			"energy_cost": 0,
+			"id": "ball_avoid",
+			"name": "避障",
 			"params": [],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_tracking",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_boomerang",
-			"code": "11",
 			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "回旋",
-			"reverse": "ball_straight",
+			"code": "11",
 			"description": "球飞到一半返回",
+			"energy_cost": 0,
+			"id": "ball_boomerang",
+			"name": "回旋",
 			"params": [
 				"return_distance"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_straight",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_straight",
+			"category": "BALL",
 			"code": "12",
-			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "直行",
-			"reverse": "ball_boomerang",
 			"description": "球直线飞行不受干扰",
+			"energy_cost": 0,
+			"id": "ball_straight",
+			"name": "直行",
 			"params": [],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_boomerang",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_lockon",
+			"category": "BALL",
 			"code": "13",
-			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "精准锁定",
-			"reverse": "ball_spread",
 			"description": "发球时自动瞄准最近敌人",
+			"energy_cost": 0,
+			"id": "ball_lockon",
+			"name": "精准锁定",
 			"params": [],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_spread",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_spread",
-			"code": "14",
 			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "扩散",
-			"reverse": "ball_lockon",
+			"code": "14",
 			"description": "母球在飞行距离比例点分裂N个子球（伤害×split_damage_ratio）；子球不再分裂、被接=球权转移、停止即消散；母球存续（波6 #8 空壳转正）",
+			"energy_cost": 0,
+			"id": "ball_spread",
+			"name": "扩散",
 			"params": [
 				"split_count",
 				"split_damage_ratio",
 				"trigger_dist_pct"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_lockon",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_bounce_enhance",
-			"code": "18b1",
 			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "反弹增强",
-			"reverse": "",
+			"code": "18b1",
 			"description": "撞墙反弹次数上限max_bounces(0=无限)+每次反弹速度保持率speed_keep_pct(默认1.0，>1加速)",
+			"energy_cost": 0,
+			"id": "ball_bounce_enhance",
+			"name": "反弹增强",
 			"params": [
 				"max_bounces",
 				"speed_keep_pct"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_sure_hit",
+			"category": "BALL",
 			"code": "18b2",
-			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "必中",
-			"reverse": "",
 			"description": "高度窗豁免(跳跃躲不开)+追踪目标隐身不丢；瞄准配合ball_lockon",
+			"energy_cost": 0,
+			"id": "ball_sure_hit",
+			"name": "必中",
 			"params": [],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_transform",
-			"code": "18b3",
 			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "球形态变换",
-			"reverse": "",
+			"code": "18b3",
 			"description": "碰撞判定半径×size_scale(巨型雪球=2.0易命中，<1变小难命中)",
+			"energy_cost": 0,
+			"id": "ball_transform",
+			"name": "球形态变换",
 			"params": [
 				"size_scale"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_stealth",
+			"category": "BALL",
 			"code": "18b4",
-			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "球隐身",
-			"reverse": "",
 			"description": "球对敌方不可见(施法者同队可见)：AI躲球感知跳过；表现层消费is_stealthed()接口（规划版命名）",
+			"energy_cost": 0,
+			"id": "ball_stealth",
+			"name": "球隐身",
 			"params": [],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_in_flight_boost",
-			"code": "18c2",
 			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "飞行球推进",
-			"reverse": "",
+			"code": "18c2",
 			"description": "场上本方飞行球瞬时强化（dmg_pct/speed_pct）；无在场球登记pending待球飞出作用(30s)",
+			"energy_cost": 0,
+			"id": "ball_in_flight_boost",
+			"name": "飞行球推进",
 			"params": [
 				"dmg_pct",
 				"speed_pct"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_recall",
-			"code": "18c3",
 			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "拉回",
-			"reverse": "",
+			"code": "18c3",
 			"description": "本方飞行球朝投掷者转向拉回，max_times次；无在场球登记pending",
+			"energy_cost": 0,
+			"id": "ball_recall",
+			"name": "拉回",
 			"params": [
 				"max_times"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_manual_steering",
-			"code": "18c4",
 			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "手动制导",
-			"reverse": "",
+			"code": "18c4",
 			"description": "玩家投球进入手动态：方向随鼠标/视线、持续耗能energy_per_sec、超时/能量尽回直线；AI路径退化为直线",
+			"energy_cost": 0,
+			"id": "ball_manual_steering",
+			"name": "手动制导",
 			"params": [
 				"energy_per_sec",
 				"max_duration"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_carry_push",
-			"code": "18c5",
 			"category": "BALL",
-			"sub_category": "命中",
-			"name": "带人位移",
-			"reverse": "",
+			"code": "18c5",
 			"description": "命中结算附加拖拽：目标沿球方向位移pull_speed，球消失/超时释放；免控目标拒绝",
+			"energy_cost": 0,
+			"id": "ball_carry_push",
+			"name": "带人位移",
 			"params": [
 				"pull_speed",
 				"max_duration"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "命中",
+			"target_type": "ball"
 		},
 		{
-			"id": "field_vision_block",
-			"code": "10c",
 			"category": "FIELD",
-			"sub_category": "区域效果",
-			"name": "视野迷雾",
-			"reverse": "",
+			"code": "10c",
 			"description": "区域内敌方AI感知半径×perception_scale（<1削弱）；视觉迷雾归美术；spawn_at可选",
+			"energy_cost": 0,
+			"id": "field_vision_block",
+			"name": "视野迷雾",
 			"params": [
 				"radius",
 				"width",
@@ -320,58 +319,58 @@
 				"perception_scale",
 				"spawn_at"
 			],
-			"target_type": "field",
-			"energy_cost": 0
-		},
-		{
-			"id": "ball_penetrate",
-			"code": "15",
-			"category": "BALL",
-			"sub_category": "飞行行为",
-			"name": "穿透",
 			"reverse": "",
-			"description": "球击中人后继续飞行不停止",
-			"params": [],
-			"target_type": "ball",
-			"energy_cost": 0
+			"sub_category": "区域效果",
+			"target_type": "field"
 		},
 		{
-			"id": "ball_range_up",
-			"code": "16",
 			"category": "BALL",
-			"sub_category": "范围",
-			"name": "范围扩大",
-			"reverse": "ball_range_down",
+			"code": "15",
+			"description": "球击中人后继续飞行不停止",
+			"energy_cost": 0,
+			"id": "ball_penetrate",
+			"name": "穿透",
+			"params": [],
+			"reverse": "",
+			"sub_category": "飞行行为",
+			"target_type": "ball"
+		},
+		{
+			"category": "BALL",
+			"code": "16",
 			"description": "球命中敌人时，以该球员为半径造成范围伤害",
+			"energy_cost": 0,
+			"id": "ball_range_up",
+			"name": "范围扩大",
 			"params": [
 				"radius",
 				"damage_pct"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_range_down",
+			"sub_category": "范围",
+			"target_type": "ball"
 		},
 		{
-			"id": "ball_range_down",
-			"code": "17",
 			"category": "BALL",
-			"sub_category": "范围",
-			"name": "范围缩小",
-			"reverse": "ball_range_up",
+			"code": "17",
 			"description": "缩小AOE范围",
+			"energy_cost": 0,
+			"id": "ball_range_down",
+			"name": "范围缩小",
 			"params": [
 				"multiplier"
 			],
-			"target_type": "ball",
-			"energy_cost": 0
+			"reverse": "ball_range_up",
+			"sub_category": "范围",
+			"target_type": "ball"
 		},
 		{
-			"id": "field_obs_add",
-			"code": "01",
 			"category": "FIELD",
-			"sub_category": "障碍",
-			"name": "创造障碍",
-			"reverse": "field_obs_clear",
+			"code": "01",
 			"description": "鼠标放置障碍物阻挡球，球卡住逐帧消耗攻击和球速，击穿后继续飞",
+			"energy_cost": 0,
+			"id": "field_obs_add",
+			"name": "创造障碍",
 			"params": [
 				"shape",
 				"width",
@@ -385,32 +384,32 @@
 				"duration",
 				"mouse_ops"
 			],
-			"target_type": "field",
-			"energy_cost": 0
+			"reverse": "field_obs_clear",
+			"sub_category": "障碍",
+			"target_type": "field"
 		},
 		{
-			"id": "field_obs_clear",
-			"code": "02",
 			"category": "FIELD",
-			"sub_category": "障碍",
-			"name": "清除障碍",
-			"reverse": "field_obs_add",
+			"code": "02",
 			"description": "鼠标选中障碍物后点击场地清除，右键取消选中",
+			"energy_cost": 0,
+			"id": "field_obs_clear",
+			"name": "清除障碍",
 			"params": [
 				"clear_count",
 				"mouse_ops"
 			],
-			"target_type": "field",
-			"energy_cost": 0
+			"reverse": "field_obs_add",
+			"sub_category": "障碍",
+			"target_type": "field"
 		},
 		{
-			"id": "player_shield_obstacle",
-			"code": "03",
 			"category": "FIELD",
-			"sub_category": "障碍",
-			"name": "护盾",
-			"reverse": "",
+			"code": "03",
 			"description": "生成护盾实体挡球并消耗来袭球威力；follow=随身跟随/static=落地固定；耐久=次数制(uses)或数值制(hp)；耗尽或超时消失",
+			"energy_cost": 0,
+			"id": "player_shield_obstacle",
+			"name": "护盾",
 			"params": [
 				"shape",
 				"width",
@@ -426,17 +425,17 @@
 				"speed_consume_rate",
 				"max_count"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "障碍",
+			"target_type": "player"
 		},
 		{
-			"id": "field_terra_change",
-			"code": "03",
 			"category": "FIELD",
-			"sub_category": "地形",
-			"name": "地形改变",
-			"reverse": "field_terra_revert",
+			"code": "03",
 			"description": "摩擦地形区（冰面滑动）：区内摩擦×friction_scale 到期自动恢复；radius=0 时全场生效（击退距离语义）（波7 #6a 转正）；bounciness 参数预留（弹性区无官方用例不实现）",
+			"energy_cost": 0,
+			"id": "field_terra_change",
+			"name": "地形改变",
 			"params": [
 				"friction_scale",
 				"bounciness",
@@ -445,62 +444,62 @@
 				"pos",
 				"spawn_at"
 			],
-			"target_type": "field",
-			"energy_cost": 0
+			"reverse": "field_terra_revert",
+			"sub_category": "地形",
+			"target_type": "field"
 		},
 		{
-			"id": "field_terra_revert",
-			"code": "04",
 			"category": "FIELD",
-			"sub_category": "地形",
-			"name": "地形恢复",
-			"reverse": "field_terra_change",
+			"code": "04",
 			"description": "恢复场地原物理属性",
+			"energy_cost": 0,
+			"id": "field_terra_revert",
+			"name": "地形恢复",
 			"params": [
 				"zone_id"
 			],
-			"target_type": "field",
-			"energy_cost": 0
+			"reverse": "field_terra_change",
+			"sub_category": "地形",
+			"target_type": "field"
 		},
 		{
-			"id": "field_zone_mark",
-			"code": "05",
 			"category": "FIELD",
-			"sub_category": "地形",
-			"name": "区域标注",
-			"reverse": "field_zone_clear",
+			"code": "05",
 			"description": "标注区域（加速/减速/危险）",
+			"energy_cost": 0,
+			"id": "field_zone_mark",
+			"name": "区域标注",
 			"params": [
 				"zone_type",
 				"position",
 				"size",
 				"duration"
 			],
-			"target_type": "field",
-			"energy_cost": 0
+			"reverse": "field_zone_clear",
+			"sub_category": "地形",
+			"target_type": "field"
 		},
 		{
-			"id": "field_zone_clear",
-			"code": "06",
 			"category": "FIELD",
-			"sub_category": "地形",
-			"name": "区域清除",
-			"reverse": "field_zone_mark",
+			"code": "06",
 			"description": "清除区域标注",
+			"energy_cost": 0,
+			"id": "field_zone_clear",
+			"name": "区域清除",
 			"params": [
 				"zone_id"
 			],
-			"target_type": "field",
-			"energy_cost": 0
+			"reverse": "field_zone_mark",
+			"sub_category": "地形",
+			"target_type": "field"
 		},
 		{
-			"id": "field_zone_boost",
-			"code": "07",
 			"category": "FIELD",
-			"sub_category": "区域效果",
-			"name": "加速区",
-			"reverse": "field_zone_slow",
+			"code": "07",
 			"description": "区域内球员加速",
+			"energy_cost": 0,
+			"id": "field_zone_boost",
+			"name": "加速区",
 			"params": [
 				"position",
 				"size",
@@ -509,17 +508,17 @@
 				"spawn_at",
 				"affect_ball"
 			],
-			"target_type": "field",
-			"energy_cost": 0
+			"reverse": "field_zone_slow",
+			"sub_category": "区域效果",
+			"target_type": "field"
 		},
 		{
-			"id": "field_zone_slow",
-			"code": "08",
 			"category": "FIELD",
-			"sub_category": "区域效果",
-			"name": "减速区",
-			"reverse": "field_zone_boost",
+			"code": "08",
 			"description": "区域内球员减速",
+			"energy_cost": 0,
+			"id": "field_zone_slow",
+			"name": "减速区",
 			"params": [
 				"position",
 				"size",
@@ -528,17 +527,17 @@
 				"spawn_at",
 				"affect_ball"
 			],
-			"target_type": "field",
-			"energy_cost": 0
+			"reverse": "field_zone_boost",
+			"sub_category": "区域效果",
+			"target_type": "field"
 		},
 		{
-			"id": "field_zone_danger",
-			"code": "09",
 			"category": "FIELD",
-			"sub_category": "区域效果",
-			"name": "危险区",
-			"reverse": "field_zone_safe",
+			"code": "09",
 			"description": "区域内持续伤害",
+			"energy_cost": 0,
+			"id": "field_zone_danger",
+			"name": "危险区",
 			"params": [
 				"position",
 				"size",
@@ -547,17 +546,17 @@
 				"spawn_at",
 				"affect_ball"
 			],
-			"target_type": "field",
-			"energy_cost": 0
+			"reverse": "field_zone_safe",
+			"sub_category": "区域效果",
+			"target_type": "field"
 		},
 		{
-			"id": "field_zone_safe",
-			"code": "10",
 			"category": "FIELD",
-			"sub_category": "区域效果",
-			"name": "安全区",
-			"reverse": "field_zone_danger",
+			"code": "10",
 			"description": "区域内免疫伤害",
+			"energy_cost": 0,
+			"id": "field_zone_safe",
+			"name": "安全区",
 			"params": [
 				"position",
 				"size",
@@ -565,17 +564,17 @@
 				"spawn_at",
 				"affect_ball"
 			],
-			"target_type": "field",
-			"energy_cost": 0
+			"reverse": "field_zone_danger",
+			"sub_category": "区域效果",
+			"target_type": "field"
 		},
 		{
-			"id": "field_zone_heal",
-			"code": "10b",
 			"category": "FIELD",
-			"sub_category": "区域效果",
-			"name": "治疗区",
-			"reverse": "",
+			"code": "10b",
 			"description": "区域内球员持续回血（走公开heal，禁疗自动生效）；毒素语义并入danger不单独做；spawn_at可选",
+			"energy_cost": 0,
+			"id": "field_zone_heal",
+			"name": "治疗区",
 			"params": [
 				"radius",
 				"width",
@@ -585,467 +584,468 @@
 				"spawn_at",
 				"affect_ball"
 			],
-			"target_type": "field",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "区域效果",
+			"target_type": "field"
 		},
 		{
-			"id": "field_illusion_add",
-			"code": "11",
 			"category": "FIELD",
-			"sub_category": "视觉",
-			"name": "幻象生成",
-			"reverse": "field_illusion_clear",
+			"code": "11",
 			"description": "生成虚假目标/路径",
+			"energy_cost": 0,
+			"id": "field_illusion_add",
+			"name": "幻象生成",
 			"params": [
 				"illusion_type",
 				"position",
 				"duration"
 			],
-			"target_type": "field",
-			"energy_cost": 0
+			"reverse": "field_illusion_clear",
+			"sub_category": "视觉",
+			"target_type": "field"
 		},
 		{
-			"id": "field_illusion_clear",
-			"code": "12",
 			"category": "FIELD",
-			"sub_category": "视觉",
-			"name": "幻象破除",
-			"reverse": "field_illusion_add",
+			"code": "12",
 			"description": "破除虚假目标",
+			"energy_cost": 0,
+			"id": "field_illusion_clear",
+			"name": "幻象破除",
 			"params": [
 				"illusion_id"
 			],
-			"target_type": "field",
-			"energy_cost": 0
+			"reverse": "field_illusion_add",
+			"sub_category": "视觉",
+			"target_type": "field"
 		},
 		{
-			"id": "player_atk_up_pct",
+			"category": "PLAYER",
 			"code": "01",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "攻击提升(%)",
-			"reverse": "player_atk_down_pct",
 			"description": "攻击力提升X%",
+			"energy_cost": 0,
+			"id": "player_atk_up_pct",
+			"name": "攻击提升(%)",
 			"params": [
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_atk_down_pct",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_atk_down_pct",
+			"category": "PLAYER",
 			"code": "02",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "攻击降低(%)",
-			"reverse": "player_atk_up_pct",
 			"description": "攻击力降低X%",
+			"energy_cost": 0,
+			"id": "player_atk_down_pct",
+			"name": "攻击降低(%)",
 			"params": [
 				"target",
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_atk_up_pct",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_atk_up_flat",
+			"category": "PLAYER",
 			"code": "03",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "攻击提升(固定)",
-			"reverse": "player_atk_down_flat",
 			"description": "攻击力+固定值",
+			"energy_cost": 0,
+			"id": "player_atk_up_flat",
+			"name": "攻击提升(固定)",
 			"params": [
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_atk_down_flat",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_atk_down_flat",
+			"category": "PLAYER",
 			"code": "04",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "攻击降低(固定)",
-			"reverse": "player_atk_up_flat",
 			"description": "攻击力-固定值",
+			"energy_cost": 0,
+			"id": "player_atk_down_flat",
+			"name": "攻击降低(固定)",
 			"params": [
 				"target",
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_atk_up_flat",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_def_up_pct",
+			"category": "PLAYER",
 			"code": "05",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "防御提升(%)",
-			"reverse": "player_def_down_pct",
 			"description": "防御提升X%",
+			"energy_cost": 0,
+			"id": "player_def_up_pct",
+			"name": "防御提升(%)",
 			"params": [
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_def_down_pct",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_def_down_pct",
+			"category": "PLAYER",
 			"code": "06",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "防御降低(%)",
-			"reverse": "player_def_up_pct",
 			"description": "防御降低X%",
+			"energy_cost": 0,
+			"id": "player_def_down_pct",
+			"name": "防御降低(%)",
 			"params": [
 				"target",
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_def_up_pct",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_def_up_flat",
+			"category": "PLAYER",
 			"code": "07",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "防御提升(固定)",
-			"reverse": "player_def_down_flat",
 			"description": "防御+固定值",
+			"energy_cost": 0,
+			"id": "player_def_up_flat",
+			"name": "防御提升(固定)",
 			"params": [
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_def_down_flat",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_def_down_flat",
+			"category": "PLAYER",
 			"code": "08",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "防御降低(固定)",
-			"reverse": "player_def_up_flat",
 			"description": "防御-固定值",
+			"energy_cost": 0,
+			"id": "player_def_down_flat",
+			"name": "防御降低(固定)",
 			"params": [
 				"target",
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_def_up_flat",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_spd_up_pct",
+			"category": "PLAYER",
 			"code": "09",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "速度提升(%)",
-			"reverse": "player_spd_down_pct",
 			"description": "移动速度提升X%",
+			"energy_cost": 0,
+			"id": "player_spd_up_pct",
+			"name": "速度提升(%)",
 			"params": [
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_spd_down_pct",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_spd_down_pct",
+			"category": "PLAYER",
 			"code": "10",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "速度降低(%)",
-			"reverse": "player_spd_up_pct",
 			"description": "移动速度降低X%",
+			"energy_cost": 0,
+			"id": "player_spd_down_pct",
+			"name": "速度降低(%)",
 			"params": [
 				"target",
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_spd_up_pct",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_spd_up_flat",
+			"category": "PLAYER",
 			"code": "11",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "速度提升(固定)",
-			"reverse": "player_spd_down_flat",
 			"description": "移动速度+固定值",
+			"energy_cost": 0,
+			"id": "player_spd_up_flat",
+			"name": "速度提升(固定)",
 			"params": [
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_spd_down_flat",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_spd_down_flat",
+			"category": "PLAYER",
 			"code": "12",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "速度降低(固定)",
-			"reverse": "player_spd_up_flat",
 			"description": "移动速度-固定值",
+			"energy_cost": 0,
+			"id": "player_spd_down_flat",
+			"name": "速度降低(固定)",
 			"params": [
 				"target",
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_spd_up_flat",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_res_up_pct",
+			"category": "PLAYER",
 			"code": "13",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "韧性提升(%)",
-			"reverse": "player_res_down_pct",
 			"description": "韧性提升X%",
+			"energy_cost": 0,
+			"id": "player_res_up_pct",
+			"name": "韧性提升(%)",
 			"params": [
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_res_down_pct",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_res_down_pct",
+			"category": "PLAYER",
 			"code": "14",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "韧性降低(%)",
-			"reverse": "player_res_up_pct",
 			"description": "韧性降低X%",
+			"energy_cost": 0,
+			"id": "player_res_down_pct",
+			"name": "韧性降低(%)",
 			"params": [
 				"target",
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_res_up_pct",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_res_up_flat",
+			"category": "PLAYER",
 			"code": "15",
-			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "韧性提升(固定)",
-			"reverse": "player_res_down_flat",
 			"description": "韧性+固定值",
+			"energy_cost": 0,
+			"id": "player_res_up_flat",
+			"name": "韧性提升(固定)",
 			"params": [
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_res_down_flat",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_res_down_flat",
-			"code": "16",
 			"category": "PLAYER",
-			"sub_category": "属性",
-			"name": "韧性降低(固定)",
-			"reverse": "player_res_up_flat",
+			"code": "16",
 			"description": "韧性-固定值",
+			"energy_cost": 0,
+			"id": "player_res_down_flat",
+			"name": "韧性降低(固定)",
 			"params": [
 				"target",
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_res_up_flat",
+			"sub_category": "属性",
+			"target_type": "player"
 		},
 		{
-			"id": "player_invincible",
-			"code": "17",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "无敌",
-			"reverse": "player_vulnerable",
+			"code": "17",
 			"description": "短暂免疫伤害",
+			"energy_cost": 0,
+			"id": "player_invincible",
+			"name": "无敌",
 			"params": [
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_vulnerable",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_vulnerable",
-			"code": "18",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "易伤",
-			"reverse": "player_invincible",
+			"code": "18",
 			"description": "受到的伤害增加",
+			"energy_cost": 0,
+			"id": "player_vulnerable",
+			"name": "易伤",
+			"on_hit": true,
 			"params": [
 				"target",
 				"multiplier",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0,
-			"on_hit": true
+			"reverse": "player_invincible",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_stealth",
-			"code": "19",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "隐身",
-			"reverse": "player_reveal",
+			"code": "19",
 			"description": "不被敌人锁定",
+			"energy_cost": 0,
+			"id": "player_stealth",
+			"name": "隐身",
 			"params": [
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_reveal",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_heal_block",
-			"code": "19b1",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "禁疗/禁能",
-			"reverse": "",
+			"code": "19b1",
 			"description": "目标治疗无效且/或能量不回复；block=heal/energy/both（默认both，受击目标类）",
+			"energy_cost": 0,
+			"id": "player_heal_block",
+			"name": "禁疗/禁能",
+			"on_hit": true,
 			"params": [
 				"target",
 				"duration",
 				"block"
 			],
-			"target_type": "player",
-			"energy_cost": 0,
-			"on_hit": true
+			"reverse": "",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_energy_block",
-			"code": "19b1b",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "禁能",
-			"reverse": "",
+			"code": "19b1b",
 			"description": "目标能量不回复（player_heal_block 的单禁能别名，规划版命名）",
+			"energy_cost": 0,
+			"id": "player_energy_block",
+			"name": "禁能",
+			"on_hit": true,
 			"params": [
 				"target",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0,
-			"on_hit": true
+			"reverse": "",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_damage_reflect",
-			"code": "19b2",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "反伤",
-			"reverse": "",
+			"code": "19b2",
 			"description": "期间攻击此目标者受伤：pct×实际伤害(+value固定，可选超集)",
+			"energy_cost": 0,
+			"id": "player_damage_reflect",
+			"name": "反伤",
 			"params": [
 				"duration",
 				"value",
 				"pct"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_element_immune",
-			"code": "19b3",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "元素免疫",
-			"reverse": "player_element_weak",
+			"code": "19b3",
 			"description": "对指定元素的攻击伤害×multiplier（默认0=完全免疫）",
+			"energy_cost": 0,
+			"id": "player_element_immune",
+			"name": "元素免疫",
 			"params": [
 				"duration",
 				"elements",
 				"multiplier"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_element_weak",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_element_weak",
-			"code": "19b3b",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "元素弱点",
-			"reverse": "player_element_immune",
+			"code": "19b3b",
 			"description": "对指定元素的攻击伤害×multiplier（默认1.5=弱点）",
+			"energy_cost": 0,
+			"id": "player_element_weak",
+			"name": "元素弱点",
 			"params": [
 				"target",
 				"duration",
 				"elements",
 				"multiplier"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_element_immune",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_energy_share",
-			"code": "19b4",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "能量分摊",
-			"reverse": "",
+			"code": "19b4",
 			"description": "持灯者替同队施法者分摊技能能耗share_pct（均摊，付不起付到0）",
+			"energy_cost": 0,
+			"id": "player_energy_share",
+			"name": "能量分摊",
 			"params": [
 				"target",
 				"duration",
 				"share_pct"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_charge_stock",
-			"code": "19b5",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "充能容器",
-			"reverse": "",
+			"code": "19b5",
 			"description": "储存charges格充能，consume_charge逐格消耗，耗尽灯灭发信号；消费时机由技能组合层定",
+			"energy_cost": 0,
+			"id": "player_charge_stock",
+			"name": "充能容器",
 			"params": [
 				"duration",
 				"charges"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_on_hit_expire",
-			"code": "19b6",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "受击解除",
-			"reverse": "",
+			"code": "19b6",
 			"description": "把目标已在亮的指定状态标记为受击即解（statuses空=全部控制类）；也可在状态标签参数直接带break_on_hit:true",
+			"energy_cost": 0,
+			"id": "player_on_hit_expire",
+			"name": "受击解除",
 			"params": [
 				"statuses"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_mark_apply",
-			"code": "19b7",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "叠层印记",
-			"reverse": "",
+			"code": "19b7",
 			"description": "对目标叠加印记计数（封顶刷新）；达阈值触发引用标签并按参数清层；层信息经 get_mark_count/mark_changed 供表现层；thresholds 数组=多层阈值递进（工单12印记三层：每项{count,tag,params,clear}，count 达层即触发引用标签，单阈值字段与其互兼容，thresholds 优先）",
+			"energy_cost": 0,
+			"id": "player_mark_apply",
+			"name": "叠层印记",
+			"on_hit": true,
 			"params": [
 				"mark_id",
 				"max_stacks",
@@ -1057,18 +1057,17 @@
 				"thresholds",
 				"target"
 			],
-			"target_type": "player",
-			"energy_cost": 0,
-			"on_hit": true
+			"reverse": "",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_combo_ready",
-			"code": "19b10",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "合体半装",
-			"reverse": "",
+			"code": "19b10",
 			"description": "合体技半装登记（OP_COMBO，工单12主人裁方案a）：登记 combo_id+role 到 skill_state_manager；同队两队友持互补 role 且双方就绪、距离<combo_range 时自动合体——合体期双方获坦克增益（def/spd 提升与持球炮击增伤），到期拆分；能量合缴=两半技能各自支付",
+			"energy_cost": 0,
+			"id": "player_combo_ready",
+			"name": "合体半装",
 			"params": [
 				"combo_id",
 				"role",
@@ -1080,540 +1079,540 @@
 				"ball_dmg_up_pct",
 				"energy_drain_rate"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_reveal",
-			"code": "20",
 			"category": "PLAYER",
-			"sub_category": "状态",
-			"name": "显形",
-			"reverse": "player_stealth",
+			"code": "20",
 			"description": "强制显现敌人",
+			"energy_cost": 0,
+			"id": "player_reveal",
+			"name": "显形",
+			"on_hit": true,
 			"params": [
 				"target_id",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0,
-			"on_hit": true
+			"reverse": "player_stealth",
+			"sub_category": "状态",
+			"target_type": "player"
 		},
 		{
-			"id": "player_hp_heal_pct",
+			"category": "PLAYER",
 			"code": "21",
-			"category": "PLAYER",
-			"sub_category": "体力",
-			"name": "恢复(%)",
-			"reverse": "player_hp_damage_pct",
 			"description": "恢复最大体力X%",
+			"energy_cost": 0,
+			"id": "player_hp_heal_pct",
+			"name": "恢复(%)",
 			"params": [
 				"value",
 				"target"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_hp_damage_pct",
+			"sub_category": "体力",
+			"target_type": "player"
 		},
 		{
-			"id": "player_hp_damage_pct",
+			"category": "PLAYER",
 			"code": "22",
-			"category": "PLAYER",
-			"sub_category": "体力",
-			"name": "掉血(%)",
-			"reverse": "player_hp_heal_pct",
 			"description": "扣除最大体力X%",
+			"energy_cost": 0,
+			"id": "player_hp_damage_pct",
+			"name": "掉血(%)",
 			"params": [
 				"value",
 				"target"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_hp_heal_pct",
+			"sub_category": "体力",
+			"target_type": "player"
 		},
 		{
-			"id": "player_hp_heal_flat",
+			"category": "PLAYER",
 			"code": "23",
-			"category": "PLAYER",
-			"sub_category": "体力",
-			"name": "恢复(固定)",
-			"reverse": "player_hp_damage_flat",
 			"description": "恢复固定体力值",
+			"energy_cost": 0,
+			"id": "player_hp_heal_flat",
+			"name": "恢复(固定)",
 			"params": [
 				"value",
 				"target"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_hp_damage_flat",
+			"sub_category": "体力",
+			"target_type": "player"
 		},
 		{
-			"id": "player_hp_damage_flat",
+			"category": "PLAYER",
 			"code": "24",
-			"category": "PLAYER",
-			"sub_category": "体力",
-			"name": "掉血(固定)",
-			"reverse": "player_hp_heal_flat",
 			"description": "扣除固定体力值",
+			"energy_cost": 0,
+			"id": "player_hp_damage_flat",
+			"name": "掉血(固定)",
 			"params": [
 				"value",
 				"target"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_hp_heal_flat",
+			"sub_category": "体力",
+			"target_type": "player"
 		},
 		{
-			"id": "player_hp_regen",
+			"category": "PLAYER",
 			"code": "25",
-			"category": "PLAYER",
-			"sub_category": "体力",
-			"name": "持续恢复",
-			"reverse": "player_hp_dot",
 			"description": "每秒恢复固定体力",
+			"energy_cost": 0,
+			"id": "player_hp_regen",
+			"name": "持续恢复",
 			"params": [
 				"value",
 				"duration",
 				"target"
 			],
-			"target_type": "player",
-			"energy_cost": 0
-		},
-		{
-			"id": "player_hp_dot",
-			"code": "26",
-			"category": "PLAYER",
+			"reverse": "player_hp_dot",
 			"sub_category": "体力",
-			"name": "持续掉血",
-			"reverse": "player_hp_regen",
+			"target_type": "player"
+		},
+		{
+			"category": "PLAYER",
+			"code": "26",
 			"description": "每秒受到固定伤害",
+			"energy_cost": 0,
+			"id": "player_hp_dot",
+			"name": "持续掉血",
+			"on_hit": true,
 			"params": [
 				"value",
 				"duration",
 				"target"
 			],
-			"target_type": "player",
-			"energy_cost": 0,
-			"on_hit": true
+			"reverse": "player_hp_regen",
+			"sub_category": "体力",
+			"target_type": "player"
 		},
 		{
-			"id": "player_move_slow",
+			"category": "PLAYER",
 			"code": "27",
-			"category": "PLAYER",
-			"sub_category": "运动",
-			"name": "减速",
-			"reverse": "player_move_boost",
 			"description": "移动速度降低",
-			"params": [
-				"multiplier",
-				"duration"
-			],
-			"target_type": "player",
 			"energy_cost": 0,
-			"on_hit": true
-		},
-		{
-			"id": "player_move_boost",
-			"code": "28",
-			"category": "PLAYER",
-			"sub_category": "运动",
-			"name": "加速",
-			"reverse": "player_move_slow",
-			"description": "移动速度提升",
+			"id": "player_move_slow",
+			"name": "减速",
+			"on_hit": true,
 			"params": [
 				"multiplier",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_move_boost",
+			"sub_category": "运动",
+			"target_type": "player"
 		},
 		{
-			"id": "player_root",
-			"code": "29",
 			"category": "PLAYER",
+			"code": "28",
+			"description": "移动速度提升",
+			"energy_cost": 0,
+			"id": "player_move_boost",
+			"name": "加速",
+			"params": [
+				"multiplier",
+				"duration"
+			],
+			"reverse": "player_move_slow",
 			"sub_category": "运动",
-			"name": "定身",
-			"reverse": "player_unroot",
+			"target_type": "player"
+		},
+		{
+			"category": "PLAYER",
+			"code": "29",
 			"description": "无法移动",
+			"energy_cost": 0,
+			"id": "player_root",
+			"name": "定身",
+			"on_hit": true,
 			"params": [
 				"target",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0,
 			"params_note": "",
-			"on_hit": true
+			"reverse": "player_unroot",
+			"sub_category": "运动",
+			"target_type": "player"
 		},
 		{
-			"id": "player_unroot",
-			"code": "30",
 			"category": "PLAYER",
-			"sub_category": "运动",
-			"name": "自由",
-			"reverse": "player_root",
+			"code": "30",
 			"description": "解除定身",
+			"energy_cost": 0,
+			"id": "player_unroot",
+			"name": "自由",
 			"params": [
 				"player_id"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_root",
+			"sub_category": "运动",
+			"target_type": "player"
 		},
 		{
-			"id": "player_energy_gain_pct",
+			"category": "PLAYER",
 			"code": "31",
-			"category": "PLAYER",
-			"sub_category": "能量",
-			"name": "能量恢复(%)",
-			"reverse": "player_energy_cost_pct",
 			"description": "恢复最大能量X%",
+			"energy_cost": 0,
+			"id": "player_energy_gain_pct",
+			"name": "能量恢复(%)",
 			"params": [
 				"value",
 				"target"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_energy_cost_pct",
+			"sub_category": "能量",
+			"target_type": "player"
 		},
 		{
-			"id": "player_energy_cost_pct",
+			"category": "PLAYER",
 			"code": "32",
-			"category": "PLAYER",
-			"sub_category": "能量",
-			"name": "能量消耗(%)",
-			"reverse": "player_energy_gain_pct",
 			"description": "消耗最大能量X%",
+			"energy_cost": 0,
+			"id": "player_energy_cost_pct",
+			"name": "能量消耗(%)",
 			"params": [
 				"value",
 				"target"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_energy_gain_pct",
+			"sub_category": "能量",
+			"target_type": "player"
 		},
 		{
-			"id": "player_energy_gain_flat",
+			"category": "PLAYER",
 			"code": "33",
-			"category": "PLAYER",
-			"sub_category": "能量",
-			"name": "能量恢复(固定)",
-			"reverse": "player_energy_cost_flat",
 			"description": "恢复固定能量值",
+			"energy_cost": 0,
+			"id": "player_energy_gain_flat",
+			"name": "能量恢复(固定)",
 			"params": [
 				"value",
 				"target"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_energy_cost_flat",
+			"sub_category": "能量",
+			"target_type": "player"
 		},
 		{
-			"id": "player_energy_cost_flat",
+			"category": "PLAYER",
 			"code": "34",
-			"category": "PLAYER",
-			"sub_category": "能量",
-			"name": "能量消耗(固定)",
-			"reverse": "player_energy_gain_flat",
 			"description": "消耗固定能量值",
+			"energy_cost": 0,
+			"id": "player_energy_cost_flat",
+			"name": "能量消耗(固定)",
 			"params": [
 				"value",
 				"target"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_energy_gain_flat",
+			"sub_category": "能量",
+			"target_type": "player"
 		},
 		{
-			"id": "player_energy_max_up_pct",
+			"category": "PLAYER",
 			"code": "35",
-			"category": "PLAYER",
-			"sub_category": "能量",
-			"name": "最大提升(%)",
-			"reverse": "player_energy_max_down_pct",
 			"description": "最大能量提升X%",
+			"energy_cost": 0,
+			"id": "player_energy_max_up_pct",
+			"name": "最大提升(%)",
 			"params": [
 				"target",
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_energy_max_down_pct",
+			"sub_category": "能量",
+			"target_type": "player"
 		},
 		{
-			"id": "player_energy_max_down_pct",
+			"category": "PLAYER",
 			"code": "36",
-			"category": "PLAYER",
-			"sub_category": "能量",
-			"name": "最大降低(%)",
-			"reverse": "player_energy_max_up_pct",
 			"description": "最大能量降低X%",
+			"energy_cost": 0,
+			"id": "player_energy_max_down_pct",
+			"name": "最大降低(%)",
 			"params": [
 				"target",
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_energy_max_up_pct",
+			"sub_category": "能量",
+			"target_type": "player"
 		},
 		{
-			"id": "player_energy_max_up_flat",
+			"category": "PLAYER",
 			"code": "37",
-			"category": "PLAYER",
-			"sub_category": "能量",
-			"name": "最大提升(固定)",
-			"reverse": "player_energy_max_down_flat",
 			"description": "最大能量+固定值",
+			"energy_cost": 0,
+			"id": "player_energy_max_up_flat",
+			"name": "最大提升(固定)",
 			"params": [
 				"target",
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
-		},
-		{
-			"id": "player_energy_max_down_flat",
-			"code": "38",
-			"category": "PLAYER",
+			"reverse": "player_energy_max_down_flat",
 			"sub_category": "能量",
-			"name": "最大降低(固定)",
-			"reverse": "player_energy_max_up_flat",
+			"target_type": "player"
+		},
+		{
+			"category": "PLAYER",
+			"code": "38",
 			"description": "最大能量-固定值",
+			"energy_cost": 0,
+			"id": "player_energy_max_down_flat",
+			"name": "最大降低(固定)",
 			"params": [
 				"target",
 				"value",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_energy_max_up_flat",
+			"sub_category": "能量",
+			"target_type": "player"
 		},
 		{
-			"id": "player_spirit_cost_down",
+			"category": "PLAYER",
 			"code": "39",
-			"category": "PLAYER",
-			"sub_category": "元灵",
-			"name": "减少消耗",
-			"reverse": "player_spirit_cost_up",
 			"description": "技能消耗减少",
+			"energy_cost": 0,
+			"id": "player_spirit_cost_down",
+			"name": "减少消耗",
 			"params": [
 				"target",
 				"multiplier",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_spirit_cost_up",
+			"sub_category": "元灵",
+			"target_type": "player"
 		},
 		{
-			"id": "player_spirit_cost_up",
+			"category": "PLAYER",
 			"code": "40",
-			"category": "PLAYER",
-			"sub_category": "元灵",
-			"name": "增加消耗",
-			"reverse": "player_spirit_cost_down",
 			"description": "技能消耗增加",
+			"energy_cost": 0,
+			"id": "player_spirit_cost_up",
+			"name": "增加消耗",
 			"params": [
 				"target",
 				"multiplier",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_spirit_cost_down",
+			"sub_category": "元灵",
+			"target_type": "player"
 		},
 		{
-			"id": "player_spirit_uses_up",
-			"code": "41",
 			"category": "PLAYER",
-			"sub_category": "元灵",
-			"name": "增加使用次数",
-			"reverse": "",
+			"code": "41",
 			"description": "技能可使用次数增加",
+			"energy_cost": 0,
+			"id": "player_spirit_uses_up",
+			"name": "增加使用次数",
 			"params": [
 				"target",
 				"skill_id",
 				"bonus_uses",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "元灵",
+			"target_type": "player"
 		},
 		{
-			"id": "player_spirit_cd_down",
+			"category": "PLAYER",
 			"code": "42",
-			"category": "PLAYER",
-			"sub_category": "元灵",
-			"name": "冷却缩短",
-			"reverse": "player_spirit_cd_up",
 			"description": "技能冷却时间缩短",
+			"energy_cost": 0,
+			"id": "player_spirit_cd_down",
+			"name": "冷却缩短",
 			"params": [
 				"target",
 				"multiplier",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_spirit_cd_up",
+			"sub_category": "元灵",
+			"target_type": "player"
 		},
 		{
-			"id": "player_spirit_cd_up",
+			"category": "PLAYER",
 			"code": "43",
-			"category": "PLAYER",
-			"sub_category": "元灵",
-			"name": "冷却延长",
-			"reverse": "player_spirit_cd_down",
 			"description": "技能冷却时间延长",
+			"energy_cost": 0,
+			"id": "player_spirit_cd_up",
+			"name": "冷却延长",
 			"params": [
 				"target",
 				"multiplier",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_spirit_cd_down",
+			"sub_category": "元灵",
+			"target_type": "player"
 		},
 		{
-			"id": "player_spirit_double",
+			"category": "PLAYER",
 			"code": "44",
-			"category": "PLAYER",
-			"sub_category": "元灵",
-			"name": "双倍效果",
-			"reverse": "player_spirit_half",
 			"description": "下次技能效果翻倍",
+			"energy_cost": 0,
+			"id": "player_spirit_double",
+			"name": "双倍效果",
 			"params": [
 				"target",
 				"skill_id",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
-		},
-		{
-			"id": "player_spirit_half",
-			"code": "45",
-			"category": "PLAYER",
+			"reverse": "player_spirit_half",
 			"sub_category": "元灵",
-			"name": "效果减半",
-			"reverse": "player_spirit_double",
+			"target_type": "player"
+		},
+		{
+			"category": "PLAYER",
+			"code": "45",
 			"description": "下次技能效果减半",
+			"energy_cost": 0,
+			"id": "player_spirit_half",
+			"name": "效果减半",
 			"params": [
 				"target",
 				"skill_id",
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_spirit_double",
+			"sub_category": "元灵",
+			"target_type": "player"
 		},
 		{
-			"id": "player_stun",
+			"category": "PLAYER",
 			"code": "46",
-			"category": "PLAYER",
-			"sub_category": "控制",
-			"name": "眩晕",
-			"reverse": "player_cc_immune",
 			"description": "无法行动",
+			"energy_cost": 0,
+			"id": "player_stun",
+			"name": "眩晕",
+			"on_hit": true,
 			"params": [
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0,
-			"on_hit": true
+			"reverse": "player_cc_immune",
+			"sub_category": "控制",
+			"target_type": "player"
 		},
 		{
-			"id": "player_cc_immune",
+			"category": "PLAYER",
 			"code": "47",
-			"category": "PLAYER",
-			"sub_category": "控制",
-			"name": "免疫控制",
-			"reverse": "player_stun",
 			"description": "免疫所有控制",
+			"energy_cost": 0,
+			"id": "player_cc_immune",
+			"name": "免疫控制",
 			"params": [
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_stun",
+			"sub_category": "控制",
+			"target_type": "player"
 		},
 		{
-			"id": "player_silence",
+			"category": "PLAYER",
 			"code": "48",
-			"category": "PLAYER",
-			"sub_category": "控制",
-			"name": "沉默",
-			"reverse": "",
 			"description": "无法使用技能",
+			"energy_cost": 0,
+			"id": "player_silence",
+			"name": "沉默",
+			"on_hit": true,
 			"params": [
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0,
-			"on_hit": true
-		},
-		{
-			"id": "player_disarm",
-			"code": "49",
-			"category": "PLAYER",
-			"sub_category": "控制",
-			"name": "缴械",
 			"reverse": "",
+			"sub_category": "控制",
+			"target_type": "player"
+		},
+		{
+			"category": "PLAYER",
+			"code": "49",
 			"description": "无法投球",
+			"energy_cost": 0,
+			"id": "player_disarm",
+			"name": "缴械",
+			"on_hit": true,
 			"params": [
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0,
-			"on_hit": true
+			"reverse": "",
+			"sub_category": "控制",
+			"target_type": "player"
 		},
 		{
-			"id": "player_teleport",
-			"code": "50",
 			"category": "PLAYER",
-			"sub_category": "交互",
-			"name": "传送",
-			"reverse": "player_return",
+			"code": "50",
 			"description": "传送到目标位置",
+			"energy_cost": 0,
+			"id": "player_teleport",
+			"name": "传送",
 			"params": [
 				"target_position"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_return",
+			"sub_category": "交互",
+			"target_type": "player"
 		},
 		{
-			"id": "player_return",
-			"code": "51",
 			"category": "PLAYER",
-			"sub_category": "交互",
-			"name": "返回",
-			"reverse": "player_teleport",
+			"code": "51",
 			"description": "返回上一位置",
+			"energy_cost": 0,
+			"id": "player_return",
+			"name": "返回",
 			"params": [
 				"player_id"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "player_teleport",
+			"sub_category": "交互",
+			"target_type": "player"
 		},
 		{
-			"id": "skill_copy_last",
-			"code": "19b8",
 			"category": "PLAYER",
-			"sub_category": "复制",
-			"name": "复制最近技能",
-			"reverse": "",
+			"code": "19b8",
 			"description": "复制最近一条敌方释放（能耗×cost_pct 折扣）；无快照则失败；触发 SKILL_COPIED 事件（反制钩子）",
+			"energy_cost": 0,
+			"id": "skill_copy_last",
+			"name": "复制最近技能",
 			"params": [
 				"cost_pct"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "复制",
+			"target_type": "player"
 		},
 		{
-			"id": "skill_share_copy",
-			"code": "19b9",
 			"category": "PLAYER",
-			"sub_category": "复制",
-			"name": "暗黑共享",
-			"reverse": "",
+			"code": "19b9",
 			"description": "把最近敌方释放快照写入全队可复制槽 duration 秒（黑洞队共享体系）",
+			"energy_cost": 0,
+			"id": "skill_share_copy",
+			"name": "暗黑共享",
 			"params": [
 				"duration"
 			],
-			"target_type": "player",
-			"energy_cost": 0
+			"reverse": "",
+			"sub_category": "复制",
+			"target_type": "player"
 		},
 		{
-			"id": "field_drain_wall",
-			"code": "12b",
 			"category": "FIELD",
-			"sub_category": "障碍",
-			"name": "削能墙",
-			"reverse": "",
+			"code": "12b",
 			"description": "吸力墙：捕获半径内球被吸向墙心并逐帧削攻击/球速；不做击穿；吸住超时释放继续飞；耗尽走既有停球球权",
+			"energy_cost": 0,
+			"id": "field_drain_wall",
+			"name": "削能墙",
 			"params": [
 				"duration",
 				"width",
@@ -1623,6 +1622,56 @@
 				"drain_hold",
 				"attack_consume_rate",
 				"speed_consume_rate"
+			],
+			"reverse": "",
+			"sub_category": "障碍",
+			"target_type": "field"
+		},
+		{
+			"category": "SUMMON",
+			"code": "30",
+			"description": "生成召唤物实体：summon_type=types表type_id；count=数量(上限内置截断)；位置=施法者环绕确定性散布；工单23水木快牙系(布场登记,增益复核)",
+			"energy_cost": 0,
+			"id": "summon_spawn",
+			"name": "召唤物生成",
+			"params": [
+				"summon_type",
+				"count",
+				"duration"
+			],
+			"reverse": "",
+			"sub_category": "召唤",
+			"target_type": "summon"
+		},
+		{
+			"category": "SUMMON",
+			"code": "31",
+			"description": "同主召唤物在能量路径内融合为 result_type（F4 contains_point 判定+try_merge；SUMMON_MERGED 事件；工单23组合鲨鱼炸弹,布场登记,增益复核）",
+			"energy_cost": 0,
+			"id": "summon_merge",
+			"name": "召唤物融合",
+			"params": [
+				"result_type",
+				"need_count"
+			],
+			"reverse": "",
+			"sub_category": "召唤",
+			"target_type": "summon"
+		},
+		{
+			"id": "field_zone_energy_path",
+			"code": "23a3",
+			"category": "FIELD",
+			"sub_category": "区域",
+			"name": "能量快道",
+			"reverse": "",
+			"description": "持续注入能量形成能量路线：路径上召唤物耗能减少、速度加快（水木#3猎杀快道，工单23）",
+			"params": [
+				"duration",
+				"energy_per_sec",
+				"path_width",
+				"mouse_ops",
+				"path_buffs"
 			],
 			"target_type": "field",
 			"energy_cost": 0

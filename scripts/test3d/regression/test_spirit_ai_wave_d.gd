@@ -13,6 +13,8 @@ const WAVE_D_TAGS: Array[String] = [
 	"field_vision_block", "field_zone_boost", "field_zone_slow",
 	"field_zone_danger", "field_zone_safe", "field_zone_heal",
 	"field_obs_add", "field_obs_clear", "player_shield_obstacle", "field_drain_wall",
+	# 工单23时期2追加（增益窗口）：水木#3快道 + summon系两标签（family=summon 追认Q16）
+	"field_zone_energy_path", "summon_spawn", "summon_merge",
 ]
 
 ## 06§2.1 冻结字段 + 波D扩展字段 position_intent（Q4③）
@@ -54,7 +56,7 @@ func _run() -> void:
 		return
 	_assert("J2: wave=D / schema_version=3（Q4扩展版）", str(table.get("wave", "")) == "D" and int(table.get("schema_version", 0)) == 3)
 	var descriptors: Dictionary = table.get("descriptors", {})
-	_assert("J3: 描述符恰为10个", descriptors.size() == 10)
+	_assert("J3: 描述符恰为13个（原10+工单23追加3）", descriptors.size() == 13)
 
 	var registry_text := FileAccess.get_file_as_string(REGISTRY_PATH)
 	var registry: Variant = JSON.parse_string(registry_text)
@@ -93,7 +95,7 @@ func _run() -> void:
 				fields_ok = false
 				print("    [缺字段] %s.%s" % [tag_id, f])
 		# 枚举合法
-		if str(desc.get("family", "")) not in ["field_area", "field_obstacle"]:
+		if str(desc.get("family", "")) not in ["field_area", "field_obstacle", "summon"]:  # summon=工单23追加（Q16追认申请，元数据零消费）
 			enum_ok = false
 			print("    [family非法] " + tag_id)
 		if str(desc.get("direction", "")) not in ["self", "enemy"]:
@@ -105,9 +107,10 @@ func _run() -> void:
 		if str(desc.get("intent", "")) not in ["attack", "defense", "support", "control"]:
 			enum_ok = false
 			print("    [intent非法] " + tag_id)
-		if str(desc.get("target_mode", "")) != "field_position":
+		var tm := str(desc.get("target_mode", ""))
+		if tm != "field_position" and tm != "self":  # self=工单23 summon系（召唤者自身，无场地放置语义）
 			enum_ok = false
-			print("    [target_mode非field_position] " + tag_id)
+			print("    [target_mode非法] " + tag_id)
 		if str(desc.get("position_intent", "")) not in prim.POSITION_INTENTS:
 			enum_ok = false
 			print("    [position_intent非法] " + tag_id)
@@ -322,7 +325,7 @@ func _run() -> void:
 
 	# ===== I-集成面：容错与读表 =====
 	var live: Dictionary = prim.get_descriptors()
-	_assert("I1: get_descriptors 读实表得10标签", live.size() == 10)
+	_assert("I1: get_descriptors 读实表得13标签", live.size() == 13)
 	_assert("I2: timing_gate 对空 descriptor fail-closed", not bool(prim.timing_gate({}, {}, {}).get("ok")))
 	_assert("I3a: resolve_target_mode 空描述符回落none", prim.resolve_target_mode({}, {}) == "none")
 	_assert("I3b: resolve_target_mode 实描述符=field_position", prim.resolve_target_mode(desc_wall, {}) == "field_position")

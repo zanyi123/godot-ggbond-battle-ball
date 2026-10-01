@@ -143,6 +143,63 @@
 			"target_mode": "field_position",
 			"position_intent": "enemy_carrier_path",
 			"notes": "削能墙：敌持球路径布吸力墙；对齐09-24放置流接线(16工单：施法者身前生成，AI侧精化为敌持球路径点)"
+		},
+		"summon_spawn": {
+			"family": "summon",
+			"direction": "self",
+			"timing_gate": "enemy_visible",
+			"value_param": "count",
+			"value_unit": 15.0,
+			"value_min": 15.0,
+			"value_cap": 60.0,
+			"intent": "attack",
+			"intent_strength": 0.6,
+			"target_mode": "self",
+			"position_intent": "none",
+			"notes": "工单23芬尼/水木共用：summon_type区分型；count计价（多重3条=45）；守鲨/魔术球差异化语义待批次校准；family=summon追认见Q16"
+		},
+		"summon_merge": {
+			"family": "summon",
+			"direction": "self",
+			"timing_gate": "ally_cast_setup",
+			"value_param": "need_count",
+			"value_unit": 25.0,
+			"value_min": 15.0,
+			"value_cap": 65.0,
+			"intent": "attack",
+			"intent_strength": 0.7,
+			"target_mode": "self",
+			"position_intent": "none",
+			"notes": "工单23水木#6组合炸弹：need_count=2×25=50；gate=连招邀约窗口（17号协议；protocol_v2关时fail-closed不触发=安全）；value_param对齐registry既有params(集成窗口code31)"
+		},
+		"field_zone_energy_path": {
+			"family": "field_area",
+			"direction": "self",
+			"timing_gate": "enemy_visible",
+			"value_param": "duration",
+			"value_unit": 4.0,
+			"value_min": 15.0,
+			"value_cap": 55.0,
+			"intent": "support",
+			"intent_strength": 0.5,
+			"target_mode": "field_position",
+			"position_intent": "advance_lane",
+			"notes": "工单23水木#3猎杀快道：8s×4=32；持续注能成本经cap压低；路径增益(path_buffs)经F4下发召唤物"
 		}
-	}
+	},
+	"descriptors_keys": [
+		"field_vision_block",
+		"field_zone_boost",
+		"field_zone_slow",
+		"field_zone_danger",
+		"field_zone_safe",
+		"field_zone_heal",
+		"field_obs_add",
+		"field_obs_clear",
+		"player_shield_obstacle",
+		"field_drain_wall",
+		"summon_spawn",
+		"summon_merge",
+		"field_zone_energy_path"
+	]
 }
