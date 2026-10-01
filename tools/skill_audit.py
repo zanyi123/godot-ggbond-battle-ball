@@ -24,7 +24,8 @@ HALF = 25.0  # 每场 25s 半场（出手窗口够用，跑批快）
 
 def load_auditable():
     d = json.load(io.open(SKILLS, encoding="utf-8"))
-    real = [s for s in d["skills"] if "e2e" not in s["id"] and "passive_test" not in s["id"]]
+    real = [s for s in d["skills"]
+            if "e2e" not in s["id"] and "passive_test" not in s["id"] and s.get("type") != "passive"]
     return real
 
 
