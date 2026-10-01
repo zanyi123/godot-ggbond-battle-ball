@@ -1,0 +1,148 @@
+{
+ "baseline_score": 72.59400000000001,
+ "deterministic": true,
+ "runs": [
+  {
+   "scores": [
+    62.95,
+    75.09,
+    82.04,
+    73.44,
+    69.45
+   ],
+   "metrics": [
+    {
+     "goals_a": 3,
+     "goals_b": 0,
+     "cast": 10,
+     "pool": 10,
+     "coverage": 100.0,
+     "ball_cast": 4,
+     "pass_rate": 66.7,
+     "stuck": 0,
+     "switches": 79,
+     "exit": 0
+    },
+    {
+     "goals_a": 1,
+     "goals_b": 4,
+     "cast": 10,
+     "pool": 10,
+     "coverage": 100.0,
+     "ball_cast": 4,
+     "pass_rate": 89.8,
+     "stuck": 0,
+     "switches": 390,
+     "exit": 0
+    },
+    {
+     "goals_a": 3,
+     "goals_b": 1,
+     "cast": 10,
+     "pool": 10,
+     "coverage": 100.0,
+     "ball_cast": 4,
+     "pass_rate": 100.0,
+     "stuck": 0,
+     "switches": 86,
+     "exit": 0
+    },
+    {
+     "goals_a": 2,
+     "goals_b": 3,
+     "cast": 10,
+     "pool": 10,
+     "coverage": 100.0,
+     "ball_cast": 4,
+     "pass_rate": 75.0,
+     "stuck": 0,
+     "switches": 111,
+     "exit": 0
+    },
+    {
+     "goals_a": 3,
+     "goals_b": 0,
+     "cast": 10,
+     "pool": 10,
+     "coverage": 100.0,
+     "ball_cast": 4,
+     "pass_rate": 75.0,
+     "stuck": 0,
+     "switches": 108,
+     "exit": 0
+    }
+   ]
+  },
+  {
+   "scores": [
+    62.95,
+    75.09,
+    82.04,
+    73.44,
+    69.45
+   ],
+   "metrics": [
+    {
+     "goals_a": 3,
+     "goals_b": 0,
+     "cast": 10,
+     "pool": 10,
+     "coverage": 100.0,
+     "ball_cast": 4,
+     "pass_rate": 66.7,
+     "stuck": 0,
+     "switches": 79,
+     "exit": 0
+    },
+    {
+     "goals_a": 1,
+     "goals_b": 4,
+     "cast": 10,
+     "pool": 10,
+     "coverage": 100.0,
+     "ball_cast": 4,
+     "pass_rate": 89.8,
+     "stuck": 0,
+     "switches": 390,
+     "exit": 0
+    },
+    {
+     "goals_a": 3,
+     "goals_b": 1,
+     "cast": 10,
+     "pool": 10,
+     "coverage": 100.0,
+     "ball_cast": 4,
+     "pass_rate": 100.0,
+     "stuck": 0,
+     "switches": 86,
+     "exit": 0
+    },
+    {
+     "goals_a": 2,
+     "goals_b": 3,
+     "cast": 10,
+     "pool": 10,
+     "coverage": 100.0,
+     "ball_cast": 4,
+     "pass_rate": 75.0,
+     "stuck": 0,
+     "switches": 111,
+     "exit": 0
+    },
+    {
+     "goals_a": 3,
+     "goals_b": 0,
+     "cast": 10,
+     "pool": 10,
+     "coverage": 100.0,
+     "ball_cast": 4,
+     "pass_rate": 75.0,
+     "stuck": 0,
+     "switches": 108,
+     "exit": 0
+    }
+   ]
+  }
+ ]
+}

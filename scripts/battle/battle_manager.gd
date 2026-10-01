@@ -1243,6 +1243,7 @@ func _setup_ai_manager() -> void:
 		var profile: AIProfile = AIProfile.get_role_preset(team_a_roles[i])
 		AIProfile.apply_team_strategy(profile, "balanced")
 		AIProfile.apply_difficulty(profile, "normal")
+		AIProfile.apply_sandbox_override(profile)  # 22-A 沙盒钩子（文件缺省=零效果）
 		ai_mgr.register_player(team_a_players[i], "a", i, profile)
 
 	# 队B:随机角色(保证不重复)+ 随机策略 + 随机弱点
@@ -1260,6 +1261,7 @@ func _setup_ai_manager() -> void:
 			var w: String = weaknesses[randi() % weaknesses.size()]
 			AIProfile.apply_weakness(profile, w)
 		AIProfile.apply_difficulty(profile, "normal")
+		AIProfile.apply_sandbox_override(profile)  # 22-A 沙盒钩子（文件缺省=零效果）
 		ai_mgr.register_player(team_b_players[i], "b", i, profile)
 
 	print("[Match] AI管理器初始化完成 队B策略=%s" % team_b_strategy)
@@ -1860,6 +1862,7 @@ func _setup_ai_for_dev_prep() -> void:
 		var profile: AIProfile = AIProfile.get_role_preset(team_a_roles[i])
 		AIProfile.apply_team_strategy(profile, "balanced")
 		AIProfile.apply_difficulty(profile, "normal")
+		AIProfile.apply_sandbox_override(profile)  # 22-A 沙盒钩子（文件缺省=零效果）
 		ai_mgr.register_player(team_a_players[i], "a", i, profile)
 
 	var roles := ["attacker", "defender", "supporter"]
@@ -1875,6 +1878,7 @@ func _setup_ai_for_dev_prep() -> void:
 			var w: String = weaknesses[randi() % weaknesses.size()]
 			AIProfile.apply_weakness(profile, w)
 		AIProfile.apply_difficulty(profile, "normal")
+		AIProfile.apply_sandbox_override(profile)  # 22-A 沙盒钩子（文件缺省=零效果）
 		ai_mgr.register_player(team_b_players[i], "b", i, profile)
 
 	print("[Match] 开发者模式 AI 管理器初始化完成")

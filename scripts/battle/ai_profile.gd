@@ -141,6 +141,26 @@ var facing_mode_dribble: String = "goal"
 var facing_mode_support: String = "ball"
 var facing_mode_defend: String = "enemy"
 
+# ──── 22-A 参数自搜索沙盒钩子（工单22；文件不存在=零效果，主线默认值即真值）────
+const SANDBOX_OVERRIDE_PATH := "res://data/systems/spirit_ai/sandbox_profile.json"
+
+static func apply_sandbox_override(p: AIProfile) -> void:
+	# SPSA 扫描器专用：实验时由工具写 sandbox_profile.json（{参数名: 值}），
+	# 主线永不携带该文件（固化走主人拍板改默认值，本钩子只服务沙盒实验）
+	if not FileAccess.file_exists(SANDBOX_OVERRIDE_PATH):
+		return
+	var f := FileAccess.open(SANDBOX_OVERRIDE_PATH, FileAccess.READ)
+	if f == null:
+		return
+	var parsed = JSON.parse_string(f.get_as_text())
+	f.close()
+	if not parsed is Dictionary:
+		return
+	for key in parsed:
+		if key in p:
+			p.set(key, parsed[key])
+
+
 # ──── 元灵技能AI参数（2026-07-13 新增）────
 # 2026-09-27 平台窗口调参（主人令"涉及数值的自己合理去调"，工单12缺口#2/#4）：
 # threshold 15→10、expected_future_score 50→25——依据=平台三种子实测：技能池 raw 实际分布 10~33，
@@ -372,6 +392,11 @@ static func apply_difficulty(profile: AIProfile, difficulty: String) -> void:
 			profile.skill_leading_penalty = 0.85
 			profile.skill_expected_future_score = 30.0
 			profile.skill_uncertainty_discount = 0.4
+
+	# 22-A S2 沙盒钩子挂接（工单22）：难度分支跑完后最后应用沙盒覆盖（最高优先级——
+	# 主线流程 weakness→difficulty，此处=终值定版点）；sandbox_profile.json 不存在=零效果，
+	# 文件仅 SPSA 实验期间由工具写入（主线永不携带）
+	apply_sandbox_override(profile)
 
 
 ## 叠加弱点
