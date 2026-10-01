@@ -185,6 +185,43 @@ func _run() -> void:
 	_assert("M3: 耗尽消散经manager转发 path_depleted", mgr_depleted.size() >= 1 and not bool(zm2.get("zone_active")))
 	_assert("M4: 既有6型回归——BOOST create_zone 不受影响", mgr.create_zone({"zone_type": 0, "duration": 3.0}, Vector2(0, 2000)) != null and mgr.get_zone_count() == 2)
 
+	# ===== H-handler分发链（base_route match → field_route 直生 → manager → 第7型 zone）=====
+	var fake_bm: Node = Node.new()
+	fake_bm.name = "FakeBattleManager"
+	root.add_child(fake_bm)
+	var fz_mgr: Node = ManagerScript.new()
+	fz_mgr.name = "FieldZoneManager"
+	fake_bm.add_child(fz_mgr)
+	var handler_owner: StubOwner = StubOwner.new()
+	handler_owner.position = Vector2(200, 1500)
+	handler_owner.team = "a"
+	root.add_child(handler_owner)
+	fake_bm.set_script(null)
+	# base_route 备用口：battle_manager.get_all_players() 提供施法者
+	fake_bm.set_meta("players", [handler_owner])
+	# 用脚本动态补 get_all_players（避免新建脚本文件）
+	var fake_script: GDScript = GDScript.new()
+	fake_script.source_code = "extends Node\nvar players_ref: Array = []\nfunc get_all_players() -> Array:\n\treturn players_ref\n"
+	fake_script.reload()
+	fake_bm.set_script(fake_script)
+	fake_bm.set("players_ref", [handler_owner])
+	var handler: Node = (load("res://scripts/systems/spirit_system/spirit_tag_effect_handler.gd") as GDScript).new()
+	handler.battle_manager = fake_bm
+	var hp: Array = handler.get("_players_inside_hint") if false else []
+	handler.set("players", [handler_owner])
+	var params_h: Dictionary = {
+		"caster_id": handler_owner.get_instance_id(),
+		"duration": 8.0, "path_width": 48.0, "energy_per_sec": 2.0,
+		"path_buffs": {"speed_mult": 1.3},
+		"_target_data": {"field_position": Vector2(500, 1500)},
+	}
+	handler._apply_field_zone_effect(params_h, 6)
+	var h_zones: Array = fz_mgr.get_all_zones()
+	var h_path: Area2D = h_zones[0] if h_zones.size() == 1 else null
+	_assert("H1: handler分发链生成第7型快道（match分支命中）", h_zones.size() == 1 and h_path != null and int(h_path.get("zone_type")) == 6)
+	_assert("H2: 条带端点=施法者→AI落点", h_path != null and (h_path.get("path_from") as Vector2).distance_to(Vector2(200, 1500)) < 0.01 and (h_path.get("path_to") as Vector2).distance_to(Vector2(500, 1500)) < 0.01)
+	_assert("H3: path_buffs 透传", h_path != null and (h_path.get("path_buffs") as Dictionary).get("speed_mult", 0.0) == 1.3)
+
 	# ===== R-纪律 =====
 	var src := FileAccess.get_file_as_string("res://scripts/battle/field_effect_zone.gd")
 	_assert("R1: field_effect_zone.gd 源码无 randf(/randi(", src.find("randf(") == -1 and src.find("randi(") == -1)

@@ -46,9 +46,9 @@
 					"value": 30.0
 				},
 				"ball_range_up": {
-					"radius": 120.0,
 					"damage_pct": 0.6,
-					"duration": 8.0
+					"duration": 8.0,
+					"radius": 120.0
 				}
 			},
 			"tags": [
@@ -181,16 +181,16 @@
 			"name": "荆棘庇佑",
 			"tag_params": {
 				"field_obs_add": {
-					"shape": "rect",
-					"width": 120.0,
+					"attack_consume_rate": 10.0,
+					"duration": 10.0,
+					"element": "草木",
 					"height": 24.0,
 					"hp": 240.0,
-					"duration": 10.0,
-					"attack_consume_rate": 10.0,
-					"speed_consume_rate": 30.0,
 					"max_count": 2.0,
 					"mouse_ops": 1.0,
-					"element": "草木"
+					"shape": "rect",
+					"speed_consume_rate": 30.0,
+					"width": 120.0
 				}
 			},
 			"tags": [
@@ -351,33 +351,33 @@
 					"multiplier": 1.35
 				},
 				"player_mark_apply": {
+					"duration": 20.0,
 					"mark_id": "huo_yinji",
 					"max_stacks": 3.0,
-					"duration": 20.0,
 					"target": "self",
 					"thresholds": [
 						{
+							"clear": false,
 							"count": 2.0,
-							"tag": "player_heal_block",
 							"params": {
-								"duration": 6.0,
 								"block": "heal",
+								"duration": 6.0,
 								"target": "nearest_enemy"
 							},
-							"clear": false
+							"tag": "player_heal_block"
 						},
 						{
+							"clear": false,
 							"count": 3.0,
-							"tag": "field_zone_danger",
 							"params": {
-								"position": "0,0",
-								"size": "160,160",
+								"affect_ball": false,
 								"damage_value": 15.0,
 								"duration": 3.0,
-								"spawn_at": "ball_stop",
-								"affect_ball": false
+								"position": "0,0",
+								"size": "160,160",
+								"spawn_at": "ball_stop"
 							},
-							"clear": false
+							"tag": "field_zone_danger"
 						}
 					]
 				}
@@ -411,33 +411,33 @@
 					"multiplier": 1.5
 				},
 				"player_mark_apply": {
+					"duration": 20.0,
 					"mark_id": "huo_yinji",
 					"max_stacks": 3.0,
-					"duration": 20.0,
 					"target": "self",
 					"thresholds": [
 						{
+							"clear": false,
 							"count": 2.0,
-							"tag": "player_heal_block",
 							"params": {
-								"duration": 6.0,
 								"block": "heal",
+								"duration": 6.0,
 								"target": "nearest_enemy"
 							},
-							"clear": false
+							"tag": "player_heal_block"
 						},
 						{
+							"clear": false,
 							"count": 3.0,
-							"tag": "field_zone_danger",
 							"params": {
-								"position": "0,0",
-								"size": "160,160",
+								"affect_ball": false,
 								"damage_value": 15.0,
 								"duration": 3.0,
-								"spawn_at": "ball_stop",
-								"affect_ball": false
+								"position": "0,0",
+								"size": "160,160",
+								"spawn_at": "ball_stop"
 							},
-							"clear": false
+							"tag": "field_zone_danger"
 						}
 					]
 				}
@@ -465,12 +465,12 @@
 			"operator": "OP_AUTO",
 			"tag_params": {
 				"player_atk_up_pct": {
-					"value": 40.0,
-					"duration": 10.0
+					"duration": 10.0,
+					"value": 40.0
 				},
 				"player_def_up_pct": {
-					"value": 40.0,
-					"duration": 10.0
+					"duration": 10.0,
+					"value": 40.0
 				}
 			},
 			"tags": [
@@ -495,13 +495,13 @@
 			"operator": "OP_COMBO",
 			"tag_params": {
 				"player_combo_ready": {
+					"ball_dmg_up_pct": 35.0,
 					"combo_id": "combo_heavy_tank",
-					"role": "armor",
-					"duration": 8.0,
 					"combo_range": 150.0,
 					"def_up_pct": 40.0,
-					"spd_up_pct": 25.0,
-					"ball_dmg_up_pct": 35.0
+					"duration": 8.0,
+					"role": "armor",
+					"spd_up_pct": 25.0
 				}
 			},
 			"tags": [
@@ -525,13 +525,13 @@
 			"operator": "OP_COMBO",
 			"tag_params": {
 				"player_combo_ready": {
+					"ball_dmg_up_pct": 35.0,
 					"combo_id": "combo_heavy_tank",
-					"role": "cannon",
-					"duration": 8.0,
 					"combo_range": 150.0,
 					"def_up_pct": 40.0,
-					"spd_up_pct": 25.0,
-					"ball_dmg_up_pct": 35.0
+					"duration": 8.0,
+					"role": "cannon",
+					"spd_up_pct": 25.0
 				}
 			},
 			"tags": [
@@ -542,127 +542,127 @@
 			"unlock_level": 1.0
 		},
 		{
-			"id": "skill_e2e_we_teleport",
-			"name": "波E实证·传送",
+			"cooldown": 15.0,
 			"description": "波E实证测试技：向锚点瞬移",
 			"detail": "平台窗口波E实证用（19工单任务B，e2e_命名先例=操3）；player_teleport handler实证",
 			"element": "梦幻",
 			"energy_cost": 15.0,
-			"cooldown": 15.0,
 			"icon_color": "#FFFFFF",
 			"icon_path": "",
+			"id": "skill_e2e_we_teleport",
+			"name": "波E实证·传送",
 			"operator": "OP_AUTO",
-			"type": "active",
+			"tag_params": {
+				"player_teleport": {
+					"pos_x": -250.0,
+					"pos_y": 0.0,
+					"target": "self"
+				}
+			},
 			"tags": [
 				"player_teleport"
 			],
-			"tag_params": {
-				"player_teleport": {
-					"target": "self",
-					"pos_x": -250.0,
-					"pos_y": 0.0
-				}
-			},
+			"type": "active",
 			"unlock_cost": 0.0,
 			"unlock_level": 1.0
 		},
 		{
-			"id": "skill_e2e_we_copy",
-			"name": "波E实证·复制",
+			"cooldown": 15.0,
 			"description": "波E实证测试技：复制敌方最近释放",
 			"detail": "平台窗口波E实证用（19工单任务B）；skill_copy_last handler实证，效果信号=SKILL_COPIED",
 			"element": "梦幻",
 			"energy_cost": 20.0,
-			"cooldown": 15.0,
 			"icon_color": "#FFFFFF",
 			"icon_path": "",
+			"id": "skill_e2e_we_copy",
+			"name": "波E实证·复制",
 			"operator": "OP_AUTO",
-			"type": "active",
-			"tags": [
-				"skill_copy_last"
-			],
 			"tag_params": {
 				"skill_copy_last": {
 					"cost_pct": 1.0
 				}
 			},
+			"tags": [
+				"skill_copy_last"
+			],
+			"type": "active",
 			"unlock_cost": 0.0,
 			"unlock_level": 1.0
 		},
 		{
-			"id": "skill_e2e_we_illusion",
-			"name": "波E实证·幻影",
+			"cooldown": 18.0,
 			"description": "波E实证测试技：生成幻象球员",
 			"detail": "平台窗口波E实证用（19工单任务B）；field_illusion_add handler实证（ai_mode 仅登记未被消费=已知观察项）",
 			"element": "梦幻",
 			"energy_cost": 20.0,
-			"cooldown": 18.0,
 			"icon_color": "#FFFFFF",
 			"icon_path": "",
+			"id": "skill_e2e_we_illusion",
+			"name": "波E实证·幻影",
 			"operator": "OP_AUTO",
-			"type": "active",
+			"tag_params": {
+				"field_illusion_add": {
+					"ai_mode": true,
+					"count": 1.0,
+					"duration": 8.0,
+					"place_mode": "near",
+					"stamina": 60.0
+				}
+			},
 			"tags": [
 				"field_illusion_add"
 			],
-			"tag_params": {
-				"field_illusion_add": {
-					"place_mode": "near",
-					"count": 1.0,
-					"stamina": 60.0,
-					"duration": 8.0,
-					"ai_mode": true
-				}
-			},
+			"type": "active",
 			"unlock_cost": 0.0,
 			"unlock_level": 1.0
 		},
 		{
-			"id": "skill_e2e_we_terra",
-			"name": "波E实证·地形",
+			"cooldown": 20.0,
 			"description": "波E实证测试技：地形摩擦改变",
 			"detail": "平台窗口波E实证用（19工单任务B）；field_terra_change handler 现为空壳=实证另核项",
 			"element": "梦幻",
 			"energy_cost": 15.0,
-			"cooldown": 20.0,
 			"icon_color": "#FFFFFF",
 			"icon_path": "",
+			"id": "skill_e2e_we_terra",
+			"name": "波E实证·地形",
 			"operator": "OP_AUTO",
-			"type": "active",
-			"tags": [
-				"field_terra_change"
-			],
 			"tag_params": {
 				"field_terra_change": {
 					"duration": 6.0,
 					"friction": 0.5
 				}
 			},
+			"tags": [
+				"field_terra_change"
+			],
+			"type": "active",
 			"unlock_cost": 0.0,
 			"unlock_level": 1.0
 		},
 		{
-			"id": "skill_e2e_we_vision",
-			"name": "波E实证·迷雾",
+			"cooldown": 16.0,
 			"description": "波E实证测试技：视野迷雾",
 			"detail": "平台窗口波E实证用（19工单任务B）；field_vision_block handler实证（spawn_at=ball_land 供 AI 无鼠标放置）",
 			"element": "梦幻",
 			"energy_cost": 20.0,
-			"cooldown": 16.0,
 			"icon_color": "#FFFFFF",
 			"icon_path": "",
+			"id": "skill_e2e_we_vision",
+			"name": "波E实证·迷雾",
 			"operator": "OP_AUTO",
-			"type": "active",
-			"tags": [
-				"field_vision_block"
-			],
 			"tag_params": {
 				"field_vision_block": {
-					"radius": 200.0,
 					"duration": 8.0,
 					"perception_scale": 0.5,
+					"radius": 200.0,
 					"spawn_at": "ball_land"
 				}
 			},
+			"tags": [
+				"field_vision_block"
+			],
+			"type": "active",
 			"unlock_cost": 0.0,
 			"unlock_level": 1.0
 		},
@@ -704,12 +704,12 @@
 			"name": "飞行干预(测)",
 			"operator": "OP_MIDFLY",
 			"tag_params": {
-				"ball_recall": {
-					"max_times": 2.0
-				},
 				"ball_in_flight_boost": {
 					"dmg_pct": 20.0,
-					"speed_pct": 15.0,
+					"max_times": 2.0,
+					"speed_pct": 15.0
+				},
+				"ball_recall": {
 					"max_times": 2.0
 				}
 			},
@@ -720,6 +720,37 @@
 			"type": "active",
 			"unlock_cost": 0.0,
 			"unlock_level": 1.0
+		},
+		{
+			"base_description": "水木联盟·阿克维（辅助）",
+			"cooldown": 12.0,
+			"description": "猎杀快道\n持续注入能量形成能量路线：水鲨鱼在路径上耗能减少、速度加快（工单23水木#3，原作逐字）",
+			"detail": "两点绘制能量快道；由施法者持续注能维持，能量耗尽路径消散；路径增益经 path_buffs 下发召唤物",
+			"element": "冰雪",
+			"energy_cost": 25,
+			"icon_color": "#35B8E6",
+			"icon_path": "",
+			"id": "shuimu_3",
+			"name": "猎杀快道",
+			"operator": "OP_PLACE",
+			"tag_params": {
+				"field_zone_energy_path": {
+					"duration": 8.0,
+					"energy_per_sec": 2.0,
+					"mouse_ops": 1,
+					"path_buffs": {
+						"energy_cost_mult": 0.5,
+						"speed_mult": 1.3
+					},
+					"path_width": 48.0
+				}
+			},
+			"tags": [
+				"field_zone_energy_path"
+			],
+			"type": "active",
+			"unlock_cost": 0,
+			"unlock_level": 1
 		}
 	]
 }
