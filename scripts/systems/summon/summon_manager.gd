@@ -10,6 +10,8 @@ var _types: Dictionary = {}                 # type_id -> 类型定义
 var _limits: Dictionary = {}                # type_id -> 上限（未设=类型表 active_limit，缺省 6）
 var _live: Array = []                       # 在场实体引用
 var _auto_spawners: Array = []              # [{owner_id, type_id, interval_frames, acc_frames, params}]
+var _limit_restores: Array = []             # [{type_id, old_limit, frames_left}]（工单23 芬尼#1 duration 到期还原）
+var _empowers: Dictionary = {}              # owner_id -> {config: Dictionary, left: int, frames_left: float}（芬尼#4 强化态）
 var _frame_acc: int = 0                     # 固定步长帧计数（确定性时钟）
 
 
@@ -43,6 +45,13 @@ func spawn(type_id: String, owner_id: int, pos: Vector2, params: Dictionary = {}
 	var limit: int = int(_limits.get(type_id, int(tdef.get("active_limit", 6))))
 	if _count_live(type_id, owner_id) >= limit:
 		return null
+	var spawn_params: Dictionary = params.duplicate()
+	if _empowers.has(owner_id):
+		var e: Dictionary = _empowers[owner_id]
+		spawn_params["empower"] = (e["config"] as Dictionary).duplicate()
+		e["left"] = int(e["left"]) - 1
+		if int(e["left"]) <= 0:
+			_empowers.erase(owner_id)
 	var ent_script: GDScript = load("res://scripts/systems/summon/summon_entity.gd")
 	var ent = ent_script.new()
 	ent.summon_type = type_id
@@ -50,7 +59,7 @@ func spawn(type_id: String, owner_id: int, pos: Vector2, params: Dictionary = {}
 	ent._mgr = self
 	get_parent().add_child(ent)
 	ent.global_position = pos
-	ent.setup(tdef, owner_id, params)
+	ent.setup(tdef, owner_id, spawn_params)
 	_live.append(ent)
 	var bus = _bus()
 	if bus:
@@ -93,8 +102,34 @@ func stop_auto_spawner(owner_id: int, type_id: String = "") -> void:
 	_auto_spawners = _auto_spawners.filter(func(a): return int(a["owner_id"]) != owner_id or (type_id != "" and str(a["type_id"]) != type_id))
 
 
+## 23 芬尼#1：上限提升（duration 到期自动还原旧值；固定步长帧账本）
+func set_active_limit_timed(type_id: String, n: int, old_limit: int, duration_s: float) -> void:
+	set_active_limit(type_id, n)
+	_limit_restores.append({"type_id": type_id, "old_limit": old_limit, "frames_left": int(round(duration_s * 60.0))})
+
+
+## 23 芬尼#4：强化态登记（spawn 时透传 params.empower 并递减次数）
+func register_empower(owner_id: int, config: Dictionary, count: int, duration_s: float) -> void:
+	_empowers[owner_id] = {"config": config, "left": count, "frames_left": duration_s * 60.0}
+
+
 func _physics_process(delta: float) -> void:
 	_frame_acc += 1
+	# limit 到期还原
+	var keep: Array = []
+	for lr in _limit_restores:
+		lr["frames_left"] = int(lr["frames_left"]) - 1
+		if int(lr["frames_left"]) > 0:
+			keep.append(lr)
+		else:
+			set_active_limit(str(lr["type_id"]), int(lr["old_limit"]))
+	_limit_restores = keep
+	# empower 到期清除
+	for key in _empowers.keys():
+		var e: Dictionary = _empowers[key]
+		e["frames_left"] = float(e["frames_left"]) - delta
+		if float(e["frames_left"]) <= 0.0:
+			_empowers.erase(key)
 	for a in _auto_spawners:
 		a["acc_frames"] = int(a["acc_frames"]) + 1
 		if int(a["acc_frames"]) >= int(a["interval_frames"]):

@@ -14,6 +14,7 @@ const WAVE_TABLES: Array[String] = [
 	"res://data/systems/spirit_ai/primitives_c.json",
 	"res://data/systems/spirit_ai/primitives_d.json",
 	"res://data/systems/spirit_ai/primitives_e.json",
+	"res://data/systems/spirit_ai/primitives_f.json",
 ]
 
 static var _agg: Dictionary = {}

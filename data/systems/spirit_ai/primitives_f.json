@@ -1,0 +1,36 @@
+{
+	"schema_version": 1,
+	"wave": "F",
+	"updated": "2026-10-01",
+	"_说明": "工单23 时期2 描述符（芬尼/水木新召唤系标签）。计价口径照 06 契约：params[value_param]×value_unit 后 clamp。时机：召唤系=进攻窗口（敌可见/持球交战），无上限=开阔局亦可（calm）。value 基准对齐兜底分 15。",
+	"descriptors": {
+		"summon_spawn": {
+			"family": "summon", "direction": "self",
+			"timing_gate": "enemy_visible",
+			"value_param": "count", "value_unit": 15.0, "value_min": 15.0, "value_cap": 60.0,
+			"intent": "attack", "intent_strength": 0.7, "target_mode": "none",
+			"notes": "通用召唤（魔术球/水鲨鱼）：count×15 计价（2体=30）；时机=敌可见进攻窗口"
+		},
+		"summon_merge": {
+			"family": "summon", "direction": "self",
+			"timing_gate": "always",
+			"value_param": "need_count", "value_unit": 15.0, "value_min": 15.0, "value_cap": 45.0,
+			"intent": "attack", "intent_strength": 0.6, "target_mode": "none",
+			"notes": "组合鲨鱼炸弹：融合由快道内实体判定（SUMMON_MERGED），技本身常备"
+		},
+		"summon_limit_up": {
+			"family": "summon", "direction": "self",
+			"timing_gate": "calm_state",
+			"value_param": "att_limit", "value_unit": 3.0, "value_min": 15.0, "value_cap": 45.0,
+			"intent": "support", "intent_strength": 0.6, "target_mode": "self",
+			"notes": "魔术无上限：开阔局铺场（att_limit 10×3=30）；持续型非爆发"
+		},
+		"enhance_next": {
+			"family": "summon", "direction": "self",
+			"timing_gate": "ball_hold",
+			"value_param": "damage_mult", "value_unit": 15.0, "value_min": 15.0, "value_cap": 45.0,
+			"intent": "attack", "intent_strength": 0.7, "target_mode": "self",
+			"notes": "能量强化：持球时强化接下来召唤物（2×15=30）；先有球源再强化"
+		}
+	}
+}

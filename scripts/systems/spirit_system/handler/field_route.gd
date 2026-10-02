@@ -442,6 +442,47 @@ func _apply_field_illusion_add(params: Dictionary) -> void:
 	])
 
 
+## 23 芬尼#1 魔术无上限（工单23 时期2）：召唤上限提升+无耗自动生成+到期还原
+func _apply_summon_limit_up(params: Dictionary, caster_id: int) -> void:
+	var mgr = _get_summon_manager()
+	if mgr == null or not mgr.has_method("set_active_limit_timed"):
+		push_error("[TagEffectHandler] 找不到 SummonManager")
+		return
+	var team := _team_of_caster(caster_id)
+	if team == "":
+		team = "a"
+	# 攻/防上限按队提升（类型表 active_limit 原值由 manager 账本还原）
+	mgr.set_active_limit_timed("fenny_magic_ball_att", int(params.get("att_limit", 10.0)), 6, float(params.get("duration", 20.0)))
+	mgr.set_active_limit_timed("fenny_magic_ball_def", int(params.get("def_limit", 10.0)), 6, float(params.get("duration", 20.0)))
+	if float(params.get("auto_interval", 5.0)) > 0.0:
+		var caster_node = _get_caster(caster_id)
+		if caster_node:
+			mgr.register_auto_spawner(caster_node.get_instance_id(), "fenny_magic_ball_att", float(params.get("auto_interval", 5.0)), {"owner_ref": caster_node})
+	print("[TagEffectHandler] 召唤上限强化: att=%s def=%s dur=%.0fs" % [str(params.get("att_limit", "?")), str(params.get("def_limit", "?")), float(params.get("duration", 20.0))])
+
+
+## 23 芬尼#4 能量强化（工单23 时期2）：接下来生成的召唤物携带强化配置（spawn 时透传递减）
+func _apply_enhance_next(params: Dictionary, caster_id: int) -> void:
+	var mgr = _get_summon_manager()
+	if mgr == null or not mgr.has_method("register_empower"):
+		push_error("[TagEffectHandler] 找不到 SummonManager")
+		return
+	var config := {
+		"damage_mult": float(params.get("damage_mult", 2.0)),
+		"firework_mult": float(params.get("firework_mult", 2.0)),
+		"pan_charges": float(params.get("pan_charges", 3.0)),
+		"potion_charges": float(params.get("potion_charges", 2.0)),
+	}
+	var count := maxi(1, int(params.get("duration", 15.0)))
+	mgr.register_empower(caster_id, config, count, float(params.get("duration", 15.0)))
+	print("[TagEffectHandler] 能量强化: 接下来%d个召唤物携带强化配置" % count)
+
+
+func _team_of_caster(caster_id: int) -> String:
+	var caster_node = _get_caster(caster_id)
+	return str(caster_node.get("team")) if caster_node != null and is_instance_valid(caster_node) else ""
+
+
 func _apply_field_illusion_clear(params: Dictionary) -> void:
 	"""幻象破除标签：释放后直接清除场上所有幻象（无鼠标系统）"""
 	var manager = _get_illusion_manager()

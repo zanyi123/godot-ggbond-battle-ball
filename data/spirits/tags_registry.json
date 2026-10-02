@@ -1675,6 +1675,35 @@
 			],
 			"target_type": "field",
 			"energy_cost": 0
+		},
+		{
+			"id": "summon_limit_up",
+			"category": "SUMMON",
+			"name": "召唤上限强化",
+			"description": "场上召唤物上限提升（攻/防分账）并开启无耗自动生成（计时器，5秒/个）",
+			"params": [
+				"att_limit",
+				"def_limit",
+				"auto_interval",
+				"duration"
+			],
+			"target_type": "self",
+			"_出处": "工单23 芬尼#1 魔术无上限（原作：上限6+6→10+10，此后5秒/个自动无耗生成）"
+		},
+		{
+			"id": "enhance_next",
+			"category": "SUMMON",
+			"name": "能量强化",
+			"description": "接下来生成的召唤物强化：爆炸/伤害翻倍、锅防×3、药水×2、烟花×2（持续期内消费）",
+			"params": [
+				"damage_mult",
+				"firework_mult",
+				"pan_charges",
+				"potion_charges",
+				"duration"
+			],
+			"target_type": "self",
+			"_出处": "工单23 芬尼#4 能量强化（原作：强化接下来魔术球）"
 		}
 	]
 }

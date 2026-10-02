@@ -599,6 +599,12 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 		"summon_merge":
 			call("_apply_summon_merge", params, caster_id)
 			success = true
+		"summon_limit_up":
+			call("_apply_summon_limit_up", params, caster_id)
+			success = true
+		"enhance_next":
+			call("_apply_enhance_next", params, caster_id)
+			success = true
 		# 对球员标签暂不实现（第1步只做buff堆栈）
 		# === 球员标签 - 属性(01-16) ===
 		"player_atk_up_pct":
