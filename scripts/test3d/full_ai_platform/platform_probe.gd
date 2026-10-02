@@ -39,6 +39,10 @@ var we_illusion_peak: int = 0         # 幻象在场峰值
 var we_vision_zone_seen: bool = false # VISION 区(5) 在场
 var _teleport_pending: Array = []     # [{t, player, from}]等待位移确认
 var _pos_poll_accum: float = 0.0
+# —— 工单23 时期3：芬尼/水木双通道判定（F2 事件订阅 + summon 计数）——
+var _23_applicable: bool = false
+var _23_events: Dictionary = {}
+var _23_summon_peak: int = 0
 var _stall_accum: float = 0.0
 var _stall_seconds: float = 0.0
 var _stall_reports: int = 0
@@ -105,6 +109,28 @@ func setup(battle_manager: Node2D) -> void:
 		print("[Probe] 团队合击 tracker 未在位（11工单一期落地后自动接入）")
 
 	print("[Probe] 检测层已挂接：释放(skill_used) + 印记(mark_changed) + 合体(combo_formed/broken)")
+
+	# —— 工单23 时期3：芬尼/水木双通道（F2 八事件+summon 峰值；探活守卫，零冲突）——
+	for player in bm.team_a_players + bm.team_b_players:
+		if player == null or not is_instance_valid(player):
+			continue
+		for sid in player.get_equipped_skills():
+			if str(sid).begins_with("fenny_") or str(sid).begins_with("shuimu_"):
+				_23_applicable = true
+	if _23_applicable:
+		var bus2: Node = get_tree().get_first_node_in_group("battle_event_bus")
+		var EB = BattleEventBusScript.GameEvent
+		if bus2 != null and bus2.has_method("subscribe"):
+			for ev_name in ["SUMMON_SPAWNED", "SUMMON_DESPAWNED", "SUMMON_MERGED",
+					"ITEM_ACQUIRED", "ITEM_USED", "DEFEND_INTERCEPT",
+					"DEFEND_ATTRIBUTE_BREAK", "BALL_FORCED_CONTROL"]:
+				if EB.get(ev_name) != null:
+					bus2.subscribe(EB.get(ev_name), _on_23_event.bind(ev_name))
+			print("[Probe] 工单23：F2 八事件已订阅")
+		var smgr: Node = get_tree().get_first_node_in_group("summon_managers")
+		print("[Probe] 工单23：召唤物管理器%s" % ("在位（峰值统计启用）" if smgr != null else "未在位"))
+	else:
+		print("[Probe] 工单23：未启用（装载不含芬尼/水木技）")
 
 	# —— 19工单任务B：波E实证挂接 ——
 	for player in bm.team_a_players + bm.team_b_players:
@@ -244,6 +270,10 @@ func _process(delta: float) -> void:
 					if not we_vision_zone_seen:
 						print("[Probe] 🔥 迷雾落地: VISION 区在场")
 					we_vision_zone_seen = true
+	# 工单23：召唤物在场估算（SPAWNED-DESPAWNED 累计差）
+	if _23_applicable:
+		var live: int = int(_23_events.get("SUMMON_SPAWNED", 0)) - int(_23_events.get("SUMMON_DESPAWNED", 0))
+		_23_summon_peak = maxi(_23_summon_peak, live)
 
 
 # ==================== 信号处理 ====================
@@ -271,6 +301,23 @@ func _player_by_id(caster_id: int) -> Node:
 		if player != null and is_instance_valid(player) and player.get_instance_id() == caster_id:
 			return player
 	return null
+
+
+func _on_23_event(payload: Dictionary, ev_name: String) -> void:
+	_23_events[ev_name] = int(_23_events.get(ev_name, 0)) + 1
+	var brief := ""
+	match ev_name:
+		"SUMMON_SPAWNED":
+			brief = str(payload.get("type_id", "?"))
+		"SUMMON_MERGED":
+			brief = str(payload.get("result_type", "?"))
+		"DEFEND_INTERCEPT":
+			brief = "拦截伤害 %s" % str(payload.get("blocked_damage", "?"))
+		"ITEM_USED":
+			brief = str(payload.get("item_id", "?"))
+		"BALL_FORCED_CONTROL":
+			brief = str(payload.get("mode", "?"))
+	print("[Probe] 🔥 %s: %s" % [ev_name, brief])
 
 
 func _on_we_skill_copied(payload: Dictionary) -> void:
@@ -373,7 +420,10 @@ func build_verdict() -> Dictionary:
 		"we_copy_ok": we_copy_ok,
 		"we_illusion_ok": we_illusion_ok,
 		"we_pass": we_pass,
-		"pass": mark_ok and combo_ok and trio_best >= 2 and ((not _team_combo_available) or not team_combo_events.is_empty()) and ((not we_applicable) or we_pass),
+		"23_applicable": _23_applicable,
+		"23_key_events": int(_23_events.get("SUMMON_SPAWNED", 0)) + int(_23_events.get("DEFEND_INTERCEPT", 0)) + int(_23_events.get("BALL_FORCED_CONTROL", 0)),
+		"23_ok": (not _23_applicable) or (int(_23_events.get("SUMMON_SPAWNED", 0)) + int(_23_events.get("DEFEND_INTERCEPT", 0)) + int(_23_events.get("BALL_FORCED_CONTROL", 0))) > 0,
+		"pass": mark_ok and combo_ok and trio_best >= 2 and ((not _team_combo_available) or not team_combo_events.is_empty()) and ((not we_applicable) or we_pass) and ((not _23_applicable) or (int(_23_events.get("SUMMON_SPAWNED", 0)) + int(_23_events.get("DEFEND_INTERCEPT", 0)) + int(_23_events.get("BALL_FORCED_CONTROL", 0))) > 0),
 	}
 
 
@@ -408,6 +458,19 @@ func print_final_report() -> Dictionary:
 		print("[Probe]   · 迷雾: 出手%d VISION区在场%s（观察项）" % [int(casts.get("skill_e2e_we_vision", 0)), "✅" if we_vision_zone_seen else "—"])
 		print("[Probe]   · 地形: 出手%d（handler 空壳=另核上报，不计判定）" % int(casts.get("skill_e2e_we_terra", 0)))
 		print("[Probe]   · 波E三独立项: %s" % ("✅ 达成" if bool(v["we_pass"]) else "❌ 未达成"))
+	# —— 工单23 时期3：芬尼/水木双通道报告 ——
+	if _23_applicable:
+		print("[Probe] ---- 工单23 芬尼/水木（F2 事件落地判定）----")
+		for ev_name in ["SUMMON_SPAWNED", "SUMMON_DESPAWNED", "SUMMON_MERGED", "ITEM_ACQUIRED",
+				"ITEM_USED", "DEFEND_INTERCEPT", "DEFEND_ATTRIBUTE_BREAK", "BALL_FORCED_CONTROL"]:
+			var cnt := int(_23_events.get(ev_name, 0))
+			if cnt > 0:
+				print("[Probe]   · %s: %d 次 ✅" % [ev_name, cnt])
+		print("[Probe]   · 召唤物在场峰值: %d" % _23_summon_peak)
+		var key_events := int(_23_events.get("SUMMON_SPAWNED", 0)) + int(_23_events.get("DEFEND_INTERCEPT", 0)) + int(_23_events.get("BALL_FORCED_CONTROL", 0))
+		print("[Probe]   · 关键事件合计(生成/拦截/强制控球): %d %s" % [key_events, "✅ 效果有落地" if key_events > 0 else "⚠ 零落地（查召唤/拦截链路）"])
+	else:
+		print("[Probe] 工单23 芬尼/水木：未启用（装载不含两队技）")
 	_dump_player_pools()
 	print("[Probe] ---- 赛中因子采样（每秒×全场；score_pos=得分>0 的采样占比）----")
 	for sid in WATCH_SKILLS:

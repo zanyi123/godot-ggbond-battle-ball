@@ -1,0 +1,56 @@
+{
+	"schema_version": 2,
+	"test_spirits": [
+		{
+			"id": "test_spirit_fenny",
+			"name": "芬尼队的元灵",
+			"element": "梦幻",
+			"skills": ["fenny_1", "fenny_2", "fenny_3", "fenny_4"]
+		},
+		{
+			"id": "test_spirit_shuimu",
+			"name": "水木联盟的元灵",
+			"element": "冰雪",
+			"skills": ["shuimu_1", "shuimu_3", "shuimu_5", "shuimu_6"]
+		}
+	],
+	"loadouts": [
+		{
+			"slot": "A0",
+			"character_id": "char_001",
+			"spirit_id": "芬尼队的元灵",
+			"skills": ["fenny_1", "fenny_4"]
+		},
+		{
+			"slot": "A1",
+			"character_id": "char_002",
+			"spirit_id": "芬尼队的元灵",
+			"skills": ["fenny_2"]
+		},
+		{
+			"slot": "A2",
+			"character_id": "char_003",
+			"spirit_id": "芬尼队的元灵",
+			"skills": ["fenny_3"]
+		},
+		{
+			"slot": "B0",
+			"character_id": "char_004",
+			"spirit_id": "水木联盟的元灵",
+			"skills": ["shuimu_1", "shuimu_6"]
+		},
+		{
+			"slot": "B1",
+			"character_id": "char_005",
+			"spirit_id": "水木联盟的元灵",
+			"skills": ["shuimu_3", "shuimu_5"]
+		},
+		{
+			"slot": "B2",
+			"character_id": "char_006",
+			"spirit_id": "水木联盟的元灵",
+			"skills": ["shuimu_2", "shuimu_4"]
+		}
+	],
+	"_说明": "工单23 时期3 金路径装载（平台窗口）：芬尼队 A 组（A0 无上限+能量强化 / A1 白球-攻 / A2 白球-守）+ 水木联盟 B 组（B0 快牙猎杀+组合炸弹 / B1 猎杀快道+快牙撕咬 / B2 多重+防御版）。双通道共用本装载：玩家通道=F6 排表面板勾🎮（按原作说明操作：STEER 操球/MARK 吸附/PLACE 绘路，探针事件计数=效果落地判定）；AI 通道=--platform-auto 同装载自动跑（出手+事件落地）。技能池=时期2 交付（fenny_*/shuimu_*）。"
+}
