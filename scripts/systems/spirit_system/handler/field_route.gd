@@ -157,11 +157,12 @@ func _apply_summon_spawn(params: Dictionary, caster_id: int) -> void:
 	if not caster:
 		print("[TagEffectHandler] 召唤: 找不到施法者")
 		return
-	var type_id := str(params.get("summon_type", ""))
+	# 双窗键名兼容（工单23 时期2 实测：芬尼口径=type_id/spawn_count，水木口径=summon_type/count）
+	var type_id := str(params.get("summon_type", params.get("type_id", "")))
 	if type_id.is_empty():
-		push_error("[TagEffectHandler] 召唤: 缺 summon_type")
+		push_error("[TagEffectHandler] 召唤: 缺 summon_type/type_id")
 		return
-	var count: int = maxi(int(params.get("count", 1)), 1)
+	var count: int = maxi(int(params.get("count", params.get("spawn_count", 1))), 1)
 	var spawned: Array = []
 	for i in range(count):
 		var angle: float = PI * 0.25 + float(i) * PI * 0.5

@@ -32,6 +32,13 @@ func _initialize() -> void:
 	_run()
 
 
+func _cp(msg: String) -> void:
+	var f := FileAccess.open("res://sim_results/_p2_trace.log", FileAccess.READ_WRITE if FileAccess.file_exists("res://sim_results/_p2_trace.log") else FileAccess.WRITE)
+	f.seek_end()
+	f.store_line(msg)
+	f.flush()
+
+
 func _check(cond: bool, name: String) -> void:
 	if cond:
 		_pass += 1
@@ -69,6 +76,7 @@ func _run() -> void:
 
 	# ===== T2：summon_limit_up 全链（标签→handler→manager 上限+自动生成）=====
 	print("[T2] summon_limit_up 全链")
+	_cp("T2头")
 	var bus = EventBusScript.new()
 	bus.add_to_group("battle_event_bus")
 	root.add_child(bus)
@@ -86,14 +94,21 @@ func _run() -> void:
 	mgr.name = "SummonManager"
 	bm_stub.add_child(mgr)
 	mgr.add_to_group("summon_managers")
+	await process_frame   # -s 模式：add_child 的 _ready 延迟至首帧（types 载入需要）
 	root.add_child(handler)
 	handler.battle_manager = bm_stub   # add_child 触发 _ready 会覆盖，赋值必须在其后
 	var caster: StubOwner = StubOwner.new()
 	caster.character_id = "fenny_caster"
 	caster.team = "a"
 	root.add_child(caster)
+	handler.players = [caster] as Array[Node]   # _get_caster 名册注册（显式转型防 -s 赋值挂起）
+	_cp("T2 players注册")
 	var params := {"att_limit": 10.0, "def_limit": 10.0, "auto_interval": 5.0, "duration": 20.0, "caster_id": caster.get_instance_id()}
-	handler.apply_tag_effect("summon_limit_up", params, caster.get_instance_id())
+	_cp("T2 直调前")
+	print("  ⏱ T2直调_do_apply_tag（绕过facade入口二分）")
+	handler._do_apply_tag("summon_limit_up", params, caster.get_instance_id())
+	_cp("T2 直调返回")
+	print("  ⏱ T2直调返回")
 	var spawned: Node = mgr.spawn("fenny_magic_ball_att", caster.get_instance_id(), Vector2.ZERO, {"owner_ref": caster})
 	_check(spawned != null, "T3 上限提升后 spawn 放行")
 	var extra: Array = []
@@ -102,6 +117,20 @@ func _run() -> void:
 		if e != null:
 			extra.append(e)
 	_check((extra as Array).size() >= 4, "T4 上限10：可生成远多于默认6 实测+%d" % (extra as Array).size())
+
+	_cp("T2b前")
+	# ===== T2b：芬尼口径双键兼容（type_id/spawn_count——时期2 实测缺口修复）=====
+	var fenny_events: Array = []
+	var cbf := func(payload: Dictionary) -> void: fenny_events.append(payload)
+	bus.subscribe(bus.GameEvent.SUMMON_SPAWNED, cbf)
+	handler.apply_tag_effect("summon_spawn", {"type_id": "fenny_magic_ball_def", "spawn_count": 3.0}, caster.get_instance_id())
+	_cp("T2b spawn后")
+	_check((fenny_events as Array).size() == 3, "T2b 芬尼口径 spawn_count=3 → SUMMON_SPAWNED×3（双键兼容）")
+	var fenny_live: int = 0
+	for e in mgr.get_summons_of(caster.get_instance_id()):
+		if str(e.get("summon_type")) == "fenny_magic_ball_def":
+			fenny_live += 1
+	_check(fenny_live == 3, "T2c 白球-守实体×3 在场（type_id 解析正确）")
 
 	# ===== T3：enhance_next 全链（强化透传与递减）=====
 	print("[T3] enhance_next 全链")
