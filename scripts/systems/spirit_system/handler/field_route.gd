@@ -458,7 +458,9 @@ func _apply_summon_limit_up(params: Dictionary, caster_id: int) -> void:
 	if float(params.get("auto_interval", 5.0)) > 0.0:
 		var caster_node = _get_caster(caster_id)
 		if caster_node:
-			mgr.register_auto_spawner(caster_node.get_instance_id(), "fenny_magic_ball_att", float(params.get("auto_interval", 5.0)), {"owner_ref": caster_node})
+			# 1001 修复（平台窗口实测：自动生成器每 tick 报"缺 summon_type"×6=魔术无上限的 5s 自动生成完全失效）
+			# 根因=注册时 params 未带类型键，manager tick 走标签分发时 params 缺 summon_type → 缺键早退
+			mgr.register_auto_spawner(caster_node.get_instance_id(), "fenny_magic_ball_att", float(params.get("auto_interval", 5.0)), {"owner_ref": caster_node, "summon_type": "fenny_magic_ball_att", "count": 1})
 	print("[TagEffectHandler] 召唤上限强化: att=%s def=%s dur=%.0fs" % [str(params.get("att_limit", "?")), str(params.get("def_limit", "?")), float(params.get("duration", 20.0))])
 
 
