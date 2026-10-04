@@ -81,20 +81,22 @@ func _build_ui() -> void:
 	hint.modulate = Color(1, 0.9, 0.5, 0.9)
 	vbox.add_child(hint)
 
-	var human_row := HBoxContainer.new()
-	human_row.add_theme_constant_override("separation", 8)
-	vbox.add_child(human_row)
-	var human_box := CheckBox.new()
-	human_box.text = "🎮 主人亲自驾驶 A0（猪猪侠）——其余全 AI，自动采集轨迹（22-C 学主人打法）"
-	human_box.add_theme_font_size_override("font_size", 13)
-	human_box.toggled.connect(func(on: bool) -> void: human_slot_choice = 0 if on else -1)
-	human_row.add_child(human_box)
-
 	var btn := Button.new()
 	btn.text = "✅ 确认开始比赛"
 	btn.add_theme_font_size_override("font_size", 16)
 	btn.pressed.connect(_on_confirm)
 	vbox.add_child(btn)
+
+	# 22-C 学打法专用开关（1001 主人令：测试全自动，学打法时才勾；默认不勾，与确认键分离防误触）
+	var human_row := HBoxContainer.new()
+	human_row.add_theme_constant_override("separation", 8)
+	vbox.add_child(human_row)
+	var human_box := CheckBox.new()
+	human_box.text = "【22-C 学打法专用，平时不勾】主人亲自驾驶 A0（其余全 AI+轨迹采集）"
+	human_box.add_theme_font_size_override("font_size", 11)
+	human_box.modulate = Color(1, 1, 1, 0.65)
+	human_box.toggled.connect(func(on: bool) -> void: human_slot_choice = 0 if on else -1)
+	human_row.add_child(human_box)
 
 
 func _make_row(slot: String) -> PanelContainer:
