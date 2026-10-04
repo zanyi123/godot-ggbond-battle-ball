@@ -22,7 +22,8 @@ var roster_panel: CanvasLayer = null
 var probe: Node = null             # 工单12 检测层（信号判定，非肉眼）
 var trace_recorder: Node = null    # 22-C S1 轨迹采集器（主人操控模式自动启用）
 var auto_matches: int = 0          # --platform-auto=N：headless 自动跑满 N 场后退出（0=交互观战）
-var platform_speed: float = 1.0    # --platform-speed=F：Engine.time_scale（auto 模式默认 6）
+var platform_speed: float = 1.0    # --platform-speed=F：Engine.time_scale（auto 未显式指定时默认 6）
+var _speed_explicit: bool = false
 var platform_seed: int = 0         # --platform-seed=N（0=不设种子）
 var loadout_path: String = ""      # --platform-loadout=path（缺省用出厂配置）
 var force_observe: bool = false    # --platform-force-observe=1：headless 下也构建观测层（UI 冒烟用）
@@ -55,7 +56,7 @@ func _platform_start() -> void:
 		auto_matches = 1
 	if auto_matches > 0:
 		Engine.physics_ticks_per_second = 60  # 与 sim 同款固定步长
-		if platform_speed == 1.0:
+		if not _speed_explicit:
 			platform_speed = 6.0
 		if GameManager.sim_half_duration_override <= 0.0:
 			GameManager.sim_half_duration_override = battle_manager.DEFAULT_SIM_HALF
@@ -138,6 +139,7 @@ func _parse_platform_args() -> void:
 			var s := float(arg.substr(17))
 			if s > 0.0:
 				platform_speed = s
+				_speed_explicit = true  # 1001 修复：显式 1.0（实时）曾被 auto 默认 6 倍覆盖
 		elif arg.begins_with("--platform-seed="):
 			platform_seed = int(arg.substr(16))
 		elif arg.begins_with("--platform-loadout="):
