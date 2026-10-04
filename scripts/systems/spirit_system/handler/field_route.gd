@@ -167,10 +167,14 @@ func _apply_summon_spawn(params: Dictionary, caster_id: int) -> void:
 		push_error("[TagEffectHandler] 召唤: 缺 summon_type/type_id")
 		return
 	var count: int = maxi(int(params.get("count", params.get("spawn_count", 1))), 1)
+	# 1001 生成位置修正（主人实测"生成在己方内场，与描述不符"）：原作=白球在外场上空生成。
+	# 位置=敌方外场带（16号铁事实：a 攻+x→a 的敌方外场 x≈+560；b 镜像 -560），y 确定性散布（零随机）。
+	var caster_team := str(caster.team)
+	var spawn_x: float = 560.0 if caster_team == "a" else -560.0
 	var spawned: Array = []
 	for i in range(count):
-		var angle: float = PI * 0.25 + float(i) * PI * 0.5
-		var pos: Vector2 = caster.global_position + Vector2(cos(angle), sin(angle)) * 40.0
+		var spread_y: float = -160.0 + float(i) * 120.0  # 确定性纵向散布（零随机）
+		var pos: Vector2 = Vector2(spawn_x, spread_y)
 		var ent: Node = sm.spawn(type_id, caster_id, pos)
 		if ent != null:
 			spawned.append(ent)

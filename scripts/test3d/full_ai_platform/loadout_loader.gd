@@ -199,7 +199,9 @@ static func apply_loadouts(bm: Node, config: Dictionary) -> Dictionary:
 					continue
 				var pid: int = pl.get_instance_id()
 				smgr.register_auto_spawner(pid, ball_type, 5.0, {"owner_ref": pl, "summon_type": ball_type, "count": 1})
-				smgr.spawn(ball_type, pid, pl.global_position + Vector2(30, -20), {"owner_ref": pl, "summon_type": ball_type})  # 原作"开局首生成"
+				# 原作"开局首生成"：位置=敌方外场带（同 1001 口径）
+				var spawn_x2: float = 560.0 if team == 0 else -560.0
+				smgr.spawn(ball_type, pid, Vector2(spawn_x2, -80.0 + 80.0 * i), {"owner_ref": pl, "summon_type": ball_type})
 				print("[Loadout] 白球体系初始化: %s → %s（开局1+5s/个）" % [str(pl.char_data.get("name", "?")), ball_type])
 
 	# 兜底：未被有效装载覆盖的槽 → sim 同款循环装备（保证平台永远满配可观测）

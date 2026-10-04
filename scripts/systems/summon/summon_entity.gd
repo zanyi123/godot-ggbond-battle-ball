@@ -53,11 +53,25 @@ func _physics_process(delta: float) -> void:
 	if state == "active" and not is_on_wall():
 		var kind := str(_tdef.get("kind", ""))
 		var ctrl := str(_tdef.get("controllable", ""))
-		if kind == "shark" and ctrl != "auto":
-			var team := str(owner_ref.team) if owner_ref != null and is_instance_valid(owner_ref) else "a"
-			var atk_dir: float = 1.0 if team == "a" else -1.0
+		var team := str(owner_ref.team) if owner_ref != null and is_instance_valid(owner_ref) else "a"
+		var atk_x: float = 1.0 if team == "a" else -1.0
+		# 1001 AI 平替（主人问"AI不会操控白球"）：19A 操控体系建成前的最小可行平替——
+		# 攻球=自主游向敌半场（撞敌/障碍爆炸由 on_ball 既有链结算）；守球=游向己方球员（触达给道具）。
+		# 鲨鱼攻击型同款自主游动（守鲨 auto 待机）。
+		if kind == "magic_ball":
+			var ball_mode := str(_tdef.get("on_ball", {}).get("mode", ""))
+			var mb_spd: float = float(_tdef.get("move_speed", 140.0))
+			if ball_mode == "carry_with_ball":
+				velocity = Vector2(atk_x * mb_spd, 0.0)
+				move_and_slide()
+			elif ball_mode == "grant_item" and owner_ref != null and is_instance_valid(owner_ref):
+				var to_owner: Vector2 = owner_ref.global_position - global_position
+				if to_owner.length() > 30.0:
+					velocity = to_owner.normalized() * mb_spd
+					move_and_slide()
+		elif kind == "shark" and ctrl != "auto":
 			var spd: float = float(_tdef.get("move_speed", 120.0))
-			velocity = Vector2(atk_dir * spd, 0.0)
+			velocity = Vector2(atk_x * spd, 0.0)
 			move_and_slide()
 	# 寿命递减（固定步长确定性；耗尽→注销）
 	lifespan_left -= delta
