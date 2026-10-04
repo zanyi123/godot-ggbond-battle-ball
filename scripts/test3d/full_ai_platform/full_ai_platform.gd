@@ -24,6 +24,7 @@ var trace_recorder: Node = null    # 22-C S1 轨迹采集器（主人操控模�
 var auto_matches: int = 0          # --platform-auto=N：headless 自动跑满 N 场后退出（0=交互观战）
 var platform_speed: float = 1.0    # --platform-speed=F：Engine.time_scale（auto 未显式指定时默认 6）
 var _speed_explicit: bool = false
+var shots_interval_cfg: float = 0.0  # --platform-shots=秒间隔（验收截图）
 var platform_seed: int = 0         # --platform-seed=N（0=不设种子）
 var loadout_path: String = ""      # --platform-loadout=path（缺省用出厂配置）
 var force_observe: bool = false    # --platform-force-observe=1：headless 下也构建观测层（UI 冒烟用）
@@ -116,6 +117,9 @@ func _begin_match() -> void:
 		probe = PlatformProbeScript.new()
 		add_child(probe)
 		probe.setup(battle_manager)
+		if shots_interval_cfg > 0.0:
+			probe.shots_interval = shots_interval_cfg
+			print("[Platform] 📸 验收截图开启（每 %.0fs 一张 → docs/img/23demo）" % shots_interval_cfg)
 	elif probe_enabled:
 		print("[Platform] ⚠ 检测层脚本不可实例化（编译失败？）——本场无探针判定，开赛继续")
 	battle_manager._on_prep_match_started()
@@ -148,6 +152,8 @@ func _parse_platform_args() -> void:
 			force_observe = true
 		elif arg == "--platform-probe=0":
 			probe_enabled = false
+		elif arg.begins_with("--platform-shots="):
+			shots_interval_cfg = float(arg.substr(17))
 		elif arg.begins_with("--platform-human="):
 			human_slot = clampi(int(arg.substr(17)), 0, 5)
 

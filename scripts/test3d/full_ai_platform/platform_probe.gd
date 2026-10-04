@@ -43,6 +43,11 @@ var _pos_poll_accum: float = 0.0
 var _23_applicable: bool = false
 var _23_events: Dictionary = {}
 var _23_summon_peak: int = 0
+# —— 验收截图（主人令 1001：肉眼看见白球/鲨鱼模型）——
+var shots_interval: float = 0.0     # --platform-shots=秒间隔（0=关闭；仅窗口模式有效）
+var _shots_accum: float = 0.0
+var _shots_count: int = 0
+var _shots_dir := "res://docs/img/23demo"
 var _stall_accum: float = 0.0
 var _stall_seconds: float = 0.0
 var _stall_reports: int = 0
@@ -123,7 +128,8 @@ func setup(battle_manager: Node2D) -> void:
 		if bus2 != null and bus2.has_method("subscribe"):
 			for ev_name in ["SUMMON_SPAWNED", "SUMMON_DESPAWNED", "SUMMON_MERGED",
 					"ITEM_ACQUIRED", "ITEM_USED", "DEFEND_INTERCEPT",
-					"DEFEND_ATTRIBUTE_BREAK", "BALL_FORCED_CONTROL"]:
+					"DEFEND_ATTRIBUTE_BREAK", "BALL_FORCED_CONTROL",
+					"OBSTACLE_IMPACT", "SUMMON_STATE_CHANGED"]:
 				if EB.get(ev_name) != null:
 					bus2.subscribe(EB.get(ev_name), _on_23_event.bind(ev_name))
 			print("[Probe] 工单23：F2 八事件已订阅")
@@ -168,6 +174,19 @@ func _process(delta: float) -> void:
 	if _elapsed - _last_report_at >= 10.0:
 		_last_report_at = _elapsed
 		print("[Probe] %4.0fs %s | %s" % [_elapsed, _casts_line(), _marks_combo_line()])
+	# 验收截图（窗口模式：定时抓主 viewport 存 PNG——主人肉眼验收用）
+	if shots_interval > 0.0 and DisplayServer.get_name() != "headless":
+		_shots_accum += delta
+		if _shots_accum >= shots_interval:
+			_shots_accum = 0.0
+			_shots_count += 1
+			var img := get_viewport().get_texture().get_image()
+			if img != null:
+				DirAccess.make_dir_recursive_absolute(_shots_dir)
+				var sp := "%s/shot_%02d_t%03ds.png" % [_shots_dir, _shots_count, int(_elapsed)]
+				img.save_png(sp)
+				print("[Probe] 📸 验收截图 #%d → %s" % [_shots_count, sp])
+
 	# 决策 dump 轮询（1s；get_decision_dump=10工单P3集成只读口）+ 关注技因子赛中采样
 	_dump_poll_accum += delta
 	if _dump_poll_accum >= 1.0:
@@ -188,7 +207,8 @@ func _process(delta: float) -> void:
 					continue
 				for info in sad.get("skills_analysis", []):
 					var sid := str(info.get("skill_id", ""))
-					if not WATCH_SKILLS.has(sid):
+					# 采样条件：关注清单 OR 芬尼/水木技（工单23 判定面）
+					if not WATCH_SKILLS.has(sid) and not sid.begins_with("fenny_") and not sid.begins_with("shuimu_"):
 						continue
 					if not _factor_stats.has(sid):
 						_factor_stats[sid] = {}
@@ -485,6 +505,20 @@ func print_final_report() -> Dictionary:
 		print("[Probe]   · %s: score>0 占比 %d/%d%s" % [
 			str(WATCH_SKILLS[sid]), int(st.get("score_pos", 0)), samples,
 			" | " + " ".join(parts) if not parts.is_empty() else ""])
+	for sid in _factor_stats:
+		if WATCH_SKILLS.has(sid):
+			continue
+		var st2: Dictionary = _factor_stats[sid]
+		var samples2 := int(st2.get("samples", 0))
+		if samples2 == 0:
+			continue
+		var parts2: Array[String] = []
+		for k2 in ["base", "situ", "time", "comm", "elem", "combo", "team", "energy"]:
+			if int(st2.get(k2, 0)) > 0:
+				parts2.append("%s归零%d/%d" % [k2, int(st2[k2]), samples2])
+		print("[Probe]   · %s: score>0 占比 %d/%d%s" % [
+			str(sid), int(st2.get("score_pos", 0)), samples2,
+			" | " + " ".join(parts2) if not parts2.is_empty() else ""])
 	if bool(v["pass"]):
 		print("[Probe] ✅ VERDICT: PASS —— 印记/合体/麒麟队合击在运行时均真实发生（信号判定）")
 	else:
