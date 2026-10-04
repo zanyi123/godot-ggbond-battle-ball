@@ -177,6 +177,31 @@ static func apply_loadouts(bm: Node, config: Dictionary) -> Dictionary:
 			"skills": player.get_equipped_skills(),
 			"fallback": false,
 		}
+	# 工单23 白球体系初始化（1001 主人实测"没有初始悬浮白球"：原作=开局首生成+5秒/个自动无耗生成，
+	# 不依赖魔术无上限技——该技只提升上限）。平台装载职责内：持 fenny_2/fenny_3 的球员注册自动生成器。
+	var smgr: Node = null
+	if bm != null and bm.is_inside_tree():
+		smgr = bm.get_tree().get_first_node_in_group("summon_managers")
+	if smgr != null and smgr.has_method("register_auto_spawner"):
+		for team in range(2):
+			var team_players: Array = bm.team_a_players if team == 0 else bm.team_b_players
+			for i in range(team_players.size()):
+				var pl = team_players[i]
+				if pl == null or not is_instance_valid(pl):
+					continue
+				var ball_type := ""
+				for sid in pl.get_equipped_skills():
+					if str(sid) == "fenny_2":
+						ball_type = "fenny_magic_ball_att"
+					elif str(sid) == "fenny_3":
+						ball_type = "fenny_magic_ball_def"
+				if ball_type.is_empty():
+					continue
+				var pid: int = pl.get_instance_id()
+				smgr.register_auto_spawner(pid, ball_type, 5.0, {"owner_ref": pl, "summon_type": ball_type, "count": 1})
+				smgr.spawn(ball_type, pid, pl.global_position + Vector2(30, -20), {"owner_ref": pl, "summon_type": ball_type})  # 原作"开局首生成"
+				print("[Loadout] 白球体系初始化: %s → %s（开局1+5s/个）" % [str(pl.char_data.get("name", "?")), ball_type])
+
 	# 兜底：未被有效装载覆盖的槽 → sim 同款循环装备（保证平台永远满配可观测）
 	var spirit_count := DataManager.spirits.size()
 	for team in range(2):

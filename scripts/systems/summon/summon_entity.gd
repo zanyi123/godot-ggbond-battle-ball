@@ -25,6 +25,8 @@ func setup(type_def: Dictionary, owner: int, params: Dictionary) -> void:
 	skill_id = str(params.get("skill_id", ""))
 	lifespan_left = float(type_def.get("lifespan", 20.0))
 	_build_hitbox(str(type_def.get("hitbox", "circle:18")))
+	if is_inside_tree():
+		_build_2d_visual()
 	_on_spawned()
 
 
@@ -45,6 +47,18 @@ func _build_hitbox(spec: String) -> void:
 func _physics_process(delta: float) -> void:
 	if state == "consumed":
 		return
+	# 1001 自主行为（主人实测"鲨鱼一直不动"）：攻击型召唤物无操控输入时向敌半场游动
+	# （原作=可融球进攻或单独操控进攻；AI 无 STEER 输入的默认档=自主进攻游动）。
+	# 方向=16号铁事实（a 内场在左→a 攻 +x）；守型/未操控外型不游（拦截待机）。叠加操控UI窗口视觉 WIP 之上。
+	if state == "active" and not is_on_wall():
+		var kind := str(_tdef.get("kind", ""))
+		var ctrl := str(_tdef.get("controllable", ""))
+		if kind == "shark" and ctrl != "auto":
+			var team := str(owner_ref.team) if owner_ref != null and is_instance_valid(owner_ref) else "a"
+			var atk_dir: float = 1.0 if team == "a" else -1.0
+			var spd: float = float(_tdef.get("move_speed", 120.0))
+			velocity = Vector2(atk_dir * spd, 0.0)
+			move_and_slide()
 	# 寿命递减（固定步长确定性；耗尽→注销）
 	lifespan_left -= delta
 	if lifespan_left <= 0.0:
@@ -73,11 +87,17 @@ func enter_burrow() -> void:
 	if _tdef.get("burrow", null) == null:
 		return   # 类型不支持潜地（fail-closed：防御鲨）
 	state = "burrowed"
+	if _visual != null:
+		_visual.modulate.a = 0.5
+	_emit_state_changed("burrowed")
 
 
 func exit_burrow() -> void:
 	if state == "burrowed":
 		state = "active"
+	if _visual != null:
+		_visual.modulate.a = 1.0
+	_emit_state_changed("active")
 
 
 func consume() -> void:
@@ -88,10 +108,52 @@ func _consume(reason: String) -> void:
 	if state == "consumed":
 		return
 	state = "consumed"
+	_emit_state_changed("consumed", reason)
 	if _mgr != null and is_instance_valid(_mgr):
 		_mgr.despawn(self, reason)
 	else:
 		queue_free()
+
+
+## ===== 2D 兜底视觉（27排查 2026-10-04：实体原为纯逻辑 Node2D，2D 视图轨下完全隐形；
+## 双轨裁定=3D主/2D兜底——简约圆形/胶囊+类型色环，零判定）=====
+func _ready() -> void:
+	_build_2d_visual()
+	# 已在树内时补一次（setup 晚于 _ready 的装配序）
+	if _tdef.size() > 0 and _visual == null:
+		_build_2d_visual()
+
+func _build_2d_visual() -> void:
+	if _visual != null:
+		return
+	_visual = Node2D.new()
+	_visual.name = "Visual2D"
+	_visual.z_index = 50
+	add_child(_visual)
+	_visual.draw.connect(_draw_visual)
+	_visual.queue_redraw()
+
+func _draw_visual() -> void:
+	var kind := str(_tdef.get("kind", ""))
+	var stype := str(_tdef.get("id", summon_type))
+	if kind == "magic_ball":
+		var ring := Color(0.9, 0.2, 0.15, 0.95) if stype.contains("_att") else Color(0.2, 0.45, 0.95, 0.95)
+		_visual.draw_circle(Vector2.ZERO, 14.0, Color(0.96, 0.96, 0.98, 0.95))
+		_visual.draw_arc(Vector2.ZERO, 17.0, 0.0, TAU, 24, ring, 3.0)
+	else:
+		var body := Color(1.0, 0.55, 0.1, 0.95) if stype.contains("bomb") else Color(0.55, 0.3, 0.9, 0.92)
+		# 鲨鱼=胶囊俯视（长椭圆）
+		_visual.draw_circle(Vector2.ZERO, 15.0, body)
+		_visual.draw_rect(Rect2(-30, -8, 60, 16), body)
+		_visual.draw_circle(Vector2(24, 0), 8.0, body)
+
+var _visual: Node2D = null
+
+## 27-J4：状态流转事件（遁地进出/消耗；订阅端=显示层/战术层，零轮询）
+func _emit_state_changed(new_state: String, reason: String = "state") -> void:
+	var bus: Node = _bus()
+	if bus:
+		bus.emit_event(bus.GameEvent.SUMMON_STATE_CHANGED, {"node": self, "state": new_state, "reason": reason})
 
 
 ## ===== 生成/消亡钩子（子类覆写点；骨架阶段=类型表事件广播）=====

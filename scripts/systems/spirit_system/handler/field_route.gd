@@ -1,6 +1,10 @@
 extends "res://scripts/systems/spirit_system/handler/player_route.gd"
 ## handler/field_route.gd —— FIELD 路线：障碍/区域/迷雾/落点桥（13 拆分步骤4）
 
+# D14（2026-10-04 主人裁定）：AI 快道=从施法者朝对方内场锚铺开固定 600 长道（知识库锚点=唯一权威）
+const _FieldZoneKnowledge: GDScript = preload("res://scripts/battle/field_zone.gd")
+const AI_PATH_LENGTH: float = 600.0
+
 ## ==================== 对场地效果 (预留) ====================
 
 ## Q12（11号工单"AI放置数据链补齐"，主人批 2026-09-27）：AI 直生分支。
@@ -231,7 +235,19 @@ func _apply_field_zone_effect(params: Dictionary, zone_type: int) -> void:
 	var ai_pos: Variant = target_data.get("field_position", null)
 	if ai_pos is Vector2:
 		if zone_type == 6 and zone_params.has("owner_node"):
-			zone_params["path_to"] = ai_pos  # F4：AI 快道终点=放置语义落点，起点=施法者（23a §三）
+			# D14：AI 快道=从施法者朝对方内场锚铺开固定 600 长道（落点评分点只定方向语义已废——
+			# 主人裁定原作=跨越半场的长矩形；锚点 fail-closed 回正右方）
+			var base_pos: Vector2 = zone_params["path_from"] if zone_params.has("path_from") else Vector2.ZERO
+			# 1001 方向修复（主人实测"快道老是背对"）：knowledge_enemy_side_anchor 返回的是
+			# 敌队外场锚=交叉布局下己方后方（SIDE_ANCHOR_B=(-300,0) 对 a 队即己方方向）——语义反。
+			# 改用 16号主人裁定铁事实：a 队内场在左(x≤0) → a 队进攻方向=+x，b 队=-x。
+			# TODO：知识库补 enemy_inner_center 权威口后替换此硬推导。
+			var atk_dir: Vector2 = Vector2.RIGHT if str(zone_params.get("owner_team", "a")) == "a" else Vector2.LEFT
+			var dirv: Vector2 = atk_dir
+			if dirv.length() < 1.0:
+				dirv = Vector2.RIGHT
+			zone_params["path_from"] = base_pos
+			zone_params["path_to"] = base_pos + dirv.normalized() * AI_PATH_LENGTH
 		manager.create_zone(zone_params, ai_pos)
 		var type_names_ai: Array = ["加速区", "减速区", "危险区", "安全区", "治疗区", "视野迷雾", "能量快道"]
 		print("[TagEffectHandler] AI直生区域: %s pos=%s size=%.0f×%.0f dur=%.1fs" % [
