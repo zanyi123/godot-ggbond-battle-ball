@@ -16,6 +16,15 @@ var _params: Dictionary = {}
 
 const BURROW_TICK_INTERVAL := 60    # 潜地耗能结算间隔（帧；1s@60fps，固定步长确定性）
 
+## ===== 玩家操控链（1001 主人实测补全：选中→索敌→飞行→结算→消失）=====
+## 攻球：选中→左键点目标→锁定最近敌人飞行→爆炸（范围伤害）→消失；
+## 守球：选中→左键点目标→飞向最近队友→道具交付→消失。右键=取消选中。
+var selected: bool = false
+var _order: Dictionary = {}
+var _flying: bool = false
+var _ticks: int = 0
+const FLY_SPEED := 420.0
+
 
 func setup(type_def: Dictionary, owner: int, params: Dictionary) -> void:
 	_tdef = type_def
@@ -44,8 +53,130 @@ func _build_hitbox(spec: String) -> void:
 	add_child(cs)
 
 
+## 玩家操控输入（_unhandled_input=不吃移动/瞄准的既有输入；仅主人操控角色的白球响应）
+func _unhandled_input(event: InputEvent) -> void:
+	var owner_node = owner_ref
+	if owner_node == null or not is_instance_valid(owner_node) or not owner_node.is_player_controlled:
+		return
+	if str(_tdef.get("kind", "")) != "magic_ball":
+		return
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			var mp := get_global_mouse_position()
+			if not selected:
+				if global_position.distance_to(mp) <= 48.0:
+					selected = true
+					if _mgr != null and _mgr.has_method("mark_selected"):
+						_mgr.mark_selected(self)
+					print("[Summon] 🎯 白球已选中（左键点目标出击 / 右键取消）")
+					get_viewport().set_input_as_handled()
+				return
+			issue_order_at(mp)
+			get_viewport().set_input_as_handled()
+		elif event.button_index == MOUSE_BUTTON_RIGHT and selected:
+			deselect()
+			print("[Summon] 已取消选中")
+			get_viewport().set_input_as_handled()
+
+
+func deselect() -> void:
+	selected = false
+	if _mgr != null and _mgr.has_method("mark_selected"):
+		_mgr.mark_selected(null)
+
+
+func issue_order_at(click_world: Vector2) -> void:
+	var mode := str(_tdef.get("on_ball", {}).get("mode", ""))
+	if mode == "carry_with_ball":
+		var enemy := _nearest_char_near(click_world, 150.0, true)
+		_order = {"mode": "explode", "target": enemy.global_position if enemy != null else click_world}
+	else:
+		var ally := _nearest_char_near(click_world, 240.0, false)
+		_order = {"mode": "grant", "target": ally.global_position if ally != null else click_world, "ally": ally}
+	_flying = true
+	selected = false
+	if _mgr != null and _mgr.has_method("mark_selected"):
+		_mgr.mark_selected(null)
+	print("[Summon] 🎯 出击: %s → %s" % [str(_tdef.get("on_ball", {}).get("mode", "")), str(_order.get("target", ""))])
+
+
+func _nearest_char_near(pos: Vector2, radius: float, want_enemy: bool) -> Node:
+	var bm: Node = _mgr.get_parent() if _mgr != null and _mgr.get_parent() != null else null
+	if bm == null or bm.get("team_a_players") == null:
+		return null
+	var my_team := str(owner_ref.team) if owner_ref != null and is_instance_valid(owner_ref) else "a"
+	var best: Node = null
+	var best_d: float = radius
+	for p in (bm.team_a_players + bm.team_b_players):
+		if p == null or not is_instance_valid(p) or p.is_defeated:
+			continue
+		if (str(p.team) != my_team) != want_enemy:
+			continue
+		var d: float = float(p.global_position.distance_to(pos))
+		if d <= best_d:
+			best_d = d
+			best = p
+	return best
+
+
+func _arrive() -> void:
+	match str(_order.get("mode", "")):
+		"explode":
+			_explode_now()
+		"grant":
+			_grant_now()
+		_:
+			_consume("used")
+
+
+func _explode_now() -> void:
+	var dmg: float = float(_tdef.get("on_ball", {}).get("damage", 30.0))
+	var emp = _params.get("empower", {})
+	if emp is Dictionary:
+		dmg *= float(emp.get("damage_mult", 1.0))
+	var bm: Node = _mgr.get_parent() if _mgr != null and _mgr.get_parent() != null else null
+	var my_team := "a"
+	var attacker: Node = owner_ref if owner_ref != null and is_instance_valid(owner_ref) else null
+	if attacker != null:
+		my_team = str(attacker.team)
+	var hits := 0
+	if bm != null and bm.get("team_a_players") != null:
+		for p in (bm.team_a_players + bm.team_b_players):
+			if p == null or not is_instance_valid(p) or p.is_defeated:
+				continue
+			if str(p.team) == my_team:
+				continue
+			if float(p.global_position.distance_to(global_position)) <= 90.0:
+				p.take_damage(dmg, attacker, str(_params.get("element", "")))
+				hits += 1
+	print("[Summon] 💥 白球爆炸: 伤害%0.f 命中%d" % [dmg, hits])
+	_consume("exploded")
+
+
+func _grant_now() -> void:
+	var ally = _order.get("ally", null)
+	var pool = _tdef.get("on_ball", {}).get("item_pool", [])
+	if ally != null and is_instance_valid(ally) and pool is Array and not (pool as Array).is_empty():
+		var granter: Node = get_tree().get_first_node_in_group("battle_item_granters")
+		var item_id: String = str((pool as Array)[_ticks % (pool as Array).size()])
+		if granter != null and granter.has_method("grant_battle_item"):
+			granter.grant_battle_item(ally, item_id)
+			print("[Summon] 🎁 道具交付: %s ← %s" % [str(ally.char_data.get("name", "?")), item_id])
+	_consume("delivered")
+
+
 func _physics_process(delta: float) -> void:
 	if state == "consumed":
+		return
+	_ticks += 1
+	# 玩家操控飞行（1001 主人令"球的飞行过程要出来"）：直奔指令点，到达即结算并消失
+	if _flying:
+		var to: Vector2 = (_order.get("target", global_position) as Vector2) - global_position
+		if to.length() <= 36.0:
+			_arrive()
+			return
+		velocity = to.normalized() * FLY_SPEED
+		move_and_slide()
 		return
 	# 1001 自主行为（主人实测"鲨鱼一直不动"）：攻击型召唤物无操控输入时向敌半场游动
 	# （原作=可融球进攻或单独操控进攻；AI 无 STEER 输入的默认档=自主进攻游动）。

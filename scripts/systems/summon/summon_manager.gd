@@ -72,6 +72,7 @@ func despawn(node: Node, reason: String = "lifespan") -> void:
 	if node == null or not is_instance_valid(node):
 		return
 	_live.erase(node)
+	print("[SummonManager] 注销: type=%s reason=%s" % [str(node.get("summon_type")), reason])
 	var bus = _bus()
 	if bus:
 		bus.emit_event(bus.GameEvent.SUMMON_DESPAWNED, {"type_id": str(node.get("summon_type")), "owner_id": int(node.get("owner_id")), "node": node, "reason": reason})
@@ -138,7 +139,27 @@ func _physics_process(delta: float) -> void:
 			var owner_node = _find_node_by_instance_id(owner_id)
 			if owner_node == null:
 				continue
-			spawn(str(a["type_id"]), owner_id, owner_node.global_position, (a["params"] as Dictionary).duplicate())
+			# 1001 主人令：自动生成的白球生成在敌方外场带（原作=外场上空生成；此前在施法者身边=与描述不符）
+			var spawn_team := _team_of(owner_id)
+			var spawn_x: float = 560.0 if spawn_team == "a" else -560.0
+			var base_pos: Vector2 = Vector2(spawn_x, -120.0 + 120.0 * float(_frame_acc % 3))  # 确定性轮转散布（禁随机流）
+			spawn(str(a["type_id"]), owner_id, base_pos, (a["params"] as Dictionary).duplicate())
+	# 1001 主人令：主攻+防御水鲨共存即自动融合为大鲨鱼（原作组合鲨鱼炸弹体系；同队跨球员，
+	# 无需快道前置——快道内融合为增强语义保留；randi 仅散布用不影响判定）
+	var att_shark: Node = null
+	var def_shark: Node = null
+	var att_owner: int = -1
+	for e in _live:
+		if e == null or not is_instance_valid(e) or str(e.get("state", "")) != "active":
+			continue
+		var ty := str(e.get("summon_type", ""))
+		if ty == "shuimu_shark_att" and att_shark == null:
+			att_shark = e
+			att_owner = int(e.get("owner_id", -1))
+		elif ty == "shuimu_shark_def" and def_shark == null and _team_of(int(e.get("owner_id", -2))) == _team_of(att_owner if att_owner >= 0 else -99):
+			def_shark = e
+	if att_shark != null and def_shark != null:
+		try_merge(att_shark, def_shark, "shuimu_shark_bomb")
 
 
 ## ===== 融合判定（组合鲨鱼炸弹：两条同族鲨鱼+双方处于能量路径=F4 查询口）=====
