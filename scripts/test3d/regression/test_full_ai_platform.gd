@@ -82,16 +82,19 @@ func _run() -> void:
 
 	# ===== T组：test_spirits（原作球员的元灵）注册与解析优先序 =====
 	# 工单12（操球窗口）按本平台工作流追加 4 个原作元灵（墨麟/狐赖/狐宇/泰格）→ 出厂 6→10（数据演进，d18fee1 先例）
-	_assert("T1: 出厂 test_spirits 全部注册（11个，工单19操控测试元灵追加）", registered.size() == 11)
+	# 1001 对账式断言（主装载随测试轮次演进，断言不绑死具体元灵名/数量）
+	var cfg_ts: Array = config.get("test_spirits", [])
+	_assert("T1: 出厂 test_spirits 全部注册（数量与配置一致=%d）" % cfg_ts.size(), registered.size() == cfg_ts.size())
 	var names_ok := true
 	for ts2 in registered:
 		if not str(ts2.get("name", "")).ends_with("的元灵"):
 			names_ok = false
-	_assert("T2: 命名规约=原作球员名+的元灵", names_ok)
-	var hit_test: Dictionary = LoadoutLoader.resolve_spirit_from(combined, "猪猪侠的元灵")
-	_assert("T3: 原作元灵按名字解析", str(hit_test.get("id", "")) == "test_spirit_zhuxiaxia")
-	var hit_prio: Dictionary = LoadoutLoader.resolve_spirit_from(combined, "金刚")
-	_assert("T4: 同元素命中 test_spirits 优先于主数据", str(hit_prio.get("id", "")) == "test_spirit_zhuxiaxia")
+	_assert("T2: 命名规约=xx的元灵", names_ok)
+	var first_name := str(registered[0].get("name", "")) if registered.size() > 0 else ""
+	var hit_test: Dictionary = LoadoutLoader.resolve_spirit_from(combined, first_name)
+	_assert("T3: 首个测试元灵按名字解析", str(hit_test.get("id", "")) == str(registered[0].get("id", "")) and not hit_test.is_empty())
+	var hit_prio: Dictionary = LoadoutLoader.resolve_spirit_from(combined, str(registered[0].get("element", "?")))
+	_assert("T4: 同元素命中 test_spirits 优先于主数据", str(hit_prio.get("id", "")) == str(registered[0].get("id", "")))
 	var bad_ts := {"test_spirits": [{"id": "t_x", "name": "坏元灵", "skills": ["skill_不存在_y"]}, {"id": "", "name": ""}], "loadouts": []}
 	_assert("T5: 非法测试元灵跳过（技能缺失/缺id）", LoadoutLoader.register_test_spirits(bad_ts).is_empty())
 
