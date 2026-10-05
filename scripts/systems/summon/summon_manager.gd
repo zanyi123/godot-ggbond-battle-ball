@@ -166,8 +166,21 @@ func _physics_process(delta: float) -> void:
 			att_owner = oid
 		elif ty == "shuimu_shark_def" and def_shark == null and _team_of(oid) == _team_of(att_owner if att_owner >= 0 else -99):
 			def_shark = e
+	# 1001 主人裁定：双鲨共存即自动融合（不要求快道；快道内融合为增强语义留 11 二期）
+	# 不走 try_merge（其内含快道 is_in_energy_path 检查会拦）——直接合：双消+中点生成大鲨鱼+SUMMON_MERGED
 	if att_shark != null and def_shark != null:
-		try_merge(att_shark, def_shark, "shuimu_shark_bomb")
+		var def_owner: int = int(def_shark.get("owner_id"))
+		if _team_of(att_owner) == _team_of(def_owner) and att_owner != def_owner:
+			var mid: Vector2 = (att_shark.global_position + def_shark.global_position) * 0.5
+			var members: Array = [att_shark.get_instance_id(), def_shark.get_instance_id()]
+			despawn(att_shark, "merged")
+			despawn(def_shark, "merged")
+			var bomb: Node = spawn("shuimu_shark_bomb", att_owner, mid, {"members": members})
+			if bomb != null:
+				var bus = _bus()
+				if bus:
+					bus.emit_event(bus.GameEvent.SUMMON_MERGED, {"result_type": "shuimu_shark_bomb", "members": members, "params": {}})
+				print("[Summon] 🦈→🦈💎 双鲨自动融合: 组合鲨鱼炸弹（跨球员同队）")
 
 
 ## ===== 融合判定（组合鲨鱼炸弹：两条同族鲨鱼+双方处于能量路径=F4 查询口）=====
