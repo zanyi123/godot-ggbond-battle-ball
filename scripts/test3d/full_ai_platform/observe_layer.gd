@@ -134,6 +134,15 @@ func _build_ui() -> void:
 	_decision_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(_decision_label)
 
+	# --- Tab 切换范围开关（1001 主人令：默认队内轮转；开=全队 6 人遍历）---
+	var sw_row := HBoxContainer.new()
+	vbox.add_child(sw_row)
+	var cross_box := CheckBox.new()
+	cross_box.text = "Tab 跨队遍历切换（默认关=仅驾驶队内轮转）"
+	cross_box.add_theme_font_size_override("font_size", 12)
+	cross_box.toggled.connect(_on_cross_team_toggled)
+	sw_row.add_child(cross_box)
+
 	# --- 队内通讯日志 ---
 	vbox.add_child(HSeparator.new())
 	var comm_title := Label.new()
@@ -311,6 +320,13 @@ func _on_comm_message(sender: CharacterBody2D, msg_type: int, team: String) -> v
 	if sender and is_instance_valid(sender):
 		who = str(sender.char_data.get("name", sender.name))
 	_append_comm("[%s] %s: %s" % [team.to_upper(), who, text])
+
+
+func _on_cross_team_toggled(on: bool) -> void:
+	var platform = get_parent()
+	if platform != null and platform.has_method("set_cross_team_switch"):
+		platform.set_cross_team_switch(on)
+		_append_comm("[观测] Tab 切换范围 = %s" % ("全队 6 人遍历" if on else "驾驶队内 3 人"))
 
 
 func _append_comm(line: String) -> void:

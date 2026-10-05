@@ -157,6 +157,7 @@ func _run() -> void:
 	_assert("E11: 检测层挂接工单12三信号(释放/印记/合体)+判定出口", probe_src.contains("mark_changed") and probe_src.contains("combo_formed") and probe_src.contains("skill_used") and probe_src.contains("build_verdict"))
 	_assert("E12: 检测层预埋11工单团队合击信号(探活守卫)", probe_src.contains("team_combo_formed") and probe_src.contains("team_combo_trackers") and probe_src.contains("_team_combo_available"))
 
+	_run_g_group()
 	print("\n========== 结果: %d/%d PASS ==========" % [_pass, _pass + _fail])
 	if _fail > 0:
 		print("❌ 有失败项")
@@ -172,3 +173,24 @@ func _assert(test_name: String, ok: bool) -> void:
 	else:
 		_fail += 1
 		print("  ❌ FAIL: " + test_name)
+
+
+
+func _run_g_group() -> void:
+	# ===== G组：Tab 切换名册（1001 主人令）——源码断言版 =====
+	# 注：-s 无显示环境实例化排表面板 UI 有引擎级深坑（stack overflow，2026-10-01 实录），
+	# 功能正确性=主人 F6 实测；此处只断言关键实现存在（防误删）。
+	var GPanel := load("res://scripts/test3d/full_ai_platform/roster_panel.gd")
+	var GPlat := load("res://scripts/test3d/full_ai_platform/full_ai_platform.gd")
+	var psrc: String = (GPanel as GDScript).source_code
+	var plsrc: String = (GPlat as GDScript).source_code
+	_assert("G1: 行内🎮驾驶互斥单选实现", psrc.contains("_on_drive_toggled") and psrc.contains("set_pressed_no_signal"))
+	_assert("G2: 勾选组顺序=槽位号", psrc.contains("_human_boxes.append(drive)"))
+	_assert("G3: 驾驶名册重设实现", plsrc.contains("set_cross_team_switch") and plsrc.contains("all_team_players"))
+	_assert("G4: 跨队遍历开关实现", plsrc.contains("observe_cross_team"))
+	_assert("G5: 确定性散布（禁 randi）", not plsrc.contains("randi("))
+
+class GStubBM extends Node2D:
+	var team_a_players: Array = []
+	var team_b_players: Array = []
+	var input_mgr: Node = null

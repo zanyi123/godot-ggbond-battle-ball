@@ -103,6 +103,35 @@ func _begin_match() -> void:
 		else:
 			battle_manager.input_mgr.set_controlled_player(null)
 			print("[Platform] 已清空玩家控制位，双队全 AI")
+	# 1001 主人令（平台专属）：驾驶模式下 Tab 切换名册=驾驶队内 3 人（默认），
+	# 观测层"跨队遍历"开关开=6 人全队顺序轮转（切不回来的旧问题随名册循环消失）。
+	# 零侵入 input_manager——只重设"可切换球员名册"（其本义=玩家可切换名单）。
+	if human_slot >= 0 and battle_manager.input_mgr != null:
+		set_cross_team_switch(observe_cross_team)
+		print("[Platform] Tab 切换名册 = %s（观测层可开跨队遍历）" % [
+			"驾驶队内 3 人" if not observe_cross_team else "全队 6 人"])
+
+
+var observe_cross_team: bool = false  # 观测层"跨队遍历切换"开关（默认关=队内轮转）
+
+## 跨队遍历开关：重设 input_manager 的可切换球员名册
+func set_cross_team_switch(on: bool) -> void:
+	observe_cross_team = on
+	if battle_manager == null or battle_manager.input_mgr == null:
+		return
+	var arr: Array[CharacterBody2D] = []
+	# ⚠ 8a1e117 备案引擎怪癖：assign 无类型数组→强类型属性在 -s 模式死循环——用显式循环
+	var src: Array = []
+	if on:
+		src = battle_manager.team_a_players + battle_manager.team_b_players
+	elif human_slot >= 0:
+		src = battle_manager.team_a_players if human_slot < 3 else battle_manager.team_b_players
+	else:
+		src = battle_manager.team_a_players
+	for pl in src:
+		if pl != null and is_instance_valid(pl) and pl is CharacterBody2D:
+			arr.append(pl)
+	battle_manager.input_mgr.all_team_players = arr
 	# === 22-C S1 轨迹采集（主人操控模式自动启用；终场 finalize 由探针同批退出路径触发）===
 	if human_slot >= 0 and battle_manager.input_mgr != null and battle_manager.input_mgr.controlled_player != null:
 		trace_recorder = TraceRecorderScript.new()
