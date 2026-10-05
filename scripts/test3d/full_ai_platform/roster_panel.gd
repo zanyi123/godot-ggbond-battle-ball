@@ -92,9 +92,9 @@ func _build_ui() -> void:
 	human_row.add_theme_constant_override("separation", 8)
 	vbox.add_child(human_row)
 	var human_box := CheckBox.new()
-	human_box.text = "【22-C 学打法专用，平时不勾】主人亲自驾驶 A0（其余全 AI+轨迹采集）"
-	human_box.add_theme_font_size_override("font_size", 11)
-	human_box.modulate = Color(1, 1, 1, 0.65)
+	human_box.text = "🖱 勾选=主人亲自驾驶 A0（猪猪侠，其余全 AI+自动采集轨迹）【22-C 学打法专用，平时测试不勾】"
+	human_box.add_theme_font_size_override("font_size", 12)
+	human_box.modulate = Color(1, 0.9, 0.55)
 	human_box.toggled.connect(func(on: bool) -> void: human_slot_choice = 0 if on else -1)
 	human_row.add_child(human_box)
 
