@@ -149,6 +149,8 @@ func _run() -> void:
 	_assert("E8: 排表确认面板脚本可加载且基类型 CanvasLayer", roster_script != null and roster_script.get_instance_base_type() == "CanvasLayer")
 	var roster_src: String = roster_script.source_code
 	_assert("E9: 排表面板含确认信号+右键技能查看器", roster_src.contains("signal confirmed") and roster_src.contains("_show_skill_viewer"))
+	# 1001 教训：CheckBox 连 pressed（无参）配 2 参回调=运行时参数不匹配勾选失效——驾驶勾选必须连 toggled（带 bool）
+	_assert("E9b: 🎮驾驶勾选连 toggled 信号（防参数不匹配复发）", roster_src.contains("drive.toggled.connect") and not roster_src.contains("drive.pressed.connect"))
 	var probe_script: GDScript = load("res://scripts/test3d/full_ai_platform/platform_probe.gd")
 	_assert("E10: 检测层脚本可加载且基类型 Node", probe_script != null and probe_script.get_instance_base_type() == "Node")
 	var probe_src: String = probe_script.source_code
