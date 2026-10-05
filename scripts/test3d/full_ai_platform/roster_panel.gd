@@ -137,7 +137,7 @@ func _make_row(slot: String) -> PanelContainer:
 	drive.text = "🎮驾驶"
 	drive.add_theme_font_size_override("font_size", 12)
 	drive.tooltip_text = "勾选=开赛后由您亲自操控该球员（其余全 AI+自动采集轨迹）"
-	drive.pressed.connect(_on_drive_toggled.bind(drive))
+	drive.toggled.connect(_on_drive_toggled.bind(drive))  # toggled 带 bool 参数（pressed 无参会致回调参数不匹配=勾选失效，1001 主人实测）
 	hbox.add_child(drive)
 	_human_boxes.append(drive)
 
