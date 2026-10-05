@@ -44,7 +44,7 @@ func _ready() -> void:
 	set_deferred("size", Vector2(1440, 900))
 
 	_create_score_panel()
-	_create_enemy_stamina_panel()
+	# 1001：旧简版敌方红条面板由顶部完整球员面板（含体力条）替代，避免重复显示
 	_create_player_panels()
 	_create_quick_message_bar()
 
@@ -72,6 +72,7 @@ func setup_players(team: Array[CharacterBody2D], enemies: Array[CharacterBody2D]
 	"""由 battle_manager 调用，绑定球员引用"""
 	team_players = team
 	enemy_players = enemies
+	_ensure_enemy_markers()
 
 	# 快捷技能栏管理：订阅名册变化（动态技能挂/摘→事件驱动刷新）
 	if spirit_trigger != null and spirit_trigger.has_signal("player_skills_changed"):
@@ -94,20 +95,63 @@ func setup_players(team: Array[CharacterBody2D], enemies: Array[CharacterBody2D]
 			if not bar.visible:
 				bar.visible = true
 
-	# 更新对方名称
+	# 顶部敌方面板（1001：与下方同款技能栏状态；面板 3-5）
 	for i in range(min(3, enemies.size())):
 		if enemies[i] and enemies[i].char_data.has("name"):
-			enemy_name_labels[i].text = enemies[i].char_data["name"]
+			player_name_labels[3 + i].text = enemies[i].char_data["name"]
+		_update_player_skill_icons(3 + i)
+		if 3 + i < _status_icon_bars.size():
+			var ebar: Control = _status_icon_bars[3 + i]
+			ebar.position = Vector2(panel_width_target() - 8 * 27.0 - 6.0, 4.0)
+			ebar.bind_player(enemies[i])
+			var om_node2 = get_parent().get_node_or_null("ObstacleManager") if get_parent() else null
+			if om_node2 != null:
+				ebar.connect_shield_source(om_node2)
+			if not ebar.visible:
+				ebar.visible = true
 
 	# 创建技能提示弹窗（延迟一帧，确保已进入场景树）
 	call_deferred("_create_skill_toast")
+
+
+## 23号工单：敌方作用对象头顶状态标记（2D 兜底轨；3D 主轨在 bridge）
+## 挂宿主球员子节点（照 avatar 先例，零跟随代码）；分流开关 EnemyStatusMarker.show_mode
+func _ensure_enemy_markers() -> void:
+	var MarkerScript: GDScript = load("res://scripts/battle/enemy_status_marker.gd")
+	if MarkerScript == null:
+		return
+	var controlled: Node = null
+	var bm = get_parent()
+	if bm != null and bm.get("input_mgr") != null and bm.input_mgr.get("controlled_player") != null:
+		controlled = bm.input_mgr.controlled_player
+	var all_players: Array = []
+	all_players.append_array(team_players)
+	all_players.append_array(enemy_players)
+	for p in all_players:
+		if p == null or not is_instance_valid(p):
+			continue
+		if not MarkerScript.should_mark(p, controlled):
+			continue
+		if p.get_node_or_null("EnemyStatusMarker") != null:
+			continue  # 幂等（setup_players 重入/换人安全）
+		var marker: Control = MarkerScript.new()
+		marker.name = "EnemyStatusMarker"
+		marker.position = MarkerScript.HEAD_OFFSET
+		p.add_child(marker)
+		marker.bind_enemy(p)
 
 
 ## 根据球员装备的元灵技能，填充技能栏图标（图片/色块+首字）
 func _update_player_skill_icons(player_index: int) -> void:
 	if player_index >= player_skill_boxes.size():
 		return
-	var player: CharacterBody2D = team_players[player_index] if player_index < team_players.size() else null
+	# 1001：索引 0-2=我方 / 3-5=敌方（顶部面板）
+	var player: CharacterBody2D = null
+	if player_index < 3:
+		player = team_players[player_index] if player_index < team_players.size() else null
+	else:
+		var ei := player_index - 3
+		player = enemy_players[ei] if ei < enemy_players.size() else null
 	if not player:
 		return
 	# 快捷技能栏管理（2026-09-25 主人裁定：3 格=一局主动技能上限，无动态格）——
@@ -229,13 +273,40 @@ func _update_bars() -> void:
 				var bonus_val: float = float(bonuses.get(stat_keys[s], 0))
 				boxes[s].visible = bonus_val > 0.0
 
-	# 顶部：对方体力
+	# 顶部敌方面板（1001：与下方同款全字段刷新；面板 3-5）
 	for i in range(min(3, enemy_players.size())):
 		var p: CharacterBody2D = enemy_players[i]
 		if not p or not is_instance_valid(p):
 			continue
-		enemy_stamina_bars[i].max_value = p.max_stamina
-		enemy_stamina_bars[i].value = p.stamina
+		var pi := 3 + i
+		player_stamina_bars[pi].max_value = p.max_stamina
+		player_stamina_bars[pi].value = p.stamina
+		player_energy_bars[pi].max_value = p.max_spirit_energy
+		player_energy_bars[pi].value = p.spirit_energy
+		if pi < player_endurance_bars.size():
+			var endu_val2 = p.get("endurance")
+			var endu_max2 = p.get("max_endurance")
+			if endu_val2 != null and endu_max2 != null:
+				player_endurance_bars[pi].max_value = endu_max2
+				player_endurance_bars[pi].value = endu_val2
+		if pi < player_skill_cd_overlays.size():
+			var eskills: Array[String] = p.get_equipped_skills()
+			var eoverlays: Array = player_skill_cd_overlays[pi]
+			for slot in range(3):
+				if slot >= eoverlays.size():
+					continue
+				if slot < eskills.size():
+					eoverlays[slot].value = p.get_skill_cooldown_ratio(eskills[slot])
+				else:
+					eoverlays[slot].value = 0.0
+		if pi < player_bonus_colors.size():
+			var ebonuses: Dictionary = _get_total_bonuses(p.character_id)
+			var estat_keys: Array = ["stamina_bonus", "defense_bonus", "speed_bonus", "attack_bonus", "resilience_bonus", "ball_speed_bonus"]
+			var eboxes: Array = player_bonus_colors[pi]
+			for s2i in range(6):
+				if s2i >= eboxes.size():
+					continue
+				eboxes[s2i].visible = float(ebonuses.get(estat_keys[s2i], 0)) > 0.0
 
 
 ## 获取某球员的总增益（装备+食物，不含训练，因为训练是永久的）
@@ -353,15 +424,16 @@ func _create_enemy_stamina_panel() -> void:
 # ============================================================
 
 func _create_player_panels() -> void:
-	"""底部三个球员面板"""
+	"""底部三个我方面板 + 顶部三个敌方面板（1001 主人令：两队都有同款技能栏状态面板）"""
 	var panel_width: float = 380.0
 	var panel_height: float = 90.0
 	var start_x: float = (1440.0 - panel_width * 3 - 20) / 2.0
 	var start_y: float = 900.0 - panel_height - 12.0
 
 	var icon_bars: Array = []
+	# 我方 3（底部，蓝头像）
 	for i in range(3):
-		var panel := _create_single_panel(i, Vector2(start_x + i * (panel_width + 10), start_y), panel_width, panel_height)
+		var panel := _create_single_panel(i, Vector2(start_x + i * (panel_width + 10), start_y), panel_width, panel_height, Color.BLUE)
 		player_panels.append(panel)
 		add_child(panel)
 		# 13-A：状态图标条实例（位置在 setup_players 绑定球员时定）
@@ -370,6 +442,15 @@ func _create_player_panels() -> void:
 		bar.position = Vector2(panel_width - 8 * 27.0 - 6.0, 4.0)
 		panel.add_child(bar)
 		icon_bars.append(bar)
+	# 敌方 3（顶部，红头像；1001：与下方同款技能栏状态，替换旧简版红条面板）
+	for i in range(3):
+		var epanel := _create_single_panel(3 + i, Vector2(start_x + i * (panel_width + 10), 64.0), panel_width, panel_height, Color(0.85, 0.25, 0.25))
+		player_panels.append(epanel)
+		add_child(epanel)
+		var ebar: Control = (load("res://scripts/battle/status_icon_bar.gd") as GDScript).new()
+		ebar.position = Vector2(panel_width - 8 * 27.0 - 6.0, 4.0)
+		epanel.add_child(ebar)
+		icon_bars.append(ebar)
 	_status_icon_bars = icon_bars
 
 
@@ -377,8 +458,8 @@ func panel_width_target() -> float:
 	return 380.0
 
 
-func _create_single_panel(index: int, pos: Vector2, width: float, height: float) -> Panel:
-	"""创建单个球员面板"""
+func _create_single_panel(index: int, pos: Vector2, width: float, height: float, avatar_color: Color = Color.BLUE) -> Panel:
+	"""创建单个球员面板（1001：avatar_color 参数化——我方蓝/敌方红）"""
 	var panel := Panel.new()
 	panel.position = pos
 	panel.size = Vector2(width, height)
@@ -393,7 +474,7 @@ func _create_single_panel(index: int, pos: Vector2, width: float, height: float)
 	var avatar_box := ColorRect.new()
 	avatar_box.size = Vector2(50, 50)
 	avatar_box.position = Vector2(10, 15)
-	avatar_box.color = Color.BLUE
+	avatar_box.color = avatar_color
 	panel.add_child(avatar_box)
 
 	# 编号
