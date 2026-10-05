@@ -150,13 +150,21 @@ func _physics_process(delta: float) -> void:
 	var def_shark: Node = null
 	var att_owner: int = -1
 	for e in _live:
-		if e == null or not is_instance_valid(e) or str(e.get("state", "")) != "active":
+		if e == null or not is_instance_valid(e):
 			continue
-		var ty := str(e.get("summon_type", ""))
+		var st_v = e.get("state")     # Object.get 仅 1 参（4.6 静态/运行时同规）
+		var ty_v = e.get("summon_type")
+		var oid_v = e.get("owner_id")
+		if st_v == null or ty_v == null or oid_v == null:
+			continue
+		if str(st_v) != "active":
+			continue
+		var ty := str(ty_v)
+		var oid := int(oid_v)
 		if ty == "shuimu_shark_att" and att_shark == null:
 			att_shark = e
-			att_owner = int(e.get("owner_id", -1))
-		elif ty == "shuimu_shark_def" and def_shark == null and _team_of(int(e.get("owner_id", -2))) == _team_of(att_owner if att_owner >= 0 else -99):
+			att_owner = oid
+		elif ty == "shuimu_shark_def" and def_shark == null and _team_of(oid) == _team_of(att_owner if att_owner >= 0 else -99):
 			def_shark = e
 	if att_shark != null and def_shark != null:
 		try_merge(att_shark, def_shark, "shuimu_shark_bomb")
