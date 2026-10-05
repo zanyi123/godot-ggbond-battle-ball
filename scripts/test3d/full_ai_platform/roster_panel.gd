@@ -7,7 +7,8 @@ extends CanvasLayer
 signal confirmed
 
 var bm: Node2D = null
-var human_slot_choice: int = -1   # 主人操控模式勾选（-1=全AI；0=A0猪猪侠亲自驾驶+轨迹采集）
+var human_slot_choice: int = -1   # 主人操控模式（-1=全AI；0-5=对应槽位由主人驾驶+轨迹采集）
+var _human_boxes: Array[CheckBox] = []  # 行内🎮驾驶勾选组（互斥单选，顺序=SLOT_ORDER=槽位号）
 var _slots: Dictionary = {}       # slot -> {char, spirit_id, spirit_name, element, skills, fallback}
 var _root: Control = null
 var _viewer: PopupPanel = null
@@ -87,17 +88,6 @@ func _build_ui() -> void:
 	btn.pressed.connect(_on_confirm)
 	vbox.add_child(btn)
 
-	# 22-C 学打法专用开关（1001 主人令：测试全自动，学打法时才勾；默认不勾，与确认键分离防误触）
-	var human_row := HBoxContainer.new()
-	human_row.add_theme_constant_override("separation", 8)
-	vbox.add_child(human_row)
-	var human_box := CheckBox.new()
-	human_box.text = "🖱 勾选=主人亲自驾驶 A0（猪猪侠，其余全 AI+自动采集轨迹）【22-C 学打法专用，平时测试不勾】"
-	human_box.add_theme_font_size_override("font_size", 12)
-	human_box.modulate = Color(1, 0.9, 0.55)
-	human_box.toggled.connect(func(on: bool) -> void: human_slot_choice = 0 if on else -1)
-	human_row.add_child(human_box)
-
 
 func _make_row(slot: String) -> PanelContainer:
 	var row := PanelContainer.new()
@@ -142,8 +132,30 @@ func _make_row(slot: String) -> PanelContainer:
 	l_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hbox.add_child(l_count)
 
+	# 行尾 🎮驾驶 勾选（互斥单选：点谁开谁；勾选组顺序=槽位号 A0..B2）
+	var drive := CheckBox.new()
+	drive.text = "🎮驾驶"
+	drive.add_theme_font_size_override("font_size", 12)
+	drive.tooltip_text = "勾选=开赛后由您亲自操控该球员（其余全 AI+自动采集轨迹）"
+	drive.pressed.connect(_on_drive_toggled.bind(drive))
+	hbox.add_child(drive)
+	_human_boxes.append(drive)
+
 	row.gui_input.connect(_on_row_gui_input.bind(slot))
 	return row
+
+
+func _on_drive_toggled(on: bool, box: CheckBox) -> void:
+	var idx := _human_boxes.find(box)
+	if on:
+		for b in _human_boxes:
+			if b != box:
+				b.set_pressed_no_signal(false)
+		human_slot_choice = idx
+		print("[Roster] 主人驾驶槽位 = %s" % SLOT_ORDER[idx])
+	elif human_slot_choice == idx:
+		human_slot_choice = -1
+		print("[Roster] 已取消驾驶（双队全 AI）")
 
 
 func _on_row_gui_input(event: InputEvent, slot: String) -> void:
