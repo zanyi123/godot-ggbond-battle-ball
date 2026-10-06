@@ -884,6 +884,7 @@ func defense_use_skill(sad: Dictionary, defense_choice: Dictionary) -> void:
 	var skill_id: String = str(defense_choice.get("skill_id", ""))
 	var action: String = str(defense_choice.get("action", ""))
 	_execute_skill(sad, _find_skill_analysis(sad, skill_id))
+	sad.player.set_meta("defense_latch_until", Engine.get_physics_frames() + 90)
 	print("[SpiritAI] %s 防御平替: %s (%s) 替代跳跃" % [sad.player.name, skill_id, action])
 
 func _find_skill_analysis(sad: Dictionary, skill_id: String) -> Dictionary:

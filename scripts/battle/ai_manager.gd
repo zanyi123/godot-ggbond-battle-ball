@@ -164,14 +164,17 @@ const AI_JUMP_DIR_DOT_MIN: float = 0.85   # 球方向与"指向我"夹角余弦�
 ## 平衡轮：性格概率门 P_dodge = base×(1+fear×(1-血量比))，确定性骰子（不用 randf，
 ## 同一(球,人)对结果恒定，sim 可复现）
 ## 24号 S3：防御平替开关（switches.json defense_replace_jump，默认 false=现行行为逐位）
+## 性能：静态缓存+2秒节流重读（M5 每帧调用，禁每帧读盘解析）
+static var _drj_cache: bool = false
+static var _drj_next_read_ms: int = 0
 func _defense_replace_jump_enabled() -> bool:
-	var txt: String = FileAccess.get_file_as_string("res://data/systems/spirit_ai/switches.json")
-	if txt.is_empty():
-		return false
-	var parsed = JSON.parse_string(txt)
-	if parsed is Dictionary:
-		return parsed.get("defense_replace_jump", false) == true
-	return false
+	var now: int = Time.get_ticks_msec()
+	if now >= _drj_next_read_ms:
+		_drj_next_read_ms = now + 2000
+		var txt: String = FileAccess.get_file_as_string("res://data/systems/spirit_ai/switches.json")
+		var parsed = JSON.parse_string(txt) if not txt.is_empty() else null
+		_drj_cache = parsed is Dictionary and parsed.get("defense_replace_jump", false) == true
+	return _drj_cache
 
 
 func _update_jump_reaction(ap: Dictionary) -> void:
@@ -239,12 +242,16 @@ func _update_jump_reaction(ap: Dictionary) -> void:
 
 	# 24号 S3 防御平替（开关默认关=现行行为逐位）：有可用防御技时，放技替代跳跃
 	if spirit_ai_mgr and _defense_replace_jump_enabled():
+		# 迟滞：防御决策后 1.5s（90物理帧）内保持防御态，不重评估不跳（防跳/盾横跳）
+		if Engine.get_physics_frames() < int(p.get_meta("defense_latch_until", 0)):
+			return
 		var incoming_dmg: float = float(ball.ball_damage) if ball else 0.0
 		var sad: Dictionary = spirit_ai_mgr.get_ap_defense_sad(p)
 		if not sad.is_empty():
 			var defense_choice: Dictionary = spirit_ai_mgr.get_ready_defense_action(sad, incoming_dmg)
 			if not defense_choice.is_empty():
 				spirit_ai_mgr.defense_use_skill(sad, defense_choice)
+				p.set_meta("defense_latch_until", Engine.get_physics_frames() + 90)
 				return  # 放技防守，不跳
 	p.try_jump()
 
