@@ -163,6 +163,17 @@ const AI_JUMP_DIR_DOT_MIN: float = 0.85   # 球方向与"指向我"夹角余弦�
 ## 待接球姿态不躲（选择接球就承担风险，归既有接球 utility 决策）
 ## 平衡轮：性格概率门 P_dodge = base×(1+fear×(1-血量比))，确定性骰子（不用 randf，
 ## 同一(球,人)对结果恒定，sim 可复现）
+## 24号 S3：防御平替开关（switches.json defense_replace_jump，默认 false=现行行为逐位）
+func _defense_replace_jump_enabled() -> bool:
+	var txt: String = FileAccess.get_file_as_string("res://data/systems/spirit_ai/switches.json")
+	if txt.is_empty():
+		return false
+	var parsed = JSON.parse_string(txt)
+	if parsed is Dictionary:
+		return parsed.get("defense_replace_jump", false) == true
+	return false
+
+
 func _update_jump_reaction(ap: Dictionary) -> void:
 	var p = ap.player
 	if p == null or not is_instance_valid(p):
@@ -226,6 +237,15 @@ func _update_jump_reaction(ap: Dictionary) -> void:
 	if _dodge_roll(threat_key, ball.flight_seq) >= p_dodge:
 		return  # 性格/运气：这次不躲（每帧重算结果一致，不会闪烁）
 
+	# 24号 S3 防御平替（开关默认关=现行行为逐位）：有可用防御技时，放技替代跳跃
+	if spirit_ai_mgr and _defense_replace_jump_enabled():
+		var incoming_dmg: float = float(ball.ball_damage) if ball else 0.0
+		var sad: Dictionary = spirit_ai_mgr.get_ap_defense_sad(p)
+		if not sad.is_empty():
+			var defense_choice: Dictionary = spirit_ai_mgr.get_ready_defense_action(sad, incoming_dmg)
+			if not defense_choice.is_empty():
+				spirit_ai_mgr.defense_use_skill(sad, defense_choice)
+				return  # 放技防守，不跳
 	p.try_jump()
 
 

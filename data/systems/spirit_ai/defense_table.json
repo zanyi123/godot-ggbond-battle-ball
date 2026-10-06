@@ -1,0 +1,25 @@
+{
+	"schema_version": 1,
+	"tag_actions": {
+		"field_obs_add": "hard_block",
+		"player_shield_obstacle": "hard_block",
+		"field_drain_wall": "hard_block",
+		"player_def_up_pct": "soften",
+		"player_def_up_flat": "soften",
+		"player_res_up_pct": "soften",
+		"player_res_up_flat": "soften",
+		"player_damage_reflect": "soften",
+		"player_element_immune": "soften",
+		"player_hp_regen": "recover",
+		"player_hp_heal_pct": "recover",
+		"player_hp_heal_flat": "recover",
+		"player_move_slow": "avoid",
+		"player_root": "avoid",
+		"player_spd_up_pct": "avoid",
+		"player_spd_up_flat": "avoid",
+		"player_stealth": "avoid",
+		"player_cc_immune": "avoid"
+	},
+	"skill_overrides": {},
+	"_说明": "24号防御技判别表（主人 0930 验收口径）：标签→防御动作。AI 待接球被来球命中时查表：有 hard_block 技→放技替代跳跃；软化/回避依次兜底；表外技不参与防御决策。数值可调，键名照抄。"
+}

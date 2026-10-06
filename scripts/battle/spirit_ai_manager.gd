@@ -1,6 +1,7 @@
 extends Node
 
 const AIProfile = preload("res://scripts/battle/ai_profile.gd")
+const SpiritAIDefenseTable = preload("res://scripts/battle/spirit_ai/defense_table.gd")
 ## 16号合一：端区锚点（外场方向锚，原误称 GOAL_*）权威定义=ai_manager.SIDE_ANCHOR_A/B，
 ## 本文件经脚本常量引用（ai_manager 侧已改运行时 load 解除循环预载）。
 ## 领域知识详见 ai_manager 头部永久注释（交叉布局/勿按球门修/搞混史）。
@@ -870,6 +871,57 @@ func _physics_process(delta: float) -> void:
 			sad.skill_think_timer = 0.0
 			_decide_skill(sad)
 			_try_send_need_buff(sad)
+
+## 24号 S3 配套：按 player 取其 sad（防御平替用；未注册/玩家控制/战败返回空）
+func get_ap_defense_sad(p: Node2D) -> Dictionary:
+	for sad in spirit_ai_data:
+		if _is_valid(sad) and sad.player == p:
+			return sad
+	return {}
+
+## 24号 S3 配套：执行防御平替（放技+迟滞标记+打印）
+func defense_use_skill(sad: Dictionary, defense_choice: Dictionary) -> void:
+	var skill_id: String = str(defense_choice.get("skill_id", ""))
+	var action: String = str(defense_choice.get("action", ""))
+	_execute_skill(sad, _find_skill_analysis(sad, skill_id))
+	print("[SpiritAI] %s 防御平替: %s (%s) 替代跳跃" % [sad.player.name, skill_id, action])
+
+func _find_skill_analysis(sad: Dictionary, skill_id: String) -> Dictionary:
+	for analysis in sad.skills_analysis:
+		if str(analysis.get("skill_id", "")) == skill_id:
+			return analysis
+	return {}
+
+## 24号 S2：防御动作查询口——来球将命中时，按判别表扫描可用防御技
+## 返回 {"action": "hard_block/soften/avoid/recover", "skill_id": String} 或空字典（无可用）
+## 打分口径（24号§四）：来球伤害 vs 自身扛性预估，win≥安全线用 hard_block，否则 soften/avoid
+func get_ready_defense_action(sad: Dictionary, incoming_damage: float) -> Dictionary:
+	var p = sad.player
+	var best: Dictionary = {}
+	var best_p: int = 0
+	for analysis in sad.skills_analysis:
+		var skill_data: Dictionary = analysis.get("skill_data", {})
+		if skill_data.get("type", "active") == "passive":
+			continue
+		var skill_id: String = str(analysis.get("skill_id", ""))
+		# 失误短冷却中不选
+		if int(sad.get("mistake_hold", {}).get(skill_id, 0)) > int(sad["skill_decide_count"]):
+			continue
+		if spirit_system and spirit_system.get_skill_cooldown(p.get_instance_id(), skill_id) > 0.0:
+			continue
+		if p.spirit_energy < float(skill_data.get("energy_cost", 20)):
+			continue
+		var action := SpiritAIDefenseTable.best_action_for_tags(analysis.get("tags", []))
+		if action == "":
+			continue
+		var pr: int = {"hard_block": 4, "soften": 3, "avoid": 2, "recover": 1}.get(action, 0)
+		# win 评估：来球伤害超过自身半血时，只有 hard_block 视为扛得住
+		if action != "hard_block" and incoming_damage > float(p.max_stamina) * 0.5:
+			continue
+		if pr > best_p:
+			best_p = pr
+			best = {"action": action, "skill_id": skill_id}
+	return best
 
 func _is_valid(sad: Dictionary) -> bool:
 	var p = sad.player

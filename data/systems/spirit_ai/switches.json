@@ -7,5 +7,7 @@
 		"D": true,
 		"E": true,
 		"F": true
-	}
+	},
+	"defense_replace_jump": false,
+	"_说明": "defense_replace_jump=24号防御平替开关（默认false=跳跃行为逐位）"
 }
