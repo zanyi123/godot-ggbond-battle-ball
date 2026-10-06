@@ -1,14 +1,1 @@
-{
-	"master_enabled": true,
-	"waves": {
-		"A": true,
-		"B": true,
-		"C": true,
-		"D": true,
-		"E": true,
-		"F": true
-	},
-	"protocol_v2": true,
-	"defense_replace_jump": false,
-	"_说明": "；2026-10-06 规划窗口恢复实测态（越权操作致键丢失，git 30f7848 重建+主人0929批protocol_v2开）"
-}
+{"master_enabled": false, "waves": {"A": false, "B": false, "C": false, "D": false, "E": false, "F": false}}

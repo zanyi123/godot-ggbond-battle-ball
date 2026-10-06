@@ -240,19 +240,33 @@ func _update_jump_reaction(ap: Dictionary) -> void:
 	if _dodge_roll(threat_key, ball.flight_seq) >= p_dodge:
 		return  # 性格/运气：这次不躲（每帧重算结果一致，不会闪烁）
 
-	# 24号 S3 防御平替（开关默认关=现行行为逐位）：有可用防御技时，放技替代跳跃
+	# 24号 防御综合评分（开关默认关=现行行为逐位）：徒手接球 vs 技能防御 vs 跳跃 三候选同池打分
 	if spirit_ai_mgr and _defense_replace_jump_enabled():
 		# 迟滞：防御决策后 1.5s（90物理帧）内保持防御态，不重评估不跳（防跳/盾横跳）
 		if Engine.get_physics_frames() < int(p.get_meta("defense_latch_until", 0)):
 			return
 		var incoming_dmg: float = float(ball.ball_damage) if ball else 0.0
+		var incoming_spd: float = float(ball.ball_speed) if ball != null and "ball_speed" in ball else 0.0
 		var sad: Dictionary = spirit_ai_mgr.get_ap_defense_sad(p)
+		# 候选池打分（同尺度：扛住概率 0~100）
+		var score_hand: float = spirit_ai_mgr.score_bare_hand_catch(p, incoming_spd, incoming_dmg)
+		var best_score: float = score_hand
+		var best_kind: String = "bare_catch"
+		var best_skill: Dictionary = {}
 		if not sad.is_empty():
-			var defense_choice: Dictionary = spirit_ai_mgr.get_ready_defense_action(sad, incoming_dmg)
-			if not defense_choice.is_empty():
-				spirit_ai_mgr.defense_use_skill(sad, defense_choice)
-				p.set_meta("defense_latch_until", Engine.get_physics_frames() + 90)
-				return  # 放技防守，不跳
+			var d: Dictionary = spirit_ai_mgr.pick_defense_skill(sad, incoming_dmg, incoming_spd)
+			if not d.is_empty() and float(d.get("win", 0.0)) * 100.0 > best_score:
+				best_score = float(d.get("win", 0.0)) * 100.0
+				best_kind = "skill"
+				best_skill = d
+		# 决策（阈值 50：扛住概率过半才行动，否则现行跳跃）
+		if best_score >= 50.0:
+			p.set_meta("defense_latch_until", Engine.get_physics_frames() + 90)
+			if best_kind == "skill":
+				spirit_ai_mgr.defense_use_skill(sad, best_skill)
+			elif p.has_method("enter_catch_state"):
+				p.enter_catch_state()
+			return  # 徒手/技能防守，不跳
 	p.try_jump()
 
 

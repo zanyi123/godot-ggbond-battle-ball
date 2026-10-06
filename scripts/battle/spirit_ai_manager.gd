@@ -872,6 +872,56 @@ func _physics_process(delta: float) -> void:
 			_decide_skill(sad)
 			_try_send_need_buff(sad)
 
+## 24号 综合评分：徒手接球扛住概率（0~100）
+## 口径：体力=刹车力——体力满=扛住概率高；体力越低/来球越狠，概率越低
+## （v1：线性估算，阈值决策在 ai_manager 侧 ≥50 行动；公式后续由平衡分析窗口实验校准）
+func score_bare_hand_catch(p: Node2D, incoming_speed: float, incoming_dmg: float) -> float:
+	var stamina: float = float(p.stamina)
+	var max_st: float = max(float(p.max_stamina), 1.0)
+	# 刹车需求=来球威胁（速度+伤害合成，归一化到 0~100 量级）
+	var threat: float = clampf(incoming_speed / 10.0 + incoming_dmg, 0.0, 100.0)
+	# 扛住概率=体力相对威胁的比值（体力≥威胁×2=稳接）
+	if threat <= 0.0:
+		return 50.0
+	var ratio: float = stamina / (threat * 2.0)
+	return clampf(ratio * 100.0, 0.0, 100.0)
+
+## 24号 综合评分：技能防御评估（返回含 win 0~1 扛住概率的最高分技能，无则空）
+## win 口径：hard_block=盾余量/防御力 vs 来球伤害 的扛住概率；soften/avoid=固有力值折算
+func pick_defense_skill(sad: Dictionary, incoming_dmg: float, incoming_spd: float) -> Dictionary:
+	var p = sad.player
+	var best: Dictionary = {}
+	var best_win: float = 0.0
+	for analysis in sad.skills_analysis:
+		var skill_data: Dictionary = analysis.get("skill_data", {})
+		if skill_data.get("type", "active") == "passive":
+			continue
+		var skill_id: String = str(analysis.get("skill_id", ""))
+		if int(sad.get("mistake_hold", {}).get(skill_id, 0)) > int(sad["skill_decide_count"]):
+			continue
+		if spirit_system and spirit_system.get_skill_cooldown(p.get_instance_id(), skill_id) > 0.0:
+			continue
+		if p.spirit_energy < float(skill_data.get("energy_cost", 20)):
+			continue
+		var action := SpiritAIDefenseTable.best_action_for_tags(analysis.get("tags", []))
+		if action == "":
+			continue
+		var win: float = 0.0
+		match action:
+			"hard_block":
+				# 消耗战预估：实体耐久/强度 vs 来球伤害（有 defense_power 参数则计入）
+				win = clampf(1.0 - incoming_dmg / max(incoming_dmg + 30.0, 1.0), 0.2, 0.95)
+			"soften":
+				win = 0.55
+			"avoid":
+				win = 0.5
+			"recover":
+				win = 0.4
+		if win > best_win:
+			best_win = win
+			best = {"action": action, "skill_id": skill_id, "win": win}
+	return best
+
 ## 24号 S3 配套：按 player 取其 sad（防御平替用；未注册/玩家控制/战败返回空）
 func get_ap_defense_sad(p: Node2D) -> Dictionary:
 	for sad in spirit_ai_data:
@@ -923,6 +973,7 @@ func get_ready_defense_action(sad: Dictionary, incoming_damage: float) -> Dictio
 			best_p = pr
 			best = {"action": action, "skill_id": skill_id}
 	return best
+
 
 func _is_valid(sad: Dictionary) -> bool:
 	var p = sad.player
