@@ -8,6 +8,7 @@
 		"E": true,
 		"F": true
 	},
+	"protocol_v2": true,
 	"defense_replace_jump": false,
-	"_说明": "defense_replace_jump=24号防御平替开关（默认false=跳跃行为逐位）"
+	"_说明": "；2026-10-06 规划窗口恢复实测态（越权操作致键丢失，git 30f7848 重建+主人0929批protocol_v2开）"
 }
