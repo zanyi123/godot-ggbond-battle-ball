@@ -246,27 +246,29 @@ func _update_jump_reaction(ap: Dictionary) -> void:
 		if Engine.get_physics_frames() < int(p.get_meta("defense_latch_until", 0)):
 			return
 		var incoming_dmg: float = float(ball.ball_damage) if ball else 0.0
-		var incoming_spd: float = float(ball.ball_speed) if ball != null and "ball_speed" in ball else 0.0
 		var sad: Dictionary = spirit_ai_mgr.get_ap_defense_sad(p)
-		# 候选池打分（同尺度：扛住概率 0~100）
-		var score_hand: float = spirit_ai_mgr.score_bare_hand_catch(p, incoming_spd, incoming_dmg)
-		var best_score: float = score_hand
-		var best_kind: String = "bare_catch"
-		var best_skill: Dictionary = {}
-		if not sad.is_empty():
-			var d: Dictionary = spirit_ai_mgr.pick_defense_skill(sad, incoming_dmg, incoming_spd)
-			if not d.is_empty() and float(d.get("win", 0.0)) * 100.0 > best_score:
-				best_score = float(d.get("win", 0.0)) * 100.0
-				best_kind = "skill"
-				best_skill = d
-		# 决策（阈值 50：扛住概率过半才行动，否则现行跳跃）
-		if best_score >= 50.0:
-			p.set_meta("defense_latch_until", Engine.get_physics_frames() + 90)
-			if best_kind == "skill":
-				spirit_ai_mgr.defense_use_skill(sad, best_skill)
-			elif p.has_method("enter_catch_state"):
-				p.enter_catch_state()
-			return  # 徒手/技能防守，不跳
+		if sad.is_empty():
+			p.try_jump()
+			return
+		# 到达估时（M5 弹道预测既有口）：距离/球速（外层已有弹道 t_arrive，此处改名 defense_eta）
+		var defense_eta: float = -1.0
+		var def_dist: float = float(p.global_position.distance_to(ball.global_position))
+		var spd_v = ball.get("ball_speed")
+		var spd: float = absf(float(spd_v)) if spd_v != null else 0.0
+		if spd > 1.0:
+			defense_eta = def_dist / spd
+		# 24号 综合评分（1001 主人令：徒手接球 vs 技能防御 vs 跳跃 三候选同池，get_defense_scores 统一出口）
+		var verdict: Dictionary = spirit_ai_mgr.get_defense_scores(sad, incoming_dmg, defense_eta)
+		var kind: String = str(verdict.get("best_kind", "jump"))
+		if kind == "jump":
+			p.try_jump()
+			return
+		p.set_meta("defense_latch_until", Engine.get_physics_frames() + 90)
+		if kind == "skill":
+			spirit_ai_mgr.defense_use_skill(sad, verdict.get("best_skill", {}))
+		elif kind == "catch" and p.has_method("enter_catch_state"):
+			p.enter_catch_state()
+		return  # 综合评分胜出动作生效，不跳
 	p.try_jump()
 
 
