@@ -162,6 +162,66 @@ static func tick_activation(state_manager: Variant, player_id: int, caster: Node
 	return ""
 
 
+## ==================== 34号 S4：AI 白球指挥链（19A S5 尾款收账） ====================
+## 23号二点七 AI 操控链（主人已裁，逐字）：进攻=查本队爆炸球选最优操控飞敌爆炸；
+## 防守/补给=按队员需求（残血→药水/被集火→锅/无球权→烟花）；
+## 场上无球=不动作等补充。走既有指令口（issue_order_at），不开新通道。
+## 强化时机行：fenny_4 施放由 AI 评分通道既有覆盖（统计出手实证），指令侧无需处理。
+static func tick_summon_commands(caster: Node) -> String:
+	if caster == null or not is_instance_valid(caster):
+		return ""
+	if bool(caster.get("is_player_controlled")):
+		return "hold"  # 人类施法者的球=储备听指挥（两段点击），AI 通道不碰
+	var summons = caster.get("summons")
+	if summons == null or not (summons is Array) or (summons as Array).is_empty():
+		return "no_ball"
+	var bm: Node = caster.get_parent() if caster.get_parent() != null and caster.get_parent().get("team_a_players") != null else null
+	if bm == null:
+		return ""
+	var my_team := str(caster.get("team"))
+	var enemies: Array = bm.team_b_players if my_team == "a" else bm.team_a_players
+	for s in summons:
+		if not is_instance_valid(s) or str(s.get("state")) != "active":
+			continue
+		if bool(s.get("_flying")):
+			continue  # 已在执行指令（不重复下单）
+		var tdef: Dictionary = s.get("_tdef") if s.get("_tdef") != null else {}
+		if str(tdef.get("kind", "")) != "magic_ball":
+			continue  # 鲨鱼=自主行为+触碰既有（非本链）
+		var mode := str(tdef.get("on_ball", {}).get("mode", ""))
+		if mode == "carry_with_ball":
+			# 进攻：选最优敌（离球最近且存活）→指挥飞向其位置→飞抵触碰爆炸
+			var best: Node2D = null
+			var best_d: float = 1e12
+			for e in enemies:
+				if e == null or not is_instance_valid(e) or e.is_defeated:
+					continue
+				var d: float = float(e.global_position.distance_to(s.global_position))
+				if d < best_d:
+					best_d = d
+					best = e
+			if best != null:
+				s.issue_order_at(best.global_position)
+				print("[AI] ⚪ 攻球指挥: → %s" % str(best.char_data.get("name", "?")) if best.get("char_data") != null else "[AI] ⚪ 攻球指挥: → 最近敌")
+				return "ai_attack_order"
+		elif mode == "grant_item":
+			# 补给：最虚队友（体力比<0.65）→飞抵交付；全员健康→持有待命
+			var needy: Node2D = null
+			var needy_ratio: float = 0.65
+			for m in (bm.team_a_players if my_team == "a" else bm.team_b_players):
+				if m == null or not is_instance_valid(m) or m.is_defeated:
+					continue
+				var ratio: float = float(m.get("stamina")) / maxf(float(m.get("max_stamina")), 1.0)
+				if ratio < needy_ratio:
+					needy_ratio = ratio
+					needy = m
+			if needy != null:
+				s.issue_order_at(needy.global_position)
+				print("[Summon] 🎁 AI 补球指挥: 飞向 %s 交付" % str(needy.char_data.get("name", "?")) if needy.get("char_data") != null else "[Summon] 🎁 AI 补球指挥")
+				return "ai_supply_order"
+	return "hold"
+
+
 ## midfly 时机策略（复用 12号 op_policy 判据；policy 空时两策略并测——任一满足即干预）
 static func _midfly_intent_by_policy(policy: String, ctx: Dictionary) -> Dictionary:
 	var none: Dictionary = {"op": "midfly", "aim_direction": Vector2.ZERO, "should_press": false, "reason": ""}

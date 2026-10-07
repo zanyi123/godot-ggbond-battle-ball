@@ -482,8 +482,10 @@ func _path_buffs_at(pos: Vector2) -> Dictionary:
 	if zm == null:
 		return {}
 	for zone in zm.zones:
+		# 4.6 怪癖（18e61d6 同族）：Object.get 仅 1 参——Area2D 不可用字典式默认值
 		if is_instance_valid(zone) and int(zone.get("zone_type")) == 6 and zone.contains_point(pos):
-			return zone.get("path_buffs", {}) if zone.get("path_buffs", {}) is Dictionary else {}
+			var pb = zone.get("path_buffs")
+			return pb if pb != null and pb is Dictionary else {}
 	return {}
 
 

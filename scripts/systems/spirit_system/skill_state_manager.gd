@@ -474,6 +474,8 @@ func ai_activate_skill(player_id: int, caster: Node, skill_id: String) -> bool:
 ## 交 ai_input_source.tick_activation 接管（STEER 引导注入/MIDFLY 时机干预）。
 ## provider 未设置=零循环体（fail-closed，行为与无此代码等价）。
 func _tick_ai_activations() -> void:
+	# 34号 S4：召唤体指挥 pass（先于 ctx 守卫——球在即指挥权在，不依赖 ctx provider）
+	_tick_summon_commands_pass()
 	if ai_virtual_inputs.is_empty() or not ai_ctx_provider.is_valid():
 		return
 	for pid in ai_virtual_inputs.keys():
@@ -486,6 +488,22 @@ func _tick_ai_activations() -> void:
 			continue
 		ctx["player"] = caster
 		SpiritAIInputSource.tick_activation(self, int(pid), caster, ctx)
+
+
+## 34号 S4：AI 召唤体指挥 pass（每帧；拥有召唤体的 AI 球员即自动获得指挥权并补登记）
+## 人类操控球员豁免（is_player_controlled）；通道=既有 issue_order_at 指令口（不开新通道）
+func _tick_summon_commands_pass() -> void:
+	var bm: Node = get_parent()
+	if bm == null or bm.get("team_a_players") == null:
+		return
+	for p in (bm.team_a_players + bm.team_b_players):
+		if p == null or not is_instance_valid(p) or bool(p.get("is_player_controlled")):
+			continue
+		var sms = p.get("summons")
+		if sms is Array and not (sms as Array).is_empty():
+			if not ai_virtual_inputs.has(p.get_instance_id()):
+				register_ai_input_source(p.get_instance_id(), p)
+			SpiritAIInputSource.tick_summon_commands(p)
 
 
 ## ==================== 工单12 S1：OP_COMBO 合体协调器（主人裁方案a） ====================

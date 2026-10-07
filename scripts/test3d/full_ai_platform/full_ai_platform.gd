@@ -200,6 +200,7 @@ func _on_platform_match_ended(score_a: int, score_b: int, result: String) -> voi
 			var ok := bool(verdict.get("pass", false))
 			print("[Platform] 探针判定: %s → 退出码 %d" % ["PASS" if ok else "FAIL", 0 if ok else 3])
 			print("[Platform] 自动模式完成，退出")
+			# 33号c：延迟一帧退出（让场景树 free 完毕，消退出期 ObjectDB/resources 泄漏告警）
 			get_tree().quit(0 if ok else 3)
 			return
 	# auto>1 不再重开（一进程一场，多种子=多次调用）——防 RESULTS 相位挂起

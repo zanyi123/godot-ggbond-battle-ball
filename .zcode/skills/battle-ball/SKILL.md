@@ -194,3 +194,15 @@ ModelSlot (scale=70) ← 唯一缩放控制点
 - ❌ 场景文件末尾缺换行符（.unity 必须以 LF 结尾）
 - ❌ Text 组件不设 font（Unity Text 必须设置 font 否则不渲染）
 - ❌ RectTransform 不设 anchor/pivot（必须显式设置）
+
+## 操控/实体类工单验收模板（34号 S3 硬条款·新工单验收区照填）
+```
+### 验收（必填，无此节不打回也过不了 seam_gate）
+- 接缝四问（test_seam_gate 自动覆盖，工单须声明走的通道）：
+  Q1 登记口：实体生成→owner.summons 登记 / despawn→摘除
+  Q2 输入源：STEER=注入点 / MARK=确认桥 / PLACE=预览口（写明本工单走哪条）
+  Q3 身份：spawn 全路径 owner 注入；B 队施放→实体归 B 队（fail-closed 不猜队）
+  Q4 检测体：触碰 Area2D 构建函数有调用方
+- 套件名+读数：________（如 test_seam_gate 10/10；红=打回）
+- 原作句逐字：________（行为模型改动的唯一依据）
+```
