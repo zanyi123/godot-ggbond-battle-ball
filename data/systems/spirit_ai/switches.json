@@ -1,1 +1,11 @@
-{"master_enabled": false, "waves": {"A": false, "B": false, "C": false, "D": false, "E": false, "F": false}}
+{
+ "master_enabled": true,
+ "waves": {
+  "A": true,
+  "B": true,
+  "C": true,
+  "D": true,
+  "E": true,
+  "F": true
+ }
+}
