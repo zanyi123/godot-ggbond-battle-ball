@@ -82,7 +82,12 @@ scripts/
 
 ## 五-补、代码按需读取清单（⚠ 重要：不要全读）
 
-全项目 49+ 个脚本 / 约 25000+ 行，**禁止启动时全读**。
+全项目实测 **214 个脚本 / 约 7 万行**（2026-10-04 实测，仍在增长），**禁止启动时全读**。
+
+**窄读铁律（省额度第一纪律，源自 awesome-cursorrules 定位思想）**：
+1. 500 行以上的文件**禁止整读**：先 grep `docs/code_map.md`（全项目 func→行号 索引）拿目标函数行号，再用 Read 的 offset/limit 只读目标段 ±80 行
+2. 找文件看上面清单，找函数看 `docs/code_map.md`；代码大改后重跑 `python tools/gen_code_map.py` 刷新地图
+3. 地图本身也只能 grep，不能整读
 
 **AI 子系统（最常读，共 ~8000 行）——改 AI 行为前必读这几个：**
 | 文件 | 行数 | 作用 |
@@ -95,6 +100,7 @@ scripts/
 | `scripts/battle/ai_profile.gd` | 337 | AI 参数/角色预设（调平衡先看这） |
 
 **任务导航：**
+- 主人用白话派活 → 先看 `docs/当前任务菜单.md`（点菜式接单）+ `vibe_task` 技能（分级挂链）
 - 修 AI bug → 先读 `ai_manager.gd` 对应状态/函数
 - 调 AI 平衡 → 先读 `ai_profile.gd`（参数都在这）
 - 改比赛流程 → 先读 `battle_manager.gd`
