@@ -166,20 +166,21 @@ static func apply_sandbox_override(p: AIProfile) -> void:
 # threshold 15→10、expected_future_score 50→25——依据=平台三种子实测：技能池 raw 实际分布 10~33，
 # 旧期望分 50 高于池上限（能量闸门对高耗能技永拒）；阈值 15 高于合体半装 raw(10~14)。
 # 仅动 AI 选技欲望门槛，不动技能游戏效果数值；sim 门禁与基线位移另报。
-var skill_use_threshold: float = 10.0
-var skill_energy_min: float = 10.0
+# ──── 22-A S6 参数固化（2026-10-02 主人批，SPSA 50轮+8种子收敛解；旧值存档 sim_results/profile_archive_pre_s6.json）────
+var skill_use_threshold: float = 5.0
+var skill_energy_min: float = 5.0
 var skill_reserve_weight: float = 0.9
 var skill_attack_intent_weight: float = 1.0
 var skill_defense_intent_weight: float = 1.0
 var skill_support_intent_weight: float = 1.0
-var skill_think_interval: float = 0.5
-var skill_late_game_bonus: float = 1.5
-var skill_losing_bonus: float = 1.3
-var skill_leading_penalty: float = 0.7
-var skill_uncertainty_discount: float = 0.6
-var skill_expected_future_score: float = 25.0
-var skill_element_counter_bonus: float = 1.3
-var skill_element_counter_penalty: float = 0.7
+var skill_think_interval: float = 0.3
+var skill_late_game_bonus: float = 2.5
+var skill_losing_bonus: float = 1.0
+var skill_leading_penalty: float = 0.3
+var skill_uncertainty_discount: float = 0.2
+var skill_expected_future_score: float = 25.3
+var skill_element_counter_bonus: float = 1.0
+var skill_element_counter_penalty: float = 1.0
 var skill_combo_bonus: float = 0.5
 var skill_threat_assessment_weight: float = 0.3
 var skill_distance_factor_weight: float = 0.1

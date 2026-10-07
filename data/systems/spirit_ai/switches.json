@@ -1,11 +1,13 @@
 {
- "master_enabled": true,
- "waves": {
-  "A": true,
-  "B": true,
-  "C": true,
-  "D": true,
-  "E": true,
-  "F": true
- }
+	"master_enabled": true,
+	"waves": {
+		"A": true,
+		"B": true,
+		"C": true,
+		"D": true,
+		"E": true,
+		"F": true
+	},
+	"protocol_v2": true,
+	"defense_replace_jump": true
 }
