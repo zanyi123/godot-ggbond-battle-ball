@@ -147,7 +147,10 @@ func _run() -> void:
 	_check(bool(ball.get("is_active")) == false, "G16 撕咬拦截：球停（is_active=false）")
 	_check(str(def1.get("state")) == "active", "G17 限度内（第1次）撕咬留存")
 	def1.on_ball_proximity(ball)
-	_check(str(def1.get("state")) == "consumed", "G18 达 stop_limit(2)=撕咬消耗")
+	_check(str(def1.get("state")) == "active" and bool(ball.get("is_active")) == false, "G18 达 stop_limit(2)=第2次仍停球（限度内；33号原作口径）")
+	def1.on_ball_proximity(ball)  # 第3次=超限改线
+	_check(bool(ball.get("is_active")) == true and (ball.get("ball_direction") as Vector2) != Vector2.RIGHT, "G18b 超限=改球路线（球续飞+方向偏离；原作逐字）")
+	_check(str(def1.get("state")) == "active", "G18c 超限改线撕咬存续")
 
 	# ===== G7：grant 分发（granter 组未接线=静默+消耗）=====
 	var ball2: StubBall = StubBall.new()

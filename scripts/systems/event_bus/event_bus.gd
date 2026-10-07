@@ -46,6 +46,9 @@ enum GameEvent {
 	SUMMON_SPAWNED,        ## 召唤物生成 {type_id, owner_id, node}
 	SUMMON_DESPAWNED,      ## 召唤物注销 {type_id, owner_id, node, reason}
 	SUMMON_MERGED,         ## 召唤物融合 {result_type, members, params}（与20号 on_formed 并行不混用）
+	SUMMON_STATE_CHANGED,  ## 27-J4 召唤物状态流转（遁地进出/消耗）{node, state, reason}
+	# Obstacle.* 障碍类（27-J3 统一判定点：球-障碍碰撞三阶段）
+	OBSTACLE_IMPACT,       ## 球撞障碍 {obstacle, ball, phase: contact/breakthrough/blocked}
 	# Ball.* 球强制控制类（消费端自 emit）
 	BALL_FORCED_CONTROL,   ## 球强制吸附/停球/改线 {ball, by_player, mode}
 }

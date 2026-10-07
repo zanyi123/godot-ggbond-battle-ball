@@ -44,7 +44,10 @@ func spawn(type_id: String, owner_id: int, pos: Vector2, params: Dictionary = {}
 		return null
 	var limit: int = int(_limits.get(type_id, int(tdef.get("active_limit", 6))))
 	if _count_live(type_id, owner_id) >= limit:
+		print("[Summon][dbg] spawn 拒: %s owner=%d count=%d limit=%d" % [type_id, owner_id, _count_live(type_id, owner_id), limit])
 		return null
+	if type_id.contains("fenny"):
+		print("[Summon][dbg] spawn fenny: type=%s owner=%d pos=%s" % [type_id, owner_id, str(pos)])
 	var spawn_params: Dictionary = params.duplicate()
 	if _empowers.has(owner_id):
 		var e: Dictionary = _empowers[owner_id]
@@ -52,6 +55,12 @@ func spawn(type_id: String, owner_id: int, pos: Vector2, params: Dictionary = {}
 		e["left"] = int(e["left"]) - 1
 		if int(e["left"]) <= 0:
 			_empowers.erase(owner_id)
+	# 31号（快捷开发系统地基·2026-10-06 主人问"为什么分不清敌我"）：施法者身份单点注入——
+	# 此前只有自动生成路径带 owner_ref，技能施放路径 spawn 无 params → 实体身份为空 →
+	# 敌我识别兜底成"a"队（水木 B 队鲨鱼追杀自己队友）/伤害归因 attacker=null。
+	# 单点解析覆盖全部生成路径（技能施放/自动生成/融合/未来新队），身份不齐=后续一切判定踩空
+	if spawn_params.get("owner_ref", null) == null:
+		spawn_params["owner_ref"] = _resolve_owner_node(owner_id)
 	var ent_script: GDScript = load("res://scripts/systems/summon/summon_entity.gd")
 	var ent = ent_script.new()
 	ent.summon_type = type_id
@@ -61,6 +70,10 @@ func spawn(type_id: String, owner_id: int, pos: Vector2, params: Dictionary = {}
 	ent.global_position = pos
 	ent.setup(tdef, owner_id, spawn_params)
 	_live.append(ent)
+	# 27-R2：登记到施法者名下（操1 项7 SUMMONING/子态桥的读端=player.summons）
+	var owner_p: Node = spawn_params.get("owner_ref", null)
+	if owner_p != null and is_instance_valid(owner_p) and owner_p.get("summons") is Array:
+		(owner_p.get("summons") as Array).append(ent)
 	var bus = _bus()
 	if bus:
 		bus.emit_event(bus.GameEvent.SUMMON_SPAWNED, {"type_id": type_id, "owner_id": owner_id, "node": ent})
@@ -73,6 +86,10 @@ func despawn(node: Node, reason: String = "lifespan") -> void:
 		return
 	_live.erase(node)
 	print("[SummonManager] 注销: type=%s reason=%s" % [str(node.get("summon_type")), reason])
+	# 27-R2：注销同步摘登记
+	var owner_p: Node = node.get("owner_ref") if node.get("owner_ref") != null else null
+	if owner_p != null and is_instance_valid(owner_p) and owner_p.get("summons") is Array:
+		(owner_p.get("summons") as Array).erase(node)
 	var bus = _bus()
 	if bus:
 		bus.emit_event(bus.GameEvent.SUMMON_DESPAWNED, {"type_id": str(node.get("summon_type")), "owner_id": int(node.get("owner_id")), "node": node, "reason": reason})
@@ -97,6 +114,7 @@ func set_active_limit(type_id: String, n: int) -> void:
 func register_auto_spawner(owner_id: int, type_id: String, interval_s: float = 5.0, params: Dictionary = {}) -> void:
 	_auto_spawners.append({"owner_id": owner_id, "type_id": type_id,
 		"interval_frames": int(round(interval_s * 60.0)), "acc_frames": 0, "params": params})
+	print("[Summon][dbg] 注册补充器: type=%s owner=%d 总数=%d" % [type_id, owner_id, _auto_spawners.size()])
 
 
 func stop_auto_spawner(owner_id: int, type_id: String = "") -> void:
@@ -116,6 +134,8 @@ func register_empower(owner_id: int, config: Dictionary, count: int, duration_s:
 
 func _physics_process(delta: float) -> void:
 	_frame_acc += 1
+	if _frame_acc % 300 == 0:
+		print("[Summon][dbg] tick300: frame=%d spawners=%d live=%d" % [_frame_acc, _auto_spawners.size(), _live.size()])
 	# limit 到期还原
 	var keep: Array = []
 	for lr in _limit_restores:
@@ -136,14 +156,16 @@ func _physics_process(delta: float) -> void:
 		if int(a["acc_frames"]) >= int(a["interval_frames"]):
 			a["acc_frames"] = 0
 			var owner_id: int = int(a["owner_id"])
-			var owner_node = _find_node_by_instance_id(owner_id)
+			# 33号c 根因修复：旧第一守卫 _find_node_by_instance_id 只扫 _live 实体借用——
+			# 首批球寿命尽后解析恒 null → 补充器永久哑火（主人报"不自动补球"根因）。
+			# 统一走 _resolve_owner_node（battle 名册权威+实体借用兜底）
+			var owner_node: Node = _resolve_owner_node(owner_id)
 			if owner_node == null:
-				continue
-			# 1001 主人令：自动生成的白球生成在敌方外场带（原作=外场上空生成；此前在施法者身边=与描述不符）
-			var spawn_team := _team_of(owner_id)
-			var spawn_x: float = 560.0 if spawn_team == "a" else -560.0
-			var base_pos: Vector2 = Vector2(spawn_x, -120.0 + 120.0 * float(_frame_acc % 3))  # 确定性轮转散布（禁随机流）
-			spawn(str(a["type_id"]), owner_id, base_pos, (a["params"] as Dictionary).duplicate())
+				continue  # 身份未定（名册也未含）跳过本拍
+			# 32号b（2026-10-06 主人裁定）：生成位按类型表 spawn_hint 数据驱动（鲨鱼=施法者脚下；
+			# 白球=敌方外场带全域随机）——单一事实源=resolve_spawn_position，自动/施放路径同源
+			var rpos: Vector2 = resolve_spawn_position(str(a["type_id"]), owner_node)
+			spawn(str(a["type_id"]), owner_id, rpos, (a["params"] as Dictionary).duplicate())
 	# 1001 主人令：主攻+防御水鲨共存即自动融合为大鲨鱼（原作组合鲨鱼炸弹体系；同队跨球员，
 	# 无需快道前置——快道内融合为增强语义保留；randi 仅散布用不影响判定）
 	var att_shark: Node = null
@@ -216,6 +238,34 @@ func _count_live(type_id: String, owner_id: int) -> int:
 		if is_instance_valid(e) and str(e.get("summon_type")) == type_id and _team_of(int(e.get("owner_id"))) == owner_team:
 			n += 1
 	return n
+
+
+## 31号：施法者节点解析（battle 名册权威优先，已存活实体借用兜底）
+func _resolve_owner_node(owner_id: int) -> Node:
+	var bm: Node = get_parent() if get_parent() != null and get_parent().get("team_a_players") != null else null
+	if bm != null:
+		for p in (bm.team_a_players + bm.team_b_players):
+			if p != null and is_instance_valid(p) and p.get_instance_id() == owner_id:
+				return p
+	for e in _live:
+		if is_instance_valid(e) and int(e.get("owner_id")) == owner_id:
+			var cand = e.get("owner_ref")
+			if cand != null and is_instance_valid(cand):
+				return cand
+	return null
+
+
+## 32号b：生成位解析（数据驱动 spawn_hint）——鲨鱼=施法者脚下 / 白球=敌方外场带全域随机；
+## 自动生成与技能施放两路径同源调用（单一事实源）
+func resolve_spawn_position(type_id: String, owner_node: Node) -> Vector2:
+	var tdef: Dictionary = _types.get(type_id, {})
+	var hint := str(tdef.get("spawn_hint", "caster"))
+	var team := str(owner_node.get("team")) if owner_node != null and is_instance_valid(owner_node) else ""
+	if hint == "enemy_outer_random" and (team == "a" or team == "b"):
+		# 敌方外场竖带全域随机（A→右带 / B→左带；留 5px 边距；randf=主人明令随机）
+		var x: float = randf_range(385.0, 505.0) if team == "a" else randf_range(-505.0, -385.0)
+		return Vector2(x, randf_range(-320.0, 320.0))
+	return owner_node.global_position if owner_node != null and is_instance_valid(owner_node) else Vector2.ZERO
 
 
 func _team_of(owner_id: int) -> String:

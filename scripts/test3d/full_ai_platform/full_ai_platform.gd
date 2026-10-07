@@ -111,6 +111,31 @@ func _begin_match() -> void:
 		print("[Platform] Tab 切换名册 = %s（观测层可开跨队遍历）" % [
 			"驾驶队内 3 人" if not observe_cross_team else "全队 6 人"])
 
+	GameManager.match_ended.connect(_on_platform_match_ended)
+	# === 工单12 检测层：信号判定印记/合体是否运行时真实发生（21表对照信号，非肉眼）===
+	# 护栏：探针脚本自身编译失败时跳过挂接（不得中断开赛——实录：new() 异常曾致 _begin_match 中断→比赛不启动→进程挂死）
+	var probe_script_ref: GDScript = PlatformProbeScript  # 4.6：preload 常量直调实例方法会被静态拒绝，经变量中转
+	if probe_enabled and probe_script_ref != null and probe_script_ref.can_instantiate():
+		probe = PlatformProbeScript.new()
+		add_child(probe)
+		probe.setup(battle_manager)
+		if shots_interval_cfg > 0.0:
+			probe.shots_interval = shots_interval_cfg
+			print("[Platform] 📸 验收截图开启（每 %.0fs 一张 → docs/img/23demo）" % shots_interval_cfg)
+	elif probe_enabled:
+		print("[Platform] ⚠ 检测层脚本不可实例化（编译失败？）——本场无探针判定，开赛继续")
+	battle_manager._on_prep_match_started()
+	if auto_matches > 0:
+		Engine.time_scale = platform_speed
+
+	# === P3 观测层（headless 默认不建 UI；--platform-force-observe=1 供 headless 冒烟 UI 构建路径）===
+	if auto_matches <= 0 and (DisplayServer.get_name() != "headless" or force_observe):
+		observe_layer = ObserveLayerScript.new()
+		add_child(observe_layer)
+		observe_layer.setup(battle_manager)
+
+	print("[Platform] ✅ 3v3 完全体AI观战已就绪（F9 收起/展开观测面板）")
+
 
 var observe_cross_team: bool = false  # 观测层"跨队遍历切换"开关（默认关=队内轮转）
 
@@ -138,30 +163,6 @@ func set_cross_team_switch(on: bool) -> void:
 		add_child(trace_recorder)
 		trace_recorder.setup(battle_manager)
 
-	GameManager.match_ended.connect(_on_platform_match_ended)
-	# === 工单12 检测层：信号判定印记/合体是否运行时真实发生（21表对照信号，非肉眼）===
-	# 护栏：探针脚本自身编译失败时跳过挂接（不得中断开赛——实录：new() 异常曾致 _begin_match 中断→比赛不启动→进程挂死）
-	var probe_script_ref: GDScript = PlatformProbeScript  # 4.6：preload 常量直调实例方法会被静态拒绝，经变量中转
-	if probe_enabled and probe_script_ref != null and probe_script_ref.can_instantiate():
-		probe = PlatformProbeScript.new()
-		add_child(probe)
-		probe.setup(battle_manager)
-		if shots_interval_cfg > 0.0:
-			probe.shots_interval = shots_interval_cfg
-			print("[Platform] 📸 验收截图开启（每 %.0fs 一张 → docs/img/23demo）" % shots_interval_cfg)
-	elif probe_enabled:
-		print("[Platform] ⚠ 检测层脚本不可实例化（编译失败？）——本场无探针判定，开赛继续")
-	battle_manager._on_prep_match_started()
-	if auto_matches > 0:
-		Engine.time_scale = platform_speed
-
-	# === P3 观测层（headless 默认不建 UI；--platform-force-observe=1 供 headless 冒烟 UI 构建路径）===
-	if auto_matches <= 0 and (DisplayServer.get_name() != "headless" or force_observe):
-		observe_layer = ObserveLayerScript.new()
-		add_child(observe_layer)
-		observe_layer.setup(battle_manager)
-
-	print("[Platform] ✅ 3v3 完全体AI观战已就绪（F9 收起/展开观测面板）")
 
 
 func _parse_platform_args() -> void:

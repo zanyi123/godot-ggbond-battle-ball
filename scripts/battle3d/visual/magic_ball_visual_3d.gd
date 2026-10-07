@@ -9,7 +9,7 @@ class_name MagicBallVisual3D
 const ATTACK_RING_COLOR := Color(0.9, 0.2, 0.15, 0.95)   # 攻=红环
 const DEFEND_RING_COLOR := Color(0.2, 0.45, 0.95, 0.95)  # 守=蓝环
 const BALL_COLOR := Color(0.96, 0.96, 0.98)              # 白色球体
-const HOVER_Y := 30.0            # 悬浮高度（照球飞行口径 30）
+const HOVER_Y := 150.0           # 悬浮高度（33号b 主人报"贴地"：原作=外场上空悬浮，高于球员头顶）
 const HOVER_AMPLITUDE := 4.0     # 悬浮浮动幅度
 const HOVER_SPEED := 2.2         # 悬浮频率
 const SPIN_SPEED := 2.0          # 环旋转速度 rad/s
@@ -69,11 +69,7 @@ func _process(delta: float) -> void:
 	if _ring != null:
 		_ring.position.y = hover_y
 		_ring.rotation.y += SPIN_SPEED * delta
-	# 选中高亮（1001 玩家操控链：选中球放大 1.35 倍提示）
-	if _sphere != null:
-		var sel: bool = _host != null and is_instance_valid(_host) and bool(_host.get("selected"))
-		var sc := 1.35 if sel else 1.0
-		_sphere.scale = Vector3(sc, sc, sc)
+	# 29号R3 注：选中高亮已随手搓选中链下线（selected 变量已删）——选中反馈由操1 子态确认流承接
 
 
 func _refresh() -> void:

@@ -369,6 +369,25 @@ func inject_steer_to_ball() -> void:
 
 
 ## 项1 双源合成（纯函数可测）：基础朝向（鼠标/FP 折算）+ 按键偏转增量
+## 27-R4：STEER 输入源覆盖召唤实体（19A 断点E补齐——攻鲨"单独操控进攻"；
+## 方向与球同款双源合成，migration=false 时显式清零=实体侧回自主游动档）
+func inject_steer_to_summons(active: bool) -> void:
+	if controlled_player == null:
+		return
+	var summons = controlled_player.get("summons")
+	if summons == null or not (summons is Array) or (summons as Array).is_empty():
+		return
+	# 30号终版（主人裁定 2026-10-06：没有前后左右按键，只有鼠标控制方向）——
+	# 召唤体自游（自带游速），鼠标悬停=朝向/游向（各自朝鼠标游）；球手动制导 WASD 口径零改动
+	for s in summons:
+		if is_instance_valid(s) and s.has_method("control_move"):
+			if not active:
+				s.control_move(Vector2.ZERO, mouse_world_pos)
+				continue
+			var to_mouse: Vector2 = mouse_world_pos - (s as Node2D).global_position
+			s.control_move(to_mouse.normalized() if to_mouse.length_squared() > 1.0 else Vector2.ZERO, mouse_world_pos)
+
+
 func compose_steer_direction(base_dir: Vector2, key_yaw: float) -> Vector2:
 	if absf(key_yaw) < 0.0001:
 		return base_dir
@@ -383,6 +402,21 @@ func _route_space_to_skill() -> void:
 	var b = controlled_player.get("ball_ref")
 	if b != null and is_instance_valid(b) and b.get("_manual_active") == true and b.has_method("steer_space_action"):
 		b.steer_space_action(mode)
+	# 29-S6（02 #10 原作备注"空格跳跃让水鲨鱼跳出地下"+05 空格路由延伸）：
+	# 操控窗内空格=steer 鲨鱼潜地翻转（burrowed→浮出 / active→潜入；潜地耗能 tick=实体既有）
+	var summons = controlled_player.get("summons")
+	if summons != null and (summons is Array):
+		for s in summons:
+			if is_instance_valid(s) and s.has_method("apply_steer_direction") and s.has_method("exit_burrow"):
+				var tdef: Dictionary = s.get("_tdef") if s.get("_tdef") != null else {}
+				if str(tdef.get("controllable", "")) != "steer" or tdef.get("burrow", null) == null:
+					continue
+				if str(s.get("state")) == "burrowed":
+					s.exit_burrow()
+					print("[InputManager] 🦈 空格: 水鲨鱼跳出地下")
+				elif str(s.get("state")) == "active":
+					s.enter_burrow()
+					print("[InputManager] 🦈 空格: 水鲨鱼潜入地下")
 
 
 func set_controlled_player(player: CharacterBody2D) -> void:
@@ -467,6 +501,24 @@ func _process(delta: float) -> void:
 
 	# 波6 #17 手动制导（项1 双源）：方向=球员朝向（鼠标/FP 折算）+ A/D 偏转增量叠加
 	inject_steer_to_ball()
+
+	# 27-R4：STEER 输入源覆盖召唤实体（攻鲨同款朝向+A/D 双源；实体侧帧新鲜度守卫）
+	inject_steer_to_summons(migration)
+
+	# 29-S10：MARK 挂起订单重试（白球生成晚于确认点击——订单挂起直到球入册或超时）
+	if skill_state_manager != null and controlled_player != null:
+		skill_state_manager.poll_pending_mark(controlled_player.get_instance_id())
+
+	# 29-S9：引导对象全灭→收窗（04 §69 结束条件：命中/耗尽/超时）——
+	# 召唤体没了且球非手动态且上下文仍挂 OP_STEER=窗口已无对象，清除上下文恢复球员行走
+	if migration and controlled_player != null and skill_state_manager != null:
+		var _ball = controlled_player.get("ball_ref")
+		var _ball_live: bool = _ball != null and is_instance_valid(_ball) and bool(_ball.get("_manual_active"))
+		var _summons = controlled_player.get("summons")
+		var _has_summons: bool = _summons != null and (_summons is Array) and not (_summons as Array).is_empty()
+		if not _ball_live and not _has_summons 				and skill_state_manager.get_player_operator(controlled_player.get_instance_id()) == "OP_STEER" 				and skill_state_manager.steer_grace_expired(controlled_player.get_instance_id()):
+			skill_state_manager._clear_operator_context(controlled_player.get_instance_id())
+			print("[InputManager] STEER 窗收起（引导对象全灭）→ 球员恢复行走")
 
 	# 项3 拖长击：拖动中吸附检测（附近敌方=可作用对象 b；大相机限定），目标圈高亮为功能性显示
 	if _drag_state.active and not fp_mode:

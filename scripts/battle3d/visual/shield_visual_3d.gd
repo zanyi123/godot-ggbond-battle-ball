@@ -61,6 +61,7 @@ func _on_shield_state_changed(_hp: float, _reason: String) -> void:
 
 
 ## bridge 每帧调用：贴 2D 盾体位姿（单位制铁律 (x, 0, y)）
+## D12（2026-10-04 主人批"可以"）：rotation.y 取负（2D 角→3D 同向；弧面对称肉眼难察觉，统一修才对）
 func sync_from_2d(pos: Vector2, rot_y: float) -> void:
 	global_position = Vector3(pos.x, 30.0, pos.y)
-	rotation.y = rot_y
+	rotation.y = -rot_y

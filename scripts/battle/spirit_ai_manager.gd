@@ -888,6 +888,32 @@ func score_bare_hand_catch(p: Node2D, incoming_speed: float, incoming_dmg: float
 
 ## 24号 综合评分：技能防御评估（返回含 win 0~1 扛住概率的最高分技能，无则空）
 ## win 口径：hard_block=盾余量/防御力 vs 来球伤害 的扛住概率；soften/avoid=固有力值折算
+## 28号 统一出口（ai_manager 防御平替调用）：徒手接球 vs 技能防御 vs 跳跃 三候选同池评分
+## 返回 {best_kind: skill/catch/jump, best_skill, win}
+func get_defense_scores(sad: Dictionary, incoming_dmg: float, defense_eta: float) -> Dictionary:
+	var out := {"best_kind": "jump", "best_skill": {}, "win": 0.0}
+	var spd: float = defense_eta if defense_eta > 0.0 else 1.0  # 兜底（无 ETA 视为中等球速）
+	var skill_best: Dictionary = pick_defense_skill(sad, incoming_dmg, spd)
+	var skill_win: float = float(skill_best.get("win", 0.0))
+	var catch_win: float = 0.75  # 徒手接球基准胜率（有姿态历史口径）
+	var skill_id := str(skill_best.get("skill_id", ""))
+	if skill_best.is_empty():
+		skill_win = -1.0
+	# 跳跃=兜底动作（闪避上/下路，win 恒定基线）
+	var jump_win: float = 0.6
+	if skill_win >= catch_win and skill_win >= jump_win:
+		out["best_kind"] = "skill"
+		out["best_skill"] = skill_best
+		out["win"] = skill_win
+	elif catch_win >= jump_win:
+		out["best_kind"] = "catch"
+		out["win"] = catch_win
+	else:
+		out["best_kind"] = "jump"
+		out["win"] = jump_win
+	return out
+
+
 func pick_defense_skill(sad: Dictionary, incoming_dmg: float, incoming_spd: float) -> Dictionary:
 	var p = sad.player
 	var best: Dictionary = {}

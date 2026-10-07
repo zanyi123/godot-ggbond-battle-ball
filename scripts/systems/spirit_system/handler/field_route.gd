@@ -169,12 +169,11 @@ func _apply_summon_spawn(params: Dictionary, caster_id: int) -> void:
 	var count: int = maxi(int(params.get("count", params.get("spawn_count", 1))), 1)
 	# 1001 生成位置修正（主人实测"生成在己方内场，与描述不符"）：原作=白球在外场上空生成。
 	# 位置=敌方外场带（16号铁事实：a 攻+x→a 的敌方外场 x≈+560；b 镜像 -560），y 确定性散布（零随机）。
-	var caster_team := str(caster.team)
-	var spawn_x: float = 560.0 if caster_team == "a" else -560.0
+	# 32号b：生成位=类型表 spawn_hint 数据驱动（鲨鱼=施法者脚下=主人终裁"在释放技能的球员脚下出现"；
+	# 白球=敌方外场带全域随机=主人裁定）——单一事实源=manager.resolve_spawn_position
 	var spawned: Array = []
 	for i in range(count):
-		var spread_y: float = -160.0 + float(i) * 120.0  # 确定性纵向散布（零随机）
-		var pos: Vector2 = Vector2(spawn_x, spread_y)
+		var pos: Vector2 = sm.resolve_spawn_position(type_id, caster)
 		var ent: Node = sm.spawn(type_id, caster_id, pos)
 		if ent != null:
 			spawned.append(ent)

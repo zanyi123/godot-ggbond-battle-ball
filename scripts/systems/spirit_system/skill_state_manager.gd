@@ -131,13 +131,121 @@ func confirm_substate_at(player_id: int, world_pos: Vector2) -> String:
 		_operator_context.erase(player_id)
 		return "released"
 
-	# 普通子态：直接释放（既有行为）
+	# 32号b：白球指挥两段（MARKING）——左键点球选中→左键点敌出击爆炸/交付
+	if sub == OperatorSubState.MARKING and int(ctx.get("mark_stage", 0)) > 0:
+		var mstage: int = int(ctx.get("mark_stage", 0))
+		var parent2 = get_parent()
+		var cp2 = parent2.get("controlled_player") if parent2 != null else null
+		if mstage == 1:
+			var ball: Node = _nearest_command_ball(cp2, world_pos, 120.0)
+			if ball != null:
+				ctx["selected_summon"] = ball
+				ctx["mark_stage"] = 2
+				last_confirm_info = {"action": "ball_selected"}
+				print("[SkillState] 白球已选中（再左键点敌=出击/交付）")
+				return "ball_selected"
+			print("[SkillState] 附近无白球可选中（点球 120px 内）")
+			return ""
+		if mstage == 2:
+			var sel: Node = ctx.get("selected_summon", null)
+			if sel != null and is_instance_valid(sel) and sel.has_method("issue_order_at"):
+				sel.issue_order_at(world_pos)
+			else:
+				print("[SkillState] 选中球已失效，指挥作废")
+			_release_skill(player_id, int(ctx["slot"]))
+			_operator_context.erase(player_id)
+			last_confirm_info = {"action": "ordered", "position": world_pos}
+			return "ordered"
+
+	# 普通子态：直接释放（既有行为；非白球指挥的 MARKING 维持旧语义）
 	if sub in [OperatorSubState.AIMING, OperatorSubState.SELECTING, OperatorSubState.MARKING]:
 		_release_skill(player_id, int(ctx["slot"]))
 		last_confirm_info = {"action": "released", "position": world_pos}
 		_operator_context.erase(player_id)
 		return "released"
 	return ""
+
+
+## 32号b：指挥目标球选择（玩家已生成白球中距点最近者；snap 半径内）
+func _nearest_command_ball(cp: Node, world_pos: Vector2, snap: float) -> Node:
+	if cp == null or not is_instance_valid(cp):
+		return null
+	var summons = cp.get("summons")
+	if summons == null or not (summons is Array):
+		return null
+	var best: Node = null
+	var best_d: float = snap
+	for s in summons:
+		if is_instance_valid(s):
+			var tdef: Dictionary = s.get("_tdef") if s.get("_tdef") != null else {}
+			if str(tdef.get("kind", "")) == "magic_ball":
+				var d: float = float(s.global_position.distance_to(world_pos))
+				if d <= best_d:
+					best_d = d
+					best = s
+	return best
+
+
+## 27-R1（平台报告断点A桥）：MARKING 确认坐标→最近已生成白球出击/交付
+## （白球=自动生成体系，激活→左键确认=指挥最近球飞向点选处；手搓 _unhandled_input 链已下线=断点B 一并消除）
+var _pending_mark: Dictionary = {}   # 29-S10: player_id -> {pos, until}（白球生成晚于确认的挂起订单）
+
+## 29-S10：MARK 挂起订单重试（input_manager 每帧调；命中最近球即下发，1.5s 超时作废）
+func poll_pending_mark(player_id: int) -> void:
+	if not _pending_mark.has(player_id):
+		return
+	var pd: Dictionary = _pending_mark[player_id]
+	if Time.get_ticks_msec() > int(pd.get("until", 0)):
+		_pending_mark.erase(player_id)
+		print("[SkillState] MARK 挂起订单超时作废")
+		return
+	var parent = get_parent()
+	var cp = parent.get("controlled_player") if parent != null else null
+	if cp == null or not is_instance_valid(cp):
+		return
+	var summons = cp.get("summons")
+	if summons == null or not (summons is Array) or (summons as Array).is_empty():
+		return
+	var best: Node = null
+	var best_d: float = 1e12
+	for s in summons:
+		var tdef: Dictionary = s.get("_tdef") if s.get("_tdef") != null else {}
+		if is_instance_valid(s) and str(tdef.get("kind", "")) == "magic_ball":
+			var d: float = float(s.global_position.distance_to(pd.get("pos", Vector2.ZERO)))
+			if d < best_d:
+				best_d = d
+				best = s
+	if best != null and best.has_method("issue_order_at"):
+		best.issue_order_at(pd.get("pos", Vector2.ZERO))
+		_pending_mark.erase(player_id)
+		print("[SkillState] MARK 挂起订单下发: 白球 → %s" % str(pd.get("pos", Vector2.ZERO)))
+
+
+func _bridge_marking_to_summon(player_id: int, world_pos: Vector2) -> void:
+	var parent = get_parent()
+	if parent == null:
+		return
+	var cp = parent.get("controlled_player")
+	if cp == null or not is_instance_valid(cp):
+		return
+	var summons = cp.get("summons")
+	if summons == null or not (summons is Array) or (summons as Array).is_empty():
+		# 29-S10：球尚未生成（spawn 晚于确认）→挂起订单由 poll_pending_mark 逐帧补下发
+		_pending_mark[player_id] = {"pos": world_pos, "until": Time.get_ticks_msec() + 1500}
+		print("[SkillState] MARKING: 球未生成→挂起订单（1.5s 内生成即补下发） pos=%s" % str(world_pos))
+		return
+	var best: Node = null
+	var best_d: float = 1e12
+	for s in summons:
+		var tdef: Dictionary = s.get("_tdef") if s.get("_tdef") != null else {}  # 4.6 get 仅1参（18e61d6 怪癖）
+		if is_instance_valid(s) and str(tdef.get("kind", "")) == "magic_ball":
+			var d: float = float(s.global_position.distance_to(world_pos))
+			if d < best_d:
+				best_d = d
+				best = s
+	if best != null and best.has_method("issue_order_at"):
+		best.issue_order_at(world_pos)
+		print("[SkillState] MARKING 桥: 白球出击/交付 → %s" % str(world_pos))
 
 ## 项3 拖长击（05 §3.3）：松开时 a 对 b 作用——选中记录 a/b 两端后释放（v1 目标写入 selected 供效果链消费）
 func confirm_drag(player_id: int, a_pos: Vector2, b_node: Node2D, b_pos: Vector2) -> bool:
@@ -160,6 +268,12 @@ func clear_substate_selection(player_id: int) -> bool:
 	ctx.erase("selected")
 	if ctx.has("reclick_stage"):
 		ctx["reclick_stage"] = 1
+	# 32号b：白球两段 stage2→1（重选球）
+	if int(ctx.get("mark_stage", 0)) == 2:
+		ctx["mark_stage"] = 1
+		ctx.erase("selected_summon")
+		print("[SkillState] 白球重选（右键取消选中）")
+		return true
 	return true
 
 ## 项1 按键迁移窗口（05 §1）：STEER 类激活期（操1 设计：STEER 无激活子态，激活即窗口）+ STEERING 子态（前瞻兼容）
@@ -187,6 +301,37 @@ func get_drag_snap_radius(player_id: int) -> float:
 		if tp.has("snap_radius"):
 			return float(tp["snap_radius"])
 	return 80.0
+
+## 29-S9：召唤型 STEER 判定（OP_STEER + tags 含 summon_spawn + 非白球=鲨鱼系）
+## 32号b 收紧：白球技（fenny_2/3）tags 已移除 summon_spawn（球=自动补充，32号b 主人裁定）
+func _is_summon_steer_skill(skill_id: String) -> bool:
+	if get_operator(skill_id) != "OP_STEER":
+		return false
+	var sd: Dictionary = _get_skill_data(skill_id)
+	if not (sd.get("tags", []) as Array).has("summon_spawn"):
+		return false
+	var tp: Dictionary = sd.get("tag_params", {}).get("summon_spawn", {}) if sd.get("tag_params", {}).get("summon_spawn", {}) is Dictionary else {}
+	return not str(tp.get("type_id", "")).contains("magic_ball")
+
+
+## 32号b：白球指挥技判定（tag_params.summon_spawn.type_id 含 magic_ball——数据标记保留、tags 已移除=按键只进操作态不生成）
+func _skill_commands_magic_ball(skill_id: String) -> bool:
+	var sd: Dictionary = _get_skill_data(skill_id)
+	var tp: Dictionary = sd.get("tag_params", {}).get("summon_spawn", {}) if sd.get("tag_params", {}).get("summon_spawn", {}) is Dictionary else {}
+	return str(tp.get("type_id", "")).contains("magic_ball")
+
+
+## 29-S9：玩家当前操作上下文 operator 读取口（input_manager 收窗判定用；无上下文=空）
+func get_player_operator(player_id: int) -> String:
+	return str(_operator_context.get(player_id, {}).get("operator", ""))
+
+
+## 30号：收窗宽限判定（宽限期内召唤体还没入账也不收窗；防生成入账竞态）
+func steer_grace_expired(player_id: int) -> bool:
+	var ctx: Dictionary = _operator_context.get(player_id, {})
+	var until: int = int(ctx.get("steer_grace_until", 0))
+	return until <= 0 or Time.get_ticks_msec() > until
+
 
 ## 项7 召唤指令下发（v1：无召唤体登记时告警不崩溃；实体登记随 S5）
 func _notify_summon_order(player_id: int, world_pos: Vector2) -> void:
@@ -519,6 +664,20 @@ func on_skill_key_pressed(player_id: int, slot: int) -> bool:
 	if skill_info.state == SkillState.RELEASING and get_operator(skill_id) == "OP_MIDFLY":
 		return _trigger_midfly(player_id, skill_id)
 
+	# 29-S9：召唤型 STEER（鲨鱼系）单击即施放——释放=召唤鲨鱼，操控窗引导
+	if skill_info.state == SkillState.IDLE and _is_summon_steer_skill(skill_id):
+		print("[SkillState] 召唤型STEER 单击即施放: %s" % skill_id)
+		_activate_skill(player_id, slot)
+		_release_skill(player_id, slot)
+		return true
+	# 32号b：白球指挥技（fenny_2/3）按键=进操作态（不生成——球自动补充；两段点击指挥球）
+	if skill_info.state == SkillState.IDLE and _skill_commands_magic_ball(skill_id):
+		_activate_skill(player_id, slot)
+		_operator_context[player_id]["substate"] = OperatorSubState.MARKING
+		_operator_context[player_id]["mark_stage"] = 1
+		print("[SkillState] 白球指挥态: %s（左键点球→左键点敌；右键重选/ESC 取消）" % skill_id)
+		return false
+
 	# 检测双击
 	if _last_press_times[player_id].has(slot):
 		var last_press = _last_press_times[player_id][slot]
@@ -674,8 +833,12 @@ func _release_skill(player_id: int, slot: int) -> void:
 	# 清除激活记录
 	_active_player_skills.erase(player_id)
 	# 操1 OP_MIDFLY：保留操作上下文（飞行中再按干预需 midfly_left；球结算时经 _release 时清）
-	if get_operator(skill_id) != "OP_MIDFLY":
+	# 29-S9：召唤型 STEER 同样保留——操控窗随召唤体生命周期（04 §69 结束条件=全灭由 input_manager 收窗）
+	if get_operator(skill_id) != "OP_MIDFLY" and not _is_summon_steer_skill(skill_id):
 		_clear_operator_context(player_id)
+	elif _is_summon_steer_skill(skill_id):
+		# 30号：收窗宽限 2.5s——标签可能队列化（生成入账晚于释放返回），宽限期内不判空收窗
+		_operator_context[player_id]["steer_grace_until"] = Time.get_ticks_msec() + 2500
 
 	skill_released.emit(skill_id, player_id)
 	print("[SkillState] 技能已释放: %s (玩家:%d)" % [skill_id, player_id])

@@ -21,6 +21,17 @@ var _ball_2d: Node2D = null
 var _dbg_tick: int = 0                 # 挂点调试打印节流（步骤④实测用）
 var _field_zone: Node2D = null
 
+# 07工单：障碍物 3D 镜像（3D 模式下 2D 色块被全屏贴图遮蔽；同盾先例只读消费，轮询补建/清理）
+var _obstacle_manager: Node = null
+var _obstacle_proxies: Dictionary = {} # obstacle_2d(Node) -> ObstacleVisual3D
+# 07工单·zone段（操控UI-0929-1 已批）：场地效果区 3D 镜像（同上先例，轮询 field_zone_manager.zones）
+var _zone_proxies: Dictionary = {}     # zone_2d(Node) -> ZoneVisual3D
+# 24号 A1/A2 随行美术：召唤物 3D 镜像（水鲨鱼/魔术白球模型；事件总线订阅补建/清理，召唤系统零改动只读消费）
+var _summon_proxies: Dictionary = {}   # summon_2d(Node) -> Node3D
+var _summon_bus: Node = null           # battle_event_bus 懒查找缓存（总线战斗内后建）
+# D14：快道放置预览 3D 主轨（镜像 2D placer 预览权威位姿；非放置态隐藏）
+var _zone_preview_proxy: MeshInstance3D = null
+
 var _placeholders_hidden: bool = false
 var _last_field_visible: bool = false
 var _hud_label: Label = null
@@ -61,6 +72,10 @@ func setup(mgr: Node2D) -> void:
 	var om = battle_mgr.get_node_or_null("ObstacleManager") if battle_mgr != null else null
 	if om != null and om.has_signal("player_shield_spawned"):
 		om.player_shield_spawned.connect(_on_shield_spawned_3d)
+	# 07工单：障碍物 3D 镜像（不接信号，_sync_obstacles 每帧轮询 obstacles 数组，obstacle_manager 零改动）
+	if om != null:
+		_obstacle_manager = om
+	# 07工单·zone段：zone manager 经 battle_mgr.field_zone_manager 属性直取（zones 数组每帧轮询）
 	print("[Bridge3D] ✅ 3D 场景层构建完成 (players=%d)" % _player_proxies.size())
 
 ## P1 场地投影落点光标：贴地环（黄=瞄准中，红=路径标中球员），显示在鼠标地面投影处
@@ -319,6 +334,10 @@ func _process(delta: float) -> void:
 	if battle_mgr == null or _field_zone == null:
 		return
 	_sync_shields()
+	_sync_obstacles()
+	_sync_zones()
+	_sync_summons()
+	_sync_zone_preview()
 	# 换人重建检测：不受 field_visible 限制（备战阶段换人也要重建，开赛即正确）
 	_check_roster_rebuild()
 	var field_visible: bool = _field_zone.visible
@@ -368,6 +387,169 @@ func _sync_shields() -> void:
 		if proxy != null and is_instance_valid(proxy):
 			proxy.queue_free()
 		_shield_proxies.erase(shield2d)
+
+
+## 07工单：障碍物 3D 镜像同步（轮询 obstacles 数组补建/清理/贴位姿；obstacle_manager 零改动，只读消费）
+func _sync_obstacles() -> void:
+	if _obstacle_manager == null:
+		return
+	# 补建：2D 障碍存在但代理缺失（AI 直生/玩家放置统一走这里）
+	for obs in _obstacle_manager.obstacles:
+		if obs == null or not is_instance_valid(obs) or _obstacle_proxies.has(obs):
+			continue
+		var vis_script: GDScript = load("res://scripts/battle3d/visual/obstacle_visual_3d.gd")
+		if vis_script == null:
+			return
+		var proxy: Node3D = Node3D.new()
+		proxy.set_script(vis_script)
+		_world.add_child(proxy)
+		proxy.setup(obs)
+		_obstacle_proxies[obs] = proxy
+		print("[Bridge3D] 🧱 障碍 3D 代理补建 → shape=%s hp=%.0f pos=(%d,%d)" % [
+			str(obs.get("shape_type")), float(obs.get("obstacle_hp")),
+			int(obs.global_position.x), int(obs.global_position.y)])
+	# 清理：已销毁的 2D 障碍（球磨碎/到期/remove）
+	var dead: Array = []
+	for obs in _obstacle_proxies:
+		if obs == null or not is_instance_valid(obs):
+			dead.append(obs)
+	for obs in dead:
+		var proxy = _obstacle_proxies[obs]
+		if proxy != null and is_instance_valid(proxy):
+			proxy.queue_free()
+		_obstacle_proxies.erase(obs)
+	# 贴位姿（每帧，单位制 (x, 0, y)）
+	for obs in _obstacle_proxies:
+		if obs != null and is_instance_valid(obs):
+			_obstacle_proxies[obs].sync_from_2d(obs.global_position, obs.rotation)
+
+
+## 07工单·zone段（操控UI-0929-1 已批）：场地效果区 3D 镜像同步（轮询 field_zone_manager.zones，
+## 同障碍先例；zone_manager 零改动，只读消费）
+func _sync_zones() -> void:
+	if battle_mgr == null or battle_mgr.get("field_zone_manager") == null:
+		return
+	var zm: Node = battle_mgr.field_zone_manager
+	# 补建：2D zone 存在但代理缺失
+	for zone in zm.zones:
+		if zone == null or not is_instance_valid(zone) or _zone_proxies.has(zone):
+			continue
+		var vis_script: GDScript = load("res://scripts/battle3d/visual/zone_visual_3d.gd")
+		if vis_script == null:
+			return
+		var proxy: Node3D = Node3D.new()
+		proxy.set_script(vis_script)
+		_world.add_child(proxy)
+		proxy.setup(zone)
+		_zone_proxies[zone] = proxy
+		print("[Bridge3D] 🟩 zone 3D 代理补建 → type=%d size=(%d,%d) pos=(%d,%d)" % [
+			int(zone.get("zone_type")), int(zone.get("zone_size").x), int(zone.get("zone_size").y),
+			int(zone.global_position.x), int(zone.global_position.y)])
+	# 清理：已到期的 2D zone
+	var dead: Array = []
+	for zone in _zone_proxies:
+		if zone == null or not is_instance_valid(zone):
+			dead.append(zone)
+	for zone in dead:
+		var proxy = _zone_proxies[zone]
+		if proxy != null and is_instance_valid(proxy):
+			proxy.queue_free()
+		_zone_proxies.erase(zone)
+	# 贴位姿（每帧，单位制 (x, 0, y)）
+	for zone in _zone_proxies:
+		if zone != null and is_instance_valid(zone):
+			_zone_proxies[zone].sync_from_2d(zone.global_position, zone.rotation)
+
+
+## D14：快道放置预览 3D 主轨（镜像 2D placer 预览权威：位姿/尺寸全读 preview_node 现状；
+## 仅放置中的快道显示，非放置态隐藏；placer 零改动只读消费）
+func _sync_zone_preview() -> void:
+	var placer: Node = null
+	if battle_mgr != null and battle_mgr.get("field_zone_manager") != null:
+		placer = battle_mgr.field_zone_manager.get_node_or_null("FieldZonePlacer")
+	var pv: Node2D = placer.get("preview_node") if placer != null else null
+	var active: bool = placer != null and is_instance_valid(placer) and placer.current_mode == placer.Mode.PLACING \
+		and pv != null and is_instance_valid(pv) and int(placer.place_params.get("zone_type", -1)) == 6
+	if not active:
+		if _zone_preview_proxy != null and is_instance_valid(_zone_preview_proxy):
+			_zone_preview_proxy.visible = false
+		return
+	# 懒建：贴地半透明长条（水色系与 2D 预览同源配色）
+	if _zone_preview_proxy == null or not is_instance_valid(_zone_preview_proxy):
+		_zone_preview_proxy = MeshInstance3D.new()
+		_zone_preview_proxy.name = "ZonePathPreview3D"
+		_zone_preview_proxy.mesh = BoxMesh.new()
+		var pm := StandardMaterial3D.new()
+		pm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		pm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		pm.albedo_color = Color(0.1, 0.55, 0.75, 0.3)
+		_zone_preview_proxy.material_override = pm
+		_world.add_child(_zone_preview_proxy)
+	# 镜像 2D 预览权威：位置/旋转/尺寸（fill.size=长×宽实时值）
+	_zone_preview_proxy.visible = true
+	_zone_preview_proxy.global_position = Vector3(pv.global_position.x, 1.0, pv.global_position.y)
+	_zone_preview_proxy.rotation.y = -pv.rotation  # D12 取负同向
+	var fill: ColorRect = placer.get("_preview_fill")
+	var size: Vector2 = fill.size if fill != null and is_instance_valid(fill) else Vector2(600.0, 48.0)
+	(_zone_preview_proxy.mesh as BoxMesh).size = Vector3(maxf(size.x, 1.0), 2.0, maxf(size.y, 1.0))
+
+
+## 24号 A1/A2 随行美术：召唤物 3D 镜像（水鲨鱼/魔术白球模型；事件总线订阅补建/清理+
+## 每帧位姿同步+失效兜底清理，同盾先例；召唤系统零改动，只读消费）
+func _sync_summons() -> void:
+	# 懒订阅：事件总线战斗内后建（照 summon_entity 组查找口径），找到即订一次
+	if _summon_bus == null or not is_instance_valid(_summon_bus):
+		_summon_bus = get_tree().get_first_node_in_group("battle_event_bus") if get_tree() else null
+		if _summon_bus != null:
+			_summon_bus.subscribe(_summon_bus.GameEvent.SUMMON_SPAWNED, _on_summon_spawned_3d)
+			_summon_bus.subscribe(_summon_bus.GameEvent.SUMMON_DESPAWNED, _on_summon_despawned_3d)
+	# 清理：已注销/失效的 2D 召唤物（despawn 事件为主，失效兜底双保险）
+	var dead: Array = []
+	for ent in _summon_proxies:
+		if ent == null or not is_instance_valid(ent):
+			dead.append(ent)
+	for ent in dead:
+		var proxy = _summon_proxies[ent]
+		if proxy != null and is_instance_valid(proxy):
+			proxy.queue_free()
+		_summon_proxies.erase(ent)
+	# 贴位姿（每帧，单位制 (x, 0, y)）
+	for ent in _summon_proxies:
+		if ent != null and is_instance_valid(ent):
+			_summon_proxies[ent].sync_from_2d(ent.global_position, ent.rotation)
+
+
+func _on_summon_spawned_3d(payload: Dictionary) -> void:
+	var ent = payload.get("node")
+	if ent == null or not is_instance_valid(ent) or _summon_proxies.has(ent):
+		return
+	# kind 分型建代理（类型表 kind：shark=鲨鱼 / magic_ball=魔术白球；未知不建，fail-closed）
+	var tdef: Dictionary = ent.get("_tdef") if ent.get("_tdef") != null else {}
+	var vis_script: GDScript = null
+	match str(tdef.get("kind", "")):
+		"shark":
+			vis_script = load("res://scripts/battle3d/visual/shark_visual_3d.gd")
+		"magic_ball":
+			vis_script = load("res://scripts/battle3d/visual/magic_ball_visual_3d.gd")
+	if vis_script == null:
+		return
+	var proxy: Node3D = Node3D.new()
+	proxy.set_script(vis_script)
+	_world.add_child(proxy)
+	proxy.setup(ent)
+	_summon_proxies[ent] = proxy
+	print("[Bridge3D] 🦈 召唤物 3D 代理补建 → kind=%s type=%s pos=(%d,%d)" % [
+		str(tdef.get("kind", "")), str(ent.get("summon_type")),
+		int(ent.global_position.x), int(ent.global_position.y)])
+
+
+func _on_summon_despawned_3d(payload: Dictionary) -> void:
+	var ent = payload.get("node")
+	if ent != null and _summon_proxies.has(ent):
+		var proxy = _summon_proxies[ent]
+		if proxy != null and is_instance_valid(proxy):
+			proxy.queue_free()
+		_summon_proxies.erase(ent)
 
 
 ## 名单同步：迟到球员补建（dev 模式球员在开赛回调才创建，晚于 bridge）
@@ -439,6 +621,27 @@ func _attach_name_label(proxy: Node3D, p: Node2D) -> void:
 	label.outline_size = 10
 	label.modulate = Color(1.0, 0.85, 0.3) if input_mgr_is_controlled(p) else Color.WHITE
 	proxy.add_child(label)
+	_attach_enemy_marker(proxy, p)
+
+
+## 23号工单：敌方作用对象头顶状态标记·3D 主轨（Label3D 文字串；分流开关 EnemyStatusMarker.show_mode）
+func _attach_enemy_marker(proxy: Node3D, p: Node2D) -> void:
+	var marker_script: GDScript = load("res://scripts/battle/enemy_status_marker.gd")
+	if marker_script == null:
+		return
+	var controlled: Node = null
+	if battle_mgr != null and battle_mgr.get("input_mgr") != null and battle_mgr.input_mgr.get("controlled_player") != null:
+		controlled = battle_mgr.input_mgr.controlled_player
+	if not marker_script.should_mark(p, controlled):
+		return
+	var vis_script: GDScript = load("res://scripts/battle3d/visual/enemy_marker_3d.gd")
+	if vis_script == null:
+		return
+	var marker: Node3D = Node3D.new()
+	marker.set_script(vis_script)
+	marker.name = "EnemyMarker3D"
+	proxy.add_child(marker)
+	marker.setup(p)
 
 func input_mgr_is_controlled(p: Node2D) -> bool:
 	return battle_mgr != null and battle_mgr.input_mgr != null and battle_mgr.input_mgr.controlled_player == p

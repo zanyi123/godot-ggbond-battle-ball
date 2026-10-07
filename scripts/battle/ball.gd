@@ -509,6 +509,21 @@ func _on_body_entered(body: Node2D) -> void:
 		return
 	_hit_player_ids[pid] = true
 
+	# 27-J1 前置拦截窗口（23-F2/23c 口径落定：伤害与 on-hit 标签均不达=免负面）：
+	# 受击者装备锅（defend_intercept_ready）→ 敌方攻击在 take_damage/consume_hit_tags 之前整发拦截，
+	# 发 DEFEND_INTERCEPT（granter 订阅端自管耐久，耐久尽自动摘标志）；耐久限内"抵御任何攻击"
+	if attacker_player and player.team != attacker_player.team and bool(player.get("defend_intercept_ready")):
+		var _blk_bus = _event_bus()
+		if _blk_bus:
+			_blk_bus.emit_event(BattleEventBus.GameEvent.DEFEND_INTERCEPT, {
+				"defender": player, "attacker": attacker_player,
+				"blocked_damage": ball_damage,
+				"item": str(player.get("defend_intercept_item") if player.get("defend_intercept_item") != null else ""),
+			})
+		print("[Ball] 锅拦截: %s 抵御 %s 的攻击（伤害与负面均未达）" % [_pname(player), _pname(attacker_player)])
+		_stop_and_return()
+		return
+
 	# 命中传递（2026-09-27 修复"印记挂自己"）：随球 on-hit 标签以被命中者为目标消费——
 	# 挂在所有命中分支的公共必经点（追踪球归受击者/伤害/接球语义都先落地 on-hit）
 	if tag_effect_handler:
@@ -529,6 +544,11 @@ func _on_body_entered(body: Node2D) -> void:
 		return
 
 	# === 对方球员 → 击中造成伤害 ===
+	# 27-D13（2026-10-04 主人裁定）：印记随球命中传递——施法者身上的印记转到被命中敌人
+	# （阈值在受击者侧补触发；时限随转移继承；拦截短路=攻击未成立不传递）
+	if tag_effect_handler and attacker_player:
+		tag_effect_handler.transfer_marks_on_hit(attacker_player.get_instance_id(), player)
+
 	# 23-F2 属性瓦解分发点（唯一，23a草案§2.2）：被击者撕咬防御态 且 来袭=其克制元素 → 瓦解
 	# （零伤+事件广播；停球/改线由撕咬实体订阅 DEFEND_ATTRIBUTE_BREAK 自行处理）
 	var _att_el: String = _attacker_element()
@@ -572,9 +592,10 @@ func _on_body_entered(body: Node2D) -> void:
 		print("[Ball] AOE范围伤害: 半径=%.0f 范围伤害=%.1f 命中%d人" % [aoe_radius, aoe_damage, hit_count])
 
 	# E2 事件：HIT_TAKEN（含接球姿态命中，effect 供订阅者区分结果）
+	# 27-J2：补 element 字段（来袭属性判定——快牙撕咬"雷火系瞬间瓦解"依赖；枚举注释口径对齐）
 	var _bus = _event_bus()
 	if _bus:
-		_bus.emit_event(BattleEventBus.GameEvent.HIT_TAKEN, {"attacker": attacker_player, "defender": player, "damage": actual_damage, "effect": effect, "was_ready_to_catch": player.is_ready_to_catch})
+		_bus.emit_event(BattleEventBus.GameEvent.HIT_TAKEN, {"attacker": attacker_player, "defender": player, "damage": actual_damage, "effect": effect, "element": _attacker_element(), "was_ready_to_catch": player.is_ready_to_catch})
 
 	# === 待接球姿态：韧性判定决定接球成败（2026-09-11 补回 GD 缺失的接球机制）===
 	# roll 结果映射：knockback1(一段轻击退)=接住球拿球权 / knockback2(二段)=脱手 / 弹飞=球飞走
@@ -1262,6 +1283,10 @@ func _check_obstacle_collision() -> void:
 			# V1-2：通知盾实体"被撞一次"（uses 次数制盾在此扣次）
 			if obs.has_method("on_ball_hit"):
 				obs.on_ball_hit()
+			# 27-J3：统一判定点事件——接触阶段（破障碍/瓦解/停球技能的订阅锚）
+			var _imp_bus = _event_bus()
+			if _imp_bus:
+				_imp_bus.emit_event(BattleEventBus.GameEvent.OBSTACLE_IMPACT, {"obstacle": obs, "ball": self, "phase": "contact"})
 			print("[Ball] 球撞上障碍物! 开始消耗 HP=" + str(snappedf(obs.obstacle_hp, 1.0)))
 			return
 
@@ -1293,6 +1318,10 @@ func _process_obstacle_stuck(delta: float) -> void:
 		# 障碍物被击穿
 		stuck_on_obstacle = null
 		obs._destroy()
+		# 27-J3：击穿阶段
+		var _imp_bus = _event_bus()
+		if _imp_bus:
+			_imp_bus.emit_event(BattleEventBus.GameEvent.OBSTACLE_IMPACT, {"obstacle": obs, "ball": self, "phase": "breakthrough"})
 		if ball_speed <= 0.0 or ball_damage <= 0.0:
 			# 球也耗尽
 			print("[Ball] 击穿障碍物，但球也耗尽")
@@ -1305,6 +1334,10 @@ func _process_obstacle_stuck(delta: float) -> void:
 	if ball_damage <= 0.0 or ball_speed <= 0.0:
 		# 球攻击力或速度耗尽，被障碍物完全挡住
 		stuck_on_obstacle = null
+		# 27-J3：挡停阶段
+		var _imp_bus2 = _event_bus()
+		if _imp_bus2:
+			_imp_bus2.emit_event(BattleEventBus.GameEvent.OBSTACLE_IMPACT, {"obstacle": obs, "ball": self, "phase": "blocked"})
 		print("[Ball] 球被障碍物耗尽!")
 		_stop_and_return()
 

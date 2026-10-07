@@ -6,7 +6,7 @@ extends SceneTree
 
 const SKILLS_PATH := "res://data/spirits/skills.json"
 const REGISTRY_PATH := "res://data/spirits/tags_registry.json"
-const LOADOUTS_PATH := "res://data/systems/spirit_ai/test_loadouts.json"
+const LOADOUTS_PATH := "res://data/systems/spirit_ai/test_loadouts_kirin.json"  # 三连资产归档（主装载已切23号，00ce3cf）
 const HANDLER_PATH := "res://scripts/systems/spirit_system/spirit_tag_effect_handler.gd"
 const STATE_MANAGER_PATH := "res://scripts/systems/spirit_system/skill_state_manager.gd"
 
@@ -33,10 +33,10 @@ class StubTrioPlayer extends CharacterBody2D:
 	var lights_on: Array[String] = []
 	var buffs: Array[Dictionary] = []
 
-	func apply_mark(mark_id: String, max_stacks: int, duration: float) -> int:
+	func apply_mark(mark_id: String, max_stacks: int, duration: float, meta: Dictionary = {}) -> int:
 		var cur: Dictionary = _marks.get(mark_id, {"count": 0})
 		var count: int = int(cur.get("count", 0)) + 1
-		_marks[mark_id] = {"count": count, "max_stacks": maxi(1, max_stacks), "remaining": duration}
+		_marks[mark_id] = {"count": count, "max_stacks": maxi(1, max_stacks), "remaining": duration, "meta": meta.duplicate(true)}
 		return count
 
 	func get_mark_count(mark_id: String) -> int:
@@ -44,6 +44,23 @@ class StubTrioPlayer extends CharacterBody2D:
 
 	func clear_mark(mark_id: String) -> void:
 		_marks.erase(mark_id)
+
+	# 27-D13：转移读端（与真 player 同契约）
+	func drain_all_marks() -> Dictionary:
+		var out: Dictionary = {}
+		for mark_id in _marks:
+			out[mark_id] = _marks[mark_id].duplicate(true)
+		_marks.clear()
+		return out
+
+	func receive_mark(mark_id: String, count: int, max_stacks: int, remaining: float, meta: Dictionary = {}) -> void:
+		var cur: Dictionary = _marks.get(mark_id, {})
+		_marks[mark_id] = {
+			"count": maxi(int(cur.get("count", 0)), maxi(1, count)),
+			"max_stacks": maxi(1, max_stacks),
+			"remaining": maxf(float(cur.get("remaining", 0.0)), remaining),
+			"meta": meta if not meta.is_empty() else cur.get("meta", {}),
+		}
 
 	func turn_on_light(status: String, duration: float, extra: Dictionary = {}) -> bool:
 		lights_on.append(status)
@@ -95,7 +112,7 @@ func _run() -> void:
 		for t in reg.get("tags", []):
 			if typeof(t) == TYPE_DICTIONARY:
 				reg_by_id[str(t.get("id", ""))] = t
-	_assert("J4: tags_registry 107 条（工单23时期2增量：summon_spawn/merge/energy_path）", reg_by_id.size() == 107)
+	_assert("J4: tags_registry 109 条（23时期2增量+并发 summon_limit_up/enhance_next 对账 2026-10-04）", reg_by_id.size() == 109)
 	_assert("J5: 新标签 player_combo_ready 已注册（19b10）", reg_by_id.has("player_combo_ready") and str(reg_by_id.get("player_combo_ready", {}).get("code", "")) == "19b10")
 
 	var tags_ok := true
@@ -172,14 +189,18 @@ func _run() -> void:
 	var mk_params: Dictionary = mk_qilin.duplicate(true)
 	var mk_apply: Dictionary = {"target": "self"}
 	mk_apply.merge(mk_params, true)
+	# 27-D13（2026-10-04 主人裁定）：self 充能印记=施放侧只叠层，阈值随球命中传敌后受击者侧触发
 	handler._apply_player_mark_apply(mk_apply, caster_id)
-	_assert("M2: 首次施法→1层无层触发（近敌无禁疗灯）", caster.get_mark_count("huo_yinji") == 1 and near_foe.lights_on.is_empty())
+	_assert("M2: 首次施法→1层（施放侧无触发，近敌无禁疗灯）", caster.get_mark_count("huo_yinji") == 1 and near_foe.lights_on.is_empty())
 	handler._apply_player_mark_apply(mk_apply, caster_id)
-	_assert("M3: 二次施法→2层→heal_block 层触发（近敌禁疗灯）", caster.get_mark_count("huo_yinji") == 2 and near_foe.lights_on.has("heal_block"))
-	_assert("M4: heal_block 目标=nearest_enemy（远敌无灯）", not far_foe.lights_on.has("heal_block"))
-	var near_lights_before: int = near_foe.lights_on.size()
+	_assert("M3: 二次施法→2层（施放侧不触发=D13 阈值延迟）", caster.get_mark_count("huo_yinji") == 2 and near_foe.lights_on.is_empty() and not far_foe.lights_on.has("heal_block"))
+	handler.transfer_marks_on_hit(caster_id, near_foe)
+	_assert("M4: 球命中传敌→受击者2层+heal_block 灯（阈值受击者侧触发，params target=self=命中的球员）", caster.get_mark_count("huo_yinji") == 0 and near_foe.get_mark_count("huo_yinji") == 2 and near_foe.lights_on.has("heal_block"))
 	handler._apply_player_mark_apply(mk_apply, caster_id)
-	_assert("M5: 三次施法→3层（heal 累计语义再触发；zone 生成依赖 FieldZoneManager，headless fail-closed 不崩溃）", caster.get_mark_count("huo_yinji") == 3 and near_foe.lights_on.size() == near_lights_before + 1)
+	handler._apply_player_mark_apply(mk_apply, caster_id)
+	handler._apply_player_mark_apply(mk_apply, caster_id)
+	handler.transfer_marks_on_hit(caster_id, far_foe)
+	_assert("M5: 三层再传→受击者3层（3层 danger 阈值 zone 生成依赖 FieldZoneManager，headless fail-closed 不崩溃）", caster.get_mark_count("huo_yinji") == 0 and far_foe.get_mark_count("huo_yinji") == 3)
 
 	var mk_single: Dictionary = {
 		"target": "self", "mark_id": "mark_old", "max_stacks": 2, "duration": 5.0,
@@ -187,7 +208,9 @@ func _run() -> void:
 		"threshold_params": {"duration": 4.0, "target": "self"},
 	}
 	handler._apply_player_mark_apply(mk_single, caster_id)
-	_assert("M6: 旧单阈值兼容路径仍生效", caster.get_mark_count("mark_old") == 1 and caster.lights_on.has("heal_block"))
+	_assert("M6: 旧单阈值兼容路径（self 同样延迟施放侧）", caster.get_mark_count("mark_old") == 1 and not caster.lights_on.has("heal_block"))
+	handler.transfer_marks_on_hit(caster_id, near_foe)
+	_assert("M7: 旧单阈值经转移在受击者侧触发", near_foe.lights_on.has("heal_block") and caster.get_mark_count("mark_old") == 0)
 	var mk_both: Dictionary = {
 		"target": "self", "mark_id": "mark_both", "max_stacks": 2, "duration": 5.0,
 		"threshold_count": 1, "threshold_tag": "player_heal_block", "threshold_params": {"duration": 4.0, "target": "self"},
@@ -289,7 +312,7 @@ func _run() -> void:
 
 	# ===== L-平台装载 =====
 	var lo_data: Variant = JSON.parse_string(FileAccess.get_file_as_string(LOADOUTS_PATH))
-	_assert("L1: test_loadouts.json 可解析", typeof(lo_data) == TYPE_DICTIONARY)
+	_assert("L1: 三连归档装载可解析（主装载已切 23号，三连资产=test_loadouts_kirin）", typeof(lo_data) == TYPE_DICTIONARY)
 	var test_spirits: Array = lo_data.get("test_spirits", []) if typeof(lo_data) == TYPE_DICTIONARY else []
 	var spirit_names: Dictionary = {}
 	var spirit_skills_ok := true
@@ -301,7 +324,7 @@ func _run() -> void:
 			if not by_id.has(str(sid)):
 				spirit_skills_ok = false
 				print("    [装载引用悬空] %s → %s" % [str(sp.get("name", "")), str(sid)])
-	_assert("L2: 四原作元灵齐备（墨麟/狐赖/狐宇/泰格）", spirit_names.has("墨麟的元灵") and spirit_names.has("狐赖的元灵") and spirit_names.has("狐宇的元灵") and spirit_names.has("泰格的元灵"))
+	_assert("L2: 三连原作元灵齐备（墨麟/狐赖/狐宇；泰格=19批操控元灵随主装载迁移，非三连资产）", spirit_names.has("墨麟的元灵") and spirit_names.has("狐赖的元灵") and spirit_names.has("狐宇的元灵"))
 	_assert("L3: test_spirits 技能引用零悬空", spirit_skills_ok)
 	var loadouts: Array = lo_data.get("loadouts", [])
 	var lo_ok: bool = loadouts.size() == 6

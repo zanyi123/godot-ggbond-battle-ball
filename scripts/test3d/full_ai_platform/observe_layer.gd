@@ -28,6 +28,9 @@ func setup(battle_manager: Node2D) -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_switches_snapshot = _read_switches_text()
 	_build_ui()
+	# 30号排查（2026-10-06 主人报"面板默认打开挡住白球无法操控"）：默认收起，F9 展开；
+	# 面板 mouse_filter=STOP 会吃掉其覆盖区的左键（白球生成位=敌方外场带恰在其下）
+	_panel.visible = false
 	# 开关状态以文件实态为准（含 registry 未加载过的情形）
 	SpiritAIPrimitiveRegistry.reload_switches()
 	_sync_boxes_from_file()
@@ -85,7 +88,7 @@ func _build_ui() -> void:
 	margin.add_child(vbox)
 
 	var title := Label.new()
-	title.text = "完全体AI 观测层（F9 收起）"
+	title.text = "完全体AI 观测层（F9 展开/收起）"
 	title.add_theme_font_size_override("font_size", 15)
 	vbox.add_child(title)
 

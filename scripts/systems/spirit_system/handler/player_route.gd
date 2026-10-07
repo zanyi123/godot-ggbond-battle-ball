@@ -181,11 +181,23 @@ func _apply_player_mark_apply(params: Dictionary, caster_id: int) -> void:
 	var threshold_tag: String = str(params.get("threshold_tag", ""))
 	var clear_on_trigger: bool = bool(params.get("clear_on_trigger", false))
 	var threshold_params: Dictionary = params.get("threshold_params", {})
+	# 27-D13：阈值配置随印记 meta 存储（转移时携带到受击者侧）
+	var meta: Dictionary = {
+		"thresholds": thresholds.duplicate(true),
+		"threshold_count": threshold_count, "threshold_tag": threshold_tag,
+		"threshold_params": threshold_params.duplicate(true), "clear_on_trigger": clear_on_trigger,
+	}
+	# 27-D13：self 充能印记（target=self）阈值**不在施放时触发**——随球命中传敌后在受击者侧触发
+	# （主人裁定：火印记原作语义=命中的球员吃阈值惩罚；旧"对带印记目标即触发"保留给非 self 目标）
+	var defer_thresholds: bool = str(params.get("target", "self")) == "self"
+	var caster := _get_caster(caster_id)
 	for target in targets:
 		if not target.has_method("apply_mark"):
 			continue
-		var count: int = target.apply_mark(mark_id, max_stacks, duration)
-		print("[TagEffect] 印记: %s 第%d/%d层 target=%s" % [mark_id, count, max_stacks, target.char_data.get("name", "?")])
+		var count: int = target.apply_mark(mark_id, max_stacks, duration, meta)
+		print("[TagEffect] 印记: %s 第%d/%d层 target=%s%s" % [mark_id, count, max_stacks, target.char_data.get("name", "?"), "（阈值随球传递，受击者侧触发）" if defer_thresholds else ""])
+		if defer_thresholds and target == caster:
+			continue  # 充能印记：施放侧只叠层不触发
 		if not thresholds.is_empty():
 			# 多层阈值递进（工单12）：层达即触发（累计），clear 按项配置
 			for th in thresholds:
@@ -206,6 +218,46 @@ func _apply_player_mark_apply(params: Dictionary, caster_id: int) -> void:
 			print("[TagEffect] 印记阈值触发: %s ×%d → %s" % [mark_id, count, threshold_tag])
 			if clear_on_trigger:
 				target.clear_mark(mark_id)
+
+
+## 27-D13 印记随球命中传敌（2026-10-04 主人裁定）：施法者全部印记转移到被命中敌人；
+## 时限随转移继承（receive_mark 合并），阈值配置（meta）在受击者侧补触发；时限到期自动消失=既有倒计时
+func transfer_marks_on_hit(caster_id: int, victim: Node) -> void:
+	var caster := _get_caster(caster_id)
+	if caster == null or victim == null or not is_instance_valid(victim) or caster == victim:
+		return
+	if not victim.has_method("receive_mark") or not caster.has_method("drain_all_marks"):
+		return
+	var drained: Dictionary = caster.drain_all_marks()
+	if drained.is_empty():
+		return
+	for mark_id in drained:
+		var md: Dictionary = drained[mark_id]
+		var count: int = int(md.get("count", 1))
+		victim.receive_mark(str(mark_id), count, int(md.get("max_stacks", 1)), float(md.get("remaining", 5.0)), md.get("meta", {}))
+		print("[TagEffect] 印记传递: %s ×%d → %s" % [str(mark_id), count, victim.char_data.get("name", "?")])
+		# 阈值迁移：受击者侧补触发（≥层即触发，clear 按项配置——与施放侧同口径）
+		var ths: Array = md.get("meta", {}).get("thresholds", [])
+		if ths.is_empty():
+			var thc: int = int(md.get("meta", {}).get("threshold_count", 0))
+			var tht: String = str(md.get("meta", {}).get("threshold_tag", ""))
+			if thc > 0 and count >= thc and tht != "":
+				apply_tag_effect(tht, md.get("meta", {}).get("threshold_params", {}).duplicate(true), victim.get_instance_id())
+				print("[TagEffect] 印记传递阈值: %s ×%d ≥ %d → %s（受击者侧）" % [str(mark_id), count, thc, tht])
+				if bool(md.get("meta", {}).get("clear_on_trigger", false)):
+					victim.clear_mark(str(mark_id))
+			continue
+		for th in ths:
+			if typeof(th) != TYPE_DICTIONARY:
+				continue
+			var thd: Dictionary = th
+			var th_count: int = int(thd.get("count", 0))
+			var th_tag: String = str(thd.get("tag", ""))
+			if th_count > 0 and count >= th_count and th_tag != "":
+				apply_tag_effect(th_tag, thd.get("params", {}).duplicate(true), victim.get_instance_id())
+				print("[TagEffect] 印记传递阈值: %s ×%d ≥ %d → %s（受击者侧）" % [str(mark_id), count, th_count, th_tag])
+				if bool(thd.get("clear", false)):
+					victim.clear_mark(str(mark_id))
 
 
 ## ==================== 工单12 OP_COMBO（主人裁方案a：两队友各持半技能自动合体） ====================

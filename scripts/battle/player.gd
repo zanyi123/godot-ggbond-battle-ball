@@ -1881,6 +1881,8 @@ var _reflecting: bool = false
 var _marks: Dictionary = {}  # {mark_id: {count, max_stacks, remaining}}
 # 波5 #13 toggle 维持型：开启中的 toggle 技能 {skill_id: {lights: [], energy_per_sec}}
 var active_toggles: Dictionary = {}
+# 27-R2（19A S5）：已生成召唤体登记口（summon_manager spawn/despawn 读写；操1 项7/子态桥读端）
+var summons: Array = []
 
 ## 波5 #10 印记层数变化信号（表现层：印记图标/层数显示消费）
 signal mark_changed(mark_id: String, count: int)
@@ -1892,12 +1894,35 @@ signal toggle_changed(skill_id: String, open: bool)
 signal toggle_auto_closed(skill_id: String)
 
 ## 波5 #10：施加/叠加印记（+1 封顶并刷新时长），返回当前层数
-func apply_mark(mark_id: String, max_stacks: int, duration: float) -> int:
+## 27-D13：meta 随印记存储（thresholds 等配置随转移携带；数据面零判定）
+func apply_mark(mark_id: String, max_stacks: int, duration: float, meta: Dictionary = {}) -> int:
 	var cur: Dictionary = _marks.get(mark_id, {"count": 0, "max_stacks": max_stacks, "remaining": 0.0})
 	var count: int = mini(int(cur["count"]) + 1, maxi(1, max_stacks))
-	_marks[mark_id] = {"count": count, "max_stacks": maxi(1, max_stacks), "remaining": duration}
+	_marks[mark_id] = {"count": count, "max_stacks": maxi(1, max_stacks), "remaining": duration, "meta": meta.duplicate(true)}
 	mark_changed.emit(mark_id, count)
 	return count
+
+## 27-D13：印记随球转移读端（handler 调用）——清空全部印记并返回数据快照
+func drain_all_marks() -> Dictionary:
+	var out: Dictionary = {}
+	for mark_id in _marks:
+		out[mark_id] = _marks[mark_id].duplicate(true)
+	_marks.clear()
+	for mark_id in out:
+		mark_changed.emit(mark_id, 0)  # 摘除通知（表现层同步清零）
+	return out
+
+## 27-D13：接收转移印记（叠合并=取较大层数+继承较长剩余时长；meta 一并继承）
+func receive_mark(mark_id: String, count: int, max_stacks: int, remaining: float, meta: Dictionary = {}) -> void:
+	var cur: Dictionary = _marks.get(mark_id, {})
+	var new_count: int = maxi(int(cur.get("count", 0)), maxi(1, count))
+	var new_meta: Dictionary = meta if not meta.is_empty() else cur.get("meta", {})
+	_marks[mark_id] = {
+		"count": new_count, "max_stacks": maxi(1, max_stacks),
+		"remaining": maxf(float(cur.get("remaining", 0.0)), remaining),
+		"meta": new_meta.duplicate(true),
+	}
+	mark_changed.emit(mark_id, new_count)
 
 ## 波5 #10：读取层数
 func get_mark_count(mark_id: String) -> int:

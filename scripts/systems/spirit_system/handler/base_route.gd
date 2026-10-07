@@ -590,7 +590,11 @@ func _do_apply_tag(tag_id: String, params: Dictionary, caster_id: int) -> Dictio
 			call("_apply_field_zone_effect", params, 4)  # 波5 #3 治疗区
 			success = true
 		"field_zone_energy_path":
-			call("_apply_field_zone_effect", params, 6)  # 工单23 F4 能量快道（条带+持续注能+路径增益下发召唤物）
+			# 27排查修复（2026-10-04）：caster_id 走函数参数不进 params——AI 直生取不到施法者
+			# → owner_node 永不设 → 条带退化 120 小块（主人实机报"一小块一坨"根因）。注入后 D14 锚点语义生效
+			var zp: Dictionary = params.duplicate(true)
+			zp["caster_id"] = caster_id
+			call("_apply_field_zone_effect", zp, 6)  # 工单23 F4 能量快道（条带+持续注能+路径增益下发召唤物）
 			success = true
 		# === 召唤物标签 (30-31，工单23水木快牙系；分发口=布场代+集成复核) ===
 		"summon_spawn":
