@@ -1837,6 +1837,9 @@ func set_half_time_mode(is_half_time: bool) -> void:
 
 func _on_start_match() -> void:
 	"""开始比赛"""
+	# 34号S10：正式比赛路径复位测试模式（主菜单比赛发奖/记历史/连胜不受平台测试污染）
+	RewardSystem.test_mode = false
+	print("[备战] 正式比赛模式（发奖/记历史/连胜正常计入）")
 	print("[备战] 开始比赛!")
 	visible = false
 	match_started_from_prep.emit()

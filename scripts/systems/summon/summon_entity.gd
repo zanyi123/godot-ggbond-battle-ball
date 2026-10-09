@@ -72,7 +72,15 @@ func issue_order_at(click_world: Vector2) -> void:
 			ally = owner_ref  # 33号b 交付兜底=球主人（原作"操控球飞向自己获得道具"）——指挥必有可见结果
 		_order = {"mode": "grant", "target": ally.global_position if ally != null else click_world, "ally": ally}
 	_flying = true
-	print("[Summon] 🎯 出击: %s → %s" % [str(_tdef.get("on_ball", {}).get("mode", "")), str(_order.get("target", ""))])
+	# 34号S8 取证打印（主人令"基于证据真实性查清根源"）：出击必须带球主与类型——
+	# 历史日志出击无归属字段，无法对账"AI 指挥链抓的是谁的球"（主人手动场盲区实锤）
+	# 注意 Object.get 仅 1 参（四陷阱 #1）：单参取值+判空守卫
+	var _dbg_owner := "无主"
+	if owner_ref != null and is_instance_valid(owner_ref):
+		var _cd = owner_ref.get("char_data")
+		if _cd != null and (_cd as Dictionary).has("name"):
+			_dbg_owner = str((_cd as Dictionary)["name"])
+	print("[Summon] 🎯 出击: %s → %s（球主=%s type=%s id=%d）" % [str(_tdef.get("on_ball", {}).get("mode", "")), str(_order.get("target", "")), _dbg_owner, str(_tdef.get("type_id", "")), get_instance_id()])
 
 
 ## 27-R2（19A S5 拼图）：召唤体移动指令——操1 项7 SUMMONING/子态确认桥统一入口

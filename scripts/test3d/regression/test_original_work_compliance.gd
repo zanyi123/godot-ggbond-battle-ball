@@ -144,7 +144,9 @@ func _run() -> void:
 	print("\n--- 芬尼·魔术白球 ---")
 	var att_t: Dictionary = tdata.get("types", {}).get("fenny_magic_ball_att", {})
 	var def_t: Dictionary = tdata.get("types", {}).get("fenny_magic_ball_def", {})
-	_assert(str(att_t.get("spawn_hint", "")) == "enemy_outer_random" and str(def_t.get("spawn_hint", "")) == "enemy_outer_random", "白① 外场上空生成=敌方外场带全域随机（主人裁定口径）")
+	# 34号S7c 勘误（2026-10-08 主人澄清）：己方外场=敌方内场背后=交叉布局右带——33号 enemy_outer_random
+	# 的位置语义即主人所要（命名与主人语义相反但位置正确）；本窗口曾误改 own_outer 左带方向，已全部回退
+	_assert(str(att_t.get("spawn_hint", "")) == "enemy_outer_random" and str(def_t.get("spawn_hint", "")) == "enemy_outer_random", "白① 外场上空生成=己方外场带（敌方内场背后，33号原口径）")
 	var pool: Array = def_t.get("on_ball", {}).get("item_pool", []) if def_t.get("on_ball", {}) is Dictionary else []
 	_assert((pool as Array).size() == 3, "白② 道具池=锅/药水/烟花 三道具")
 	# 33号：待命球=储备悬停（不自动交付/不自游）——指挥飞抵才结算

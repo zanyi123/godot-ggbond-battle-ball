@@ -255,14 +255,16 @@ func _resolve_owner_node(owner_id: int) -> Node:
 	return null
 
 
-## 32号b：生成位解析（数据驱动 spawn_hint）——鲨鱼=施法者脚下 / 白球=敌方外场带全域随机；
+## 32号b：生成位解析（数据驱动 spawn_hint）——鲨鱼=施法者脚下 / 白球=外场带全域随机
+## （34号S7b 勘误 2026-10-08：己方外场=敌方内场背后=交叉布局右带，33号原口径即正确——
+##  本窗口曾误改左带方向已回退，spawn_hint 保持 enemy_outer_random 原名原位）
 ## 自动生成与技能施放两路径同源调用（单一事实源）
 func resolve_spawn_position(type_id: String, owner_node: Node) -> Vector2:
 	var tdef: Dictionary = _types.get(type_id, {})
 	var hint := str(tdef.get("spawn_hint", "caster"))
 	var team := str(owner_node.get("team")) if owner_node != null and is_instance_valid(owner_node) else ""
 	if hint == "enemy_outer_random" and (team == "a" or team == "b"):
-		# 敌方外场竖带全域随机（A→右带 / B→左带；留 5px 边距；randf=主人明令随机）
+		# 外场竖带全域随机（A→右带=己方外场(敌方内场背后) / B→左带镜像；randf=主人明令随机）
 		var x: float = randf_range(385.0, 505.0) if team == "a" else randf_range(-505.0, -385.0)
 		return Vector2(x, randf_range(-320.0, 320.0))
 	return owner_node.global_position if owner_node != null and is_instance_valid(owner_node) else Vector2.ZERO

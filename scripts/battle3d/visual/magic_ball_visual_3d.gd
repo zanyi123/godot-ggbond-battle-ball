@@ -72,10 +72,34 @@ func _process(delta: float) -> void:
 	# 29号R3 注：选中高亮已随手搓选中链下线（selected 变量已删）——选中反馈由操1 子态确认流承接
 
 
+## 34号S7 要点③：三级高亮（hover=环加亮放大 / selected=持续选中态 / none）——bridge 轮询置位
+func set_highlight(mode: String) -> void:
+	if _highlight == mode:
+		return
+	_highlight = mode
+	_apply_highlight()
+
+func _apply_highlight() -> void:
+	if _ring == null or _ring_mat == null:
+		return
+	match _highlight:
+		"hover":
+			_ring.scale = Vector3(1.25, 1.25, 1.25)
+			_ring_mat.albedo_color = Color(1.0, 1.0, 0.6, 1.0)  # 加亮白黄
+		"selected":
+			_ring.scale = Vector3(1.4, 1.4, 1.4)
+			_ring_mat.albedo_color = Color(1.0, 0.9, 0.2, 1.0)  # 选中金亮
+		_:
+			_ring.scale = Vector3.ONE
+			_ring_mat.albedo_color = _ring_color()
+
+var _highlight: String = ""
+
 func _refresh() -> void:
 	if _ring_mat == null:
 		return
-	_ring_mat.albedo_color = _ring_color()
+	if _highlight == "":
+		_ring_mat.albedo_color = _ring_color()
 
 
 func _ring_color() -> Color:

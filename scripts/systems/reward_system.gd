@@ -23,6 +23,11 @@ var reward_config: Dictionary = {
 # 连胜计数
 var _win_streak: int = 0
 
+# 34号S10（2026-10-09 主人定版需求：测试模式=不发奖/不写历史/连胜清零 三条，仅此三条）：
+# true 时正式存档三件套关闭（grant_rewards 返回空/record_match_history 跳过）；
+# 置位点=full_ai_platform 开赛（平台纯测试场）；复位点=preparation_ui 正式开赛（主菜单比赛不受污染）
+var test_mode: bool = false
+
 # 配置文件路径
 const REWARD_CONFIG_PATH: String = "user://reward_config.json"
 # 比赛历史记录路径
@@ -42,7 +47,12 @@ func _ready() -> void:
 ## is_forfeit: 是否中途退出（不发奖励、不更新连胜、不记录历史）
 func grant_rewards(result: String, is_forfeit: bool = false) -> Dictionary:
 	var empty_rewards: Dictionary = {"fairy_coin": 0, "spirit_ore": 0, "crystal": 0}
-	
+
+	# 34号S10：测试模式不发奖（主人需求①）
+	if test_mode:
+		print("[RewardSystem] 测试模式：不发放奖励")
+		return empty_rewards
+
 	if is_forfeit:
 		print("[RewardSystem] 中途退出，不发放奖励，不更新连胜")
 		return empty_rewards
@@ -158,6 +168,10 @@ func _load_config() -> void:
 ## stats_data: player_stats.get_report() 返回的数据
 ## rewards: 发放的奖励字典
 func record_match_history(result: String, score_a: int, score_b: int, duration: float, stats_data: Dictionary, rewards: Dictionary) -> void:
+	# 34号S10：测试模式不写比赛历史（主人需求②）——测试胜负不进正式存档
+	if test_mode:
+		print("[RewardSystem] 测试模式：不记录比赛历史")
+		return
 	var history: Array = _load_history()
 
 	# 提取我方（team a）击杀/死亡总数

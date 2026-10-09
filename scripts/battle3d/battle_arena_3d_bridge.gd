@@ -338,6 +338,7 @@ func _process(delta: float) -> void:
 	_sync_zones()
 	_sync_summons()
 	_sync_zone_preview()
+	_sync_command_selection()
 	# 换人重建检测：不受 field_visible 限制（备战阶段换人也要重建，开赛即正确）
 	_check_roster_rebuild()
 	var field_visible: bool = _field_zone.visible
@@ -784,3 +785,89 @@ func _input(event: InputEvent) -> void:
 						print("[Bridge3D] 📷 %s" % path)
 			KEY_ESCAPE:
 				get_tree().quit()
+
+
+## 34号S7 要点③：白球选择三级高亮（hover/selected 球环置位 + stage2 目标角色描边环）
+## 只读轮询 ssm 选择态；人类操控球员限定；零判定
+var _sel_ball_proxy_cache: Node = null
+var _tgt_ring_red: MeshInstance3D = null
+var _tgt_ring_green: MeshInstance3D = null
+
+func _sync_command_selection() -> void:
+	var ssm: Node = null
+	if battle_mgr != null and battle_mgr.get("input_mgr") != null:
+		ssm = battle_mgr.input_mgr.get("skill_state_manager")
+	var cp: Node2D = battle_mgr.get("input_mgr").get("controlled_player") if battle_mgr != null and battle_mgr.get("input_mgr") != null else null
+	if ssm == null or cp == null:
+		return
+	var sel: Dictionary = ssm.get_command_selection(cp.get_instance_id())
+	if sel.is_empty():
+		_clear_selection_rings()
+		_clear_ball_highlights()
+		return
+	# 球环三级：遍历球代理置位（hover/selected 命中者置态，其余归零）
+	var hb = sel.get("hovered_ball", null)
+	var sb = sel.get("selected_ball", null)
+	for ent in _summon_proxies:
+		var proxy = _summon_proxies[ent]
+		var mode := ""
+		if ent == hb:
+			mode = "hover"
+		elif ent == sb:
+			mode = "selected"
+		if proxy != null and is_instance_valid(proxy) and proxy.has_method("set_highlight"):
+			proxy.set_highlight(mode)
+	# stage2 目标角色环（红=敌/绿=友）——34号S7b 修：新建环必须写回成员变量，
+	# 旧写法只赋局部 ring→成员恒 null→每帧新建泄漏一个环=主人截图"逐帧红圈拖影"根因
+	var hc = sel.get("hovered_char", null)
+	if int(sel.get("stage", 0)) == 2 and hc != null and is_instance_valid(hc):
+		var enemy: bool = str(hc.get("team")) != str(cp.get("team"))
+		var ring: MeshInstance3D = _tgt_ring_red if enemy else _tgt_ring_green
+		if ring == null:
+			ring = _make_selection_ring(Color(1.0, 0.25, 0.2, 0.9) if enemy else Color(0.3, 1.0, 0.4, 0.9))
+			if enemy:
+				_tgt_ring_red = ring
+			else:
+				_tgt_ring_green = ring
+		ring.visible = true
+		ring.global_position = Vector3(hc.global_position.x, 4.0, hc.global_position.y)
+		if enemy:
+			if _tgt_ring_green != null and is_instance_valid(_tgt_ring_green):
+				_tgt_ring_green.visible = false
+		else:
+			if _tgt_ring_red != null and is_instance_valid(_tgt_ring_red):
+				_tgt_ring_red.visible = false
+	else:
+		if _tgt_ring_red != null and is_instance_valid(_tgt_ring_red):
+			_tgt_ring_red.visible = false
+		if _tgt_ring_green != null and is_instance_valid(_tgt_ring_green):
+			_tgt_ring_green.visible = false
+
+func _make_selection_ring(color: Color) -> MeshInstance3D:
+	var ring := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 26.0
+	torus.outer_radius = 32.0
+	ring.mesh = torus
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = color
+	ring.material_override = mat
+	_world.add_child(ring)
+	return ring
+
+func _clear_selection_rings() -> void:
+	if _tgt_ring_red != null and is_instance_valid(_tgt_ring_red):
+		_tgt_ring_red.visible = false
+	if _tgt_ring_green != null and is_instance_valid(_tgt_ring_green):
+		_tgt_ring_green.visible = false
+
+## 34号S7b（2026-10-08 主人判定"印记"实证）：选择模式结束（上下文空）时球代理高亮环
+## 必须全归零——旧实现 is_empty 分支只清目标环即 return，最后被 hover/selected 的球
+## 永久带环=主人"多次检索白球带来印记（攻/守都有）"根因
+func _clear_ball_highlights() -> void:
+	for ent in _summon_proxies:
+		var proxy = _summon_proxies[ent]
+		if proxy != null and is_instance_valid(proxy) and proxy.has_method("set_highlight"):
+			proxy.set_highlight("")

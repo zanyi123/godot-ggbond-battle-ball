@@ -134,10 +134,9 @@ func confirm_substate_at(player_id: int, world_pos: Vector2) -> String:
 	# 32号b：白球指挥两段（MARKING）——左键点球选中→左键点敌出击爆炸/交付
 	if sub == OperatorSubState.MARKING and int(ctx.get("mark_stage", 0)) > 0:
 		var mstage: int = int(ctx.get("mark_stage", 0))
-		var parent2 = get_parent()
-		var cp2 = parent2.get("controlled_player") if parent2 != null else null
+		var cp2: Node = _get_controlled_player()
 		if mstage == 1:
-			var ball: Node = _nearest_command_ball(cp2, world_pos, 120.0)
+			var ball: Node = _nearest_command_ball(cp2, world_pos, 120.0, str(ctx.get("command_type", "")))
 			if ball != null:
 				ctx["selected_summon"] = ball
 				ctx["mark_stage"] = 2
@@ -154,6 +153,7 @@ func confirm_substate_at(player_id: int, world_pos: Vector2) -> String:
 				print("[SkillState] 选中球已失效，指挥作废")
 			_release_skill(player_id, int(ctx["slot"]))
 			_operator_context.erase(player_id)
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE  # S7 出口①：下令完成
 			last_confirm_info = {"action": "ordered", "position": world_pos}
 			return "ordered"
 
@@ -166,23 +166,118 @@ func confirm_substate_at(player_id: int, world_pos: Vector2) -> String:
 	return ""
 
 
-## 32号b：指挥目标球选择（玩家已生成白球中距点最近者；snap 半径内）
-func _nearest_command_ball(cp: Node, world_pos: Vector2, snap: float) -> Node:
+## 34号S7：选择态只读口（bridge/视觉层轮询渲染高亮；零判定写操作）
+## 返回 {stage, hovered_ball, selected_ball, hovered_char, want_type}（无上下文=空）
+func get_command_selection(player_id: int) -> Dictionary:
+	var ctx: Dictionary = _operator_context.get(player_id, {})
+	if int(ctx.get("mark_stage", 0)) == 0:
+		return {}
+	return {
+		"stage": int(ctx.get("mark_stage", 0)),
+		"hovered_ball": ctx.get("hovered_ball", null),
+		"selected_ball": ctx.get("selected_summon", null),
+		"hovered_char": ctx.get("hovered_char", null),
+		"want_type": str(ctx.get("command_type", "")),
+	}
+
+
+## 34号S7 要点⓪（主人批 2026-10-08「可以」）：白球指挥态专用查询口——操作模式归一单一事实源
+## 定义=operator 上下文 substate==MARKING 且 mark_stage>0（fenny_2/fenny_3 两技玩家通道同走此态）。
+## input_manager 三处分叉（操控窗判定/全灭收窗/STEER 注入停用）一律改查本口，禁再按 operator 字符串分叉。
+func is_ball_command_mode(player_id: int) -> bool:
+	var ctx: Dictionary = _operator_context.get(player_id, {})
+	if ctx.is_empty():
+		return false
+	return int(ctx.get("substate", 0)) == OperatorSubState.MARKING and int(ctx.get("mark_stage", 0)) > 0
+
+
+## 34号S7 实机修（主人实测"点球没反应"根因）：驾驶者解析单一出口——
+## 实机 ssm 为注入形态挂在 battle_manager 下（parent 无 controlled_player），原六处
+## get_parent().get("controlled_player") 全部取 null=选择模式全哑；r14 stub（parent=host 有值）绿
+## =环境差断点。本口先 parent 直取（stub 兼容）再 battle_manager.input_mgr 反查（实机正路）。
+func _get_controlled_player() -> Node:
+	var p := get_parent()
+	if p != null:
+		var cp_direct = p.get("controlled_player")
+		if cp_direct != null:
+			return cp_direct
+		var im = p.get("input_mgr")
+		if im != null and is_instance_valid(im):
+			return im.get("controlled_player")
+	return null
+
+
+## 34号S7：悬停检测（input_manager 每帧喂鼠标世界坐标）——
+## stage1=snap 内同类型白球→hovered_ball；stage2=snap 内角色→hovered_char
+func set_command_hover(player_id: int, world_pos: Vector2) -> void:
+	var ctx: Dictionary = _operator_context.get(player_id, {})
+	if ctx.is_empty() or int(ctx.get("mark_stage", 0)) == 0:
+		return
+	var cp: Node = _get_controlled_player()
+	if cp == null or not is_instance_valid(cp):
+		return
+	if int(ctx.get("mark_stage", 0)) == 1:
+		var ball: Node = _nearest_command_ball(cp, world_pos, 120.0, str(ctx.get("command_type", "")))
+		if ball != null:
+			ctx["hovered_ball"] = ball
+		else:
+			ctx.erase("hovered_ball")
+	else:
+		var bm: Node = cp.get_parent()  # 34号S7 实机修：同 _nearest_command_ball（parent=input_manager 无名册）
+		var best_char: Node = null
+		var best_cd: float = 90.0
+		for p in (bm.team_a_players + bm.team_b_players):
+			if p == null or not is_instance_valid(p) or p == cp:
+				continue
+			var d: float = float(p.global_position.distance_to(world_pos))
+			if d <= best_cd:
+				best_cd = d
+				best_char = p
+		if best_char != null:
+			ctx["hovered_char"] = best_char
+		else:
+			ctx.erase("hovered_char")
+
+
+## 34号S7：选择态强制收口（六出口共用）——恢复光标+清上下文（恢复随 _clear_operator_context 统一收口）
+func exit_command_mode(player_id: int, reason: String) -> void:
+	_clear_operator_context(player_id)
+
+
+## 32号b：指挥目标球选择（玩家已生成白球中距点最近者；snap 半径内；34号S7 增期望类型过滤+全队球池）
+## 34号S7 实机修：名册随 cp 取（cp.get_parent()=battle_manager）——ssm 实机挂 input_manager 下（无名册），
+## 原 get_parent() 写法在 r14 stub（parent=host 有名册）绿、实机恒空=hover/选球全废的环境差断点
+func _nearest_command_ball(cp: Node, world_pos: Vector2, snap: float, want_type: String = "") -> Node:
 	if cp == null or not is_instance_valid(cp):
 		return null
-	var summons = cp.get("summons")
-	if summons == null or not (summons is Array):
+	# 34号S7b 双拓扑兜底：生产=球员 parent battle_manager 有名册；套件=ssm parent stub host 有名册。
+	# 单取一头会在另一环境恒 null（18:48 主人实测选中 7 连败取证在案）——两处依次解析，谁有名册用谁
+	var bm: Node = cp.get_parent()
+	if bm == null or bm.get("team_a_players") == null:
+		bm = get_parent()
+	if bm == null or bm.get("team_a_players") == null:
 		return null
+	var my_team := str(cp.get("team"))
+	var pool: Array = []
+	for p in (bm.team_a_players + bm.team_b_players):
+		if p == null or not is_instance_valid(p) or str(p.get("team")) != my_team:
+			continue
+		var sms = p.get("summons")
+		if sms is Array:
+			pool.append_array(sms)
 	var best: Node = null
 	var best_d: float = snap
-	for s in summons:
-		if is_instance_valid(s):
-			var tdef: Dictionary = s.get("_tdef") if s.get("_tdef") != null else {}
-			if str(tdef.get("kind", "")) == "magic_ball":
-				var d: float = float(s.global_position.distance_to(world_pos))
-				if d <= best_d:
-					best_d = d
-					best = s
+	for s in pool:
+		if not is_instance_valid(s):
+			continue
+		if want_type != "" and str(s.get("summon_type")) != want_type:
+			continue
+		var tdef: Dictionary = s.get("_tdef") if s.get("_tdef") != null else {}
+		if str(tdef.get("kind", "")) == "magic_ball":
+			var d: float = float(s.global_position.distance_to(world_pos))
+			if d <= best_d:
+				best_d = d
+				best = s
 	return best
 
 
@@ -199,8 +294,7 @@ func poll_pending_mark(player_id: int) -> void:
 		_pending_mark.erase(player_id)
 		print("[SkillState] MARK 挂起订单超时作废")
 		return
-	var parent = get_parent()
-	var cp = parent.get("controlled_player") if parent != null else null
+	var cp: Node = _get_controlled_player()
 	if cp == null or not is_instance_valid(cp):
 		return
 	var summons = cp.get("summons")
@@ -222,10 +316,7 @@ func poll_pending_mark(player_id: int) -> void:
 
 
 func _bridge_marking_to_summon(player_id: int, world_pos: Vector2) -> void:
-	var parent = get_parent()
-	if parent == null:
-		return
-	var cp = parent.get("controlled_player")
+	var cp: Node = _get_controlled_player()
 	if cp == null or not is_instance_valid(cp):
 		return
 	var summons = cp.get("summons")
@@ -283,6 +374,12 @@ func is_key_migration_active(player_id: int) -> bool:
 		return false
 	if not _operator_context.has(player_id):
 		return false
+	# 34号S7c（主人规格"白球技从头到尾=索球-索敌"）：白球指挥态不是键移窗——
+	# fenny_2 operator=OP_STEER，旧判定只看字符串→指挥态期间键移窗恒 true，
+	# STEER 注入排除一旦失效（substate/mark_stage 被二次按键等路径改动）即全量复活=
+	# 主人实测"第二次释放变成操控所有攻击白球鼠标引导"根因
+	if is_ball_command_mode(player_id):
+		return false
 	var ctx: Dictionary = _operator_context[player_id]
 	if str(ctx.get("operator", "")) == "OP_STEER":
 		return true
@@ -336,12 +433,10 @@ func steer_grace_expired(player_id: int) -> bool:
 ## 项7 召唤指令下发（v1：无召唤体登记时告警不崩溃；实体登记随 S5）
 func _notify_summon_order(player_id: int, world_pos: Vector2) -> void:
 	var summons: Array = []
-	var parent = get_parent()
-	if parent != null:
-		var cp = parent.get("controlled_player")
-		if cp != null and is_instance_valid(cp):
-			var s = cp.get("summons")
-			if s is Array:
+	var cp: Node = _get_controlled_player()
+	if cp != null and is_instance_valid(cp):
+		var s = cp.get("summons")
+		if s is Array:
 				summons = s
 	if summons.is_empty():
 		print("[SkillState] SUMMON: 无召唤体可指挥（v1 点击式，实体登记随 S5） pos=%s" % str(world_pos))
@@ -397,6 +492,9 @@ func get_space_mode(player_id: int) -> String:
 ## 取消（C/再按）：清操作上下文
 func _clear_operator_context(player_id: int) -> void:
 	_operator_context.erase(player_id)
+	# 34号S7 要点②：光标恢复统一收口——凡清操控上下文路径（C键取消/收窗/下令/败退/切场）
+	# 光标必回 VISIBLE，防选择模式光标泄漏（headless 无窗=no-op 零副作用）
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
 ## ==================== 波C（操球窗口 单写者认领）：AI 虚拟输入源（03主题③方案a） ====================
@@ -452,6 +550,10 @@ func get_active_operation(player_id: int) -> Dictionary:
 func ai_activate_skill(player_id: int, caster: Node, skill_id: String) -> bool:
 	var op := get_operator(skill_id)
 	if op != "OP_STEER" and op != "OP_MIDFLY":
+		return false
+	# 34号S8 任务书 #1（S7d 表 #6）：白球指挥技排除——AI 白球行为=S4 tick_summon_commands
+	# 独立指挥链（类型分拣+issue_order_at），激活窗注入=S4 指挥+STEER 引导双重驱动，禁入
+	if _skill_commands_magic_ball(skill_id):
 		return false
 	if caster == null or not is_instance_valid(caster):
 		return false
@@ -689,11 +791,20 @@ func on_skill_key_pressed(player_id: int, slot: int) -> bool:
 		_release_skill(player_id, slot)
 		return true
 	# 32号b：白球指挥技（fenny_2/3）按键=进操作态（不生成——球自动补充；两段点击指挥球）
-	if skill_info.state == SkillState.IDLE and _skill_commands_magic_ball(skill_id):
+	# 34号S7：进选择模式=光标隐藏（悬停高亮即光标）；期望类型随技（攻技选攻球/守技选守球）
+	# 34号S7c（主人规格"白球技从头到尾=索球-索敌"）：**无状态限制**——COOLDOWN 已被函数头部
+	# 冷却检查拦截，到此的任何状态（IDLE/ACTIVATED/RELEASING）按键都进（回）选择模式。
+	# 依据：on_skill_released_complete 全项目零调用方=首次下令后 state 永久停 RELEASING，
+	# 旧版仅 IDLE、S7c 首版 [IDLE,ACTIVATED] 均盖不住 RELEASING=二次按键仍落 05 再击旧链
+	# （substate 被改→STEER 注入排除失效→"操控场上所有攻击白球鼠标引导"，主人两次实测同源）
+	if _skill_commands_magic_ball(skill_id):
 		_activate_skill(player_id, slot)
 		_operator_context[player_id]["substate"] = OperatorSubState.MARKING
 		_operator_context[player_id]["mark_stage"] = 1
-		print("[SkillState] 白球指挥态: %s（左键点球→左键点敌；右键重选/ESC 取消）" % skill_id)
+		var sd_cb: Dictionary = _get_skill_data(skill_id)
+		_operator_context[player_id]["command_type"] = str(sd_cb.get("tag_params", {}).get("summon_spawn", {}).get("type_id", ""))
+		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
+		print("[SkillState] 白球指挥态: %s（选择模式：光标隐藏；左键点球→左键点敌；右键重选/ESC 取消）" % skill_id)
 		return false
 
 	# 检测双击
@@ -751,13 +862,11 @@ func _trigger_midfly(player_id: int, skill_id: String) -> bool:
 		var ai_caster = ai_virtual_inputs.get(player_id, {}).get("caster")
 		if ai_caster != null and is_instance_valid(ai_caster) and ai_caster.get("ball_ref") != null:
 			ball = ai_caster.get("ball_ref")
-	var parent = get_parent()
-	if parent != null:
-		var cp = parent.get("controlled_player")
-		if cp != null and is_instance_valid(cp) and cp.get("ball_ref") != null:
-			ball = cp.get("ball_ref")
+	var cp: Node = _get_controlled_player()
+	if cp != null and is_instance_valid(cp) and cp.get("ball_ref") != null:
+		ball = cp.get("ball_ref")
 	if ball == null:
-		var bm = parent.get("battle_manager") if parent != null else null
+		var bm = get_parent().get("battle_manager") if get_parent() != null else null
 		if bm != null:
 			ball = bm.get("ball_node")
 	if ball == null or not is_instance_valid(ball) or not ball.is_active:

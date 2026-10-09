@@ -52,6 +52,13 @@ signal player_facing_updated(player: CharacterBody2D, facing_direction: Vector2)
 signal skill_cancel_requested(player_id: int)
 
 
+## 34号S7 要点②出口⑥：比赛结束/回菜单切场景兜底——节点销毁时若光标仍隐藏（选择模式中退场）
+## 强制恢复，防 HIDDEN 残留泄漏到菜单（Input.mouse_mode 是全局态不随场景重置）
+func _exit_tree() -> void:
+	if Input.mouse_mode == Input.MOUSE_MODE_HIDDEN:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
 func _input(event: InputEvent) -> void:
 	if not match_started:
 		return
@@ -76,6 +83,11 @@ func _input(event: InputEvent) -> void:
 		# C键取消技能
 		elif event.keycode == KEY_C:
 			_handle_skill_cancel()
+		# 34号S7 要点②出口②：选择模式 ESC 取消（白球指挥态限定，不抢全局 ESC 语义；
+		# 光标恢复随 _clear_operator_context 统一收口）
+		elif event.keycode == KEY_ESCAPE:
+			if skill_state_manager != null and skill_state_manager.is_ball_command_mode(controlled_player.get_instance_id()):
+				_handle_skill_cancel()
 		# 快捷指令（整数键值：Godot 4.x 中 KEY_* 常量兼容性不稳）
 		elif event.keycode == 55:   # KEY_7
 			quick_command_requested.emit(0)  # 注意防守
@@ -297,8 +309,11 @@ func _tab_skill_state_switch() -> bool:
 
 
 ## 项1（操控规划/05 §1）技能操控窗口：STEER 类激活期 或 球飞行手动态（波6 #17）——WASD/SPC 控制权在技能
+## 34号S7 要点⓪：白球指挥态（fenny_2/fenny_3 选择模式）并入操控窗——两技同冻结/同空格迁移/同收窗（规格第1步）
 func is_skill_control_active() -> bool:
 	if skill_state_manager != null and controlled_player != null:
+		if skill_state_manager.is_ball_command_mode(controlled_player.get_instance_id()):
+			return true
 		if skill_state_manager.is_key_migration_active(controlled_player.get_instance_id()):
 			return true
 		var b = controlled_player.get("ball_ref")
@@ -373,6 +388,10 @@ func inject_steer_to_ball() -> void:
 ## 方向与球同款双源合成，migration=false 时显式清零=实体侧回自主游动档）
 func inject_steer_to_summons(active: bool) -> void:
 	if controlled_player == null:
+		return
+	# 34号S7 要点⓪完成标准②：白球指挥态（fenny_2/fenny_3 两段点击）下 STEER 注入停用——
+	# 攻/守球不再被鼠标定向牵引（选择模式=两段点击唯一输入模型，防两套操作互相打架）
+	if skill_state_manager != null and skill_state_manager.is_ball_command_mode(controlled_player.get_instance_id()):
 		return
 	var summons = controlled_player.get("summons")
 	if summons == null or not (summons is Array) or (summons as Array).is_empty():
@@ -508,17 +527,25 @@ func _process(delta: float) -> void:
 	# 29-S10：MARK 挂起订单重试（白球生成晚于确认点击——订单挂起直到球入册或超时）
 	if skill_state_manager != null and controlled_player != null:
 		skill_state_manager.poll_pending_mark(controlled_player.get_instance_id())
+		# 34号S7 要点⓪：选择模式——每帧喂悬停坐标+出口巡检（败退/球尽→收口恢复光标）；归一口判定（不再按 operator 字符串分叉）
+		if skill_state_manager.is_ball_command_mode(controlled_player.get_instance_id()):
+			skill_state_manager.set_command_hover(controlled_player.get_instance_id(), mouse_world_pos)
+			if controlled_player.is_defeated or not is_instance_valid(controlled_player):
+				skill_state_manager.exit_command_mode(controlled_player.get_instance_id(), "defeated")
 
 	# 29-S9：引导对象全灭→收窗（04 §69 结束条件：命中/耗尽/超时）——
-	# 召唤体没了且球非手动态且上下文仍挂 OP_STEER=窗口已无对象，清除上下文恢复球员行走
-	if migration and controlled_player != null and skill_state_manager != null:
-		var _ball = controlled_player.get("ball_ref")
-		var _ball_live: bool = _ball != null and is_instance_valid(_ball) and bool(_ball.get("_manual_active"))
-		var _summons = controlled_player.get("summons")
-		var _has_summons: bool = _summons != null and (_summons is Array) and not (_summons as Array).is_empty()
-		if not _ball_live and not _has_summons 				and skill_state_manager.get_player_operator(controlled_player.get_instance_id()) == "OP_STEER" 				and skill_state_manager.steer_grace_expired(controlled_player.get_instance_id()):
-			skill_state_manager._clear_operator_context(controlled_player.get_instance_id())
-			print("[InputManager] STEER 窗收起（引导对象全灭）→ 球员恢复行走")
+	# 34号S7 要点⓪归一：窗口存在=migration（STEER 键移窗，含攻鲨）OR 白球指挥态（fenny_2/fenny_3 同口，
+	# 补齐 fenny_3 原先收窗不可达缺口=两技同收窗行为）；不再按 operator 字符串分叉
+	if controlled_player != null and skill_state_manager != null:
+		var _cmd_mode: bool = skill_state_manager.is_ball_command_mode(controlled_player.get_instance_id())
+		if migration or _cmd_mode:
+			var _ball = controlled_player.get("ball_ref")
+			var _ball_live: bool = _ball != null and is_instance_valid(_ball) and bool(_ball.get("_manual_active"))
+			var _summons = controlled_player.get("summons")
+			var _has_summons: bool = _summons != null and (_summons is Array) and not (_summons as Array).is_empty()
+			if not _ball_live and not _has_summons and skill_state_manager.steer_grace_expired(controlled_player.get_instance_id()):
+				skill_state_manager._clear_operator_context(controlled_player.get_instance_id())
+				print("[InputManager] 操控窗收起（引导对象全灭）→ 球员恢复行走")
 
 	# 项3 拖长击：拖动中吸附检测（附近敌方=可作用对象 b；大相机限定），目标圈高亮为功能性显示
 	if _drag_state.active and not fp_mode:

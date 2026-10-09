@@ -87,6 +87,14 @@ func _platform_start() -> void:
 func _begin_match() -> void:
 	if battle_manager == null or not is_instance_valid(battle_manager):
 		return
+	# 34号S10（2026-10-09 主人定版需求）：平台测试模式=不发奖/不写历史/连胜清零 三条（仅此三条；
+	# 前版 S9 半成品已回退）。置位点=平台开赛；复位点=preparation_ui 正式开赛（主菜单比赛不受污染）。
+	# 结算窗照常弹出（主人裁定：比分+胜负是主人判断比赛结束的依据，不能省）。
+	RewardSystem.test_mode = true
+	RewardSystem.reset_win_streak()
+	GameManager.score_team_a = 0
+	GameManager.score_team_b = 0
+	print("[Platform] 🧪 测试模式：不发奖/不写历史/连胜已清零；比分已归零（结算窗照常弹出）")
 	# 主人操控勾选（排表面板）优先于 CLI 参数（F6 无命令行入口；确认时面板尚在）
 	if roster_panel != null and is_instance_valid(roster_panel):
 		human_slot = int(roster_panel.get("human_slot_choice"))
