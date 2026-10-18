@@ -55,6 +55,39 @@ func set_stealth(on: bool) -> void:
 		_apply_stealth_to_mesh(_ball_mesh, target_a, on)
 
 
+## 35号S2b②：烟花形态显示（无专用模型——橙金染色+自发光=烟花语义；专用模型素材化挂账主人验收）。
+## 材质遍历同 set_stealth 手法（duplicate 防共享污染）
+func set_firework_form(on: bool) -> void:
+	if _ball_mesh == null or not is_instance_valid(_ball_mesh):
+		return
+	for child in _ball_mesh.get_children():
+		if child is MeshInstance3D:
+			_apply_firework_to_mesh(child, on)
+	if _ball_mesh is MeshInstance3D:
+		_apply_firework_to_mesh(_ball_mesh, on)
+
+
+func _apply_firework_to_mesh(mi: MeshInstance3D, on: bool) -> void:
+	var m = mi.get("material_override")
+	if m != null and m is BaseMaterial3D:
+		var bm: BaseMaterial3D = m
+		bm.albedo_color = Color(1.0, 0.55, 0.1) if on else Color(1.0, 0.45, 0.1)
+		bm.emission_enabled = on
+		bm.emission = Color(1.0, 0.4, 0.05)
+		bm.emission_energy_multiplier = 1.5 if on else 0.0
+		return
+	if mi.mesh != null:
+		for i in range(mi.mesh.get_surface_count()):
+			var sm = mi.get_active_material(i)
+			if sm != null and sm is BaseMaterial3D:
+				var dup: BaseMaterial3D = sm.duplicate()
+				dup.albedo_color = Color(1.0, 0.55, 0.1) if on else Color(1.0, 0.45, 0.1)
+				dup.emission_enabled = on
+				dup.emission = Color(1.0, 0.4, 0.05)
+				dup.emission_energy_multiplier = 1.5 if on else 0.0
+				mi.set_surface_override_material(i, dup)
+
+
 func _apply_stealth_to_mesh(mi: MeshInstance3D, target_a: float, on: bool) -> void:
 	var m = mi.get("material_override")
 	if m != null and m is BaseMaterial3D:

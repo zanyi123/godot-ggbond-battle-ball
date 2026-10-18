@@ -37,6 +37,19 @@ enum State {
 
 var ai_players: Array[Dictionary] = []
 
+## 36号S3：靶子控制 gate（技能测试平台专用热切开关）——pid -> {ai:bool, move:bool, shoot:bool}；
+## 缺省无记录=全开（既有行为零影响）。shoot gate 拦两处 launch 调用（传球/投球）。
+var target_gates: Dictionary = {}
+
+func set_target_gates(pid: int, gates: Dictionary) -> void:
+	target_gates[pid] = gates.duplicate()
+
+func _gate_shoot_ok(p: CharacterBody2D) -> bool:
+	var g = target_gates.get(p.get_instance_id())
+	var gd: Dictionary = g if g is Dictionary else {}
+	return bool(gd.get("shoot", true))
+
+
 # 场地边界(内场)-- 不属于AI参数,保留常量
 const FIELD_X_MIN: float = -380.0
 const FIELD_X_MAX: float = 380.0
@@ -123,6 +136,15 @@ func _physics_process(delta: float) -> void:
 		if not _is_valid(ap):
 			continue
 
+		# 36号S3：靶子控制 gate（技能测试平台热切；缺省无记录=既有行为零影响）
+		var _tp = ap.get("player")
+		if _tp != null and is_instance_valid(_tp):
+			var _tg = target_gates.get(_tp.get_instance_id())
+			var _tg_d: Dictionary = _tg if _tg is Dictionary else {}
+			if not bool(_tg_d.get("ai", true)):
+				_tp.velocity = Vector2.ZERO
+				continue  # AI 总开关关=完全站桩（不感知/不决策/不移动）
+
 		# 感知更新(每帧调用,内部有计时控制)
 		_update_awareness(ap, delta)
 
@@ -145,6 +167,13 @@ func _physics_process(delta: float) -> void:
 
 		# 移动执行
 		_move(ap, delta)
+
+		# 36号S3：移动开关关（AI 总开时）→决策跑但移动输出清零（原地站）
+		if _tp != null and is_instance_valid(_tp):
+			var _tg2 = target_gates.get(_tp.get_instance_id())
+			var _tg2_d: Dictionary = _tg2 if _tg2 is Dictionary else {}
+			if not bool(_tg2_d.get("move", true)):
+				_tp.velocity = Vector2.ZERO
 
 
 # ==============================
@@ -290,6 +319,10 @@ static func _dodge_roll(key_a: int, key_b: int) -> float:
 func register_player(player: CharacterBody2D, team_name: String, index: int, profile: AIProfile) -> void:
 	var initial_facing: Vector2 = Vector2(1, 0) if team_name == "a" else Vector2(-1, 0)
 	player.facing_direction = initial_facing
+
+	# 36号S3：新进球员若平台已预置 gate（重置重建场景），保留原开关状态
+	if target_gates.has(player.get_instance_id()):
+		pass  # gate 随 target_gates 常驻，重注册无需处理
 
 	var base_speed: float = player.speed
 	profile.speed_chase = base_speed * profile.speed_chase_mult
@@ -2123,6 +2156,10 @@ func _do_pass(ap: Dictionary) -> void:
 	var distance: float = p.global_position.distance_to(target_pos)
 
 	p.set_carrying_ball(false)
+	if not _gate_shoot_ok(p):
+		# 36号S3：发球开关关——拦截本次传球（持球在手，不下发 launch）
+		print("[AI] %s 发球开关关：持球不出手" % _pname(p))
+		return
 	ball_node.launch(p.global_position, direction, p._get_effective_value("attack", p.attack_power) * 0.5, distance + 80.0, p, [] as Array[Dictionary])
 
 	ap.state = State.DEFEND
@@ -2175,6 +2212,10 @@ func _do_shoot(ap: Dictionary) -> void:
 		shoot_dir = shoot_dir.rotated(deg_to_rad(randf_range(-error, error)))
 
 	p.set_carrying_ball(false)
+	if not _gate_shoot_ok(p):
+		# 36号S3：发球开关关——拦截本次投球（持球在手，不下发 launch）
+		print("[AI] %s 发球开关关：持球不出手" % _pname(p))
+		return
 	ball_node.launch(p.global_position, shoot_dir, p._get_effective_value("attack", p.attack_power), shoot_dist, p, [] as Array[Dictionary])
 
 	ap.state = State.DEFEND

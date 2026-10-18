@@ -13,7 +13,8 @@
     "damage": 30.0
    },
    "controllable": "steer",
-   "spawn_hint": "enemy_outer_random"
+   "spawn_hint": "enemy_outer_random",
+   "touch_damage": 5.0
   },
   "fenny_magic_ball_def": {
    "kind": "magic_ball",

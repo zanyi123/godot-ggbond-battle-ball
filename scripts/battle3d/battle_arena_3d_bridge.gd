@@ -29,6 +29,9 @@ var _zone_proxies: Dictionary = {}     # zone_2d(Node) -> ZoneVisual3D
 # 24号 A1/A2 随行美术：召唤物 3D 镜像（水鲨鱼/魔术白球模型；事件总线订阅补建/清理，召唤系统零改动只读消费）
 var _summon_proxies: Dictionary = {}   # summon_2d(Node) -> Node3D
 var _summon_bus: Node = null           # battle_event_bus 懒查找缓存（总线战斗内后建）
+# 24号 B3 增补（主人令 2026-10-01）：三道具 3D 显示（锅/药/烟花；ITEM_ACQUIRED/USED 只读消费）
+var _item_visuals: Dictionary = {}     # pid(int) -> {proxy: Node3D, player: Node, item_id: String}
+var _item_bus: Node = null             # 与 _summon_bus 同总线，独立缓存防订阅重复
 # D14：快道放置预览 3D 主轨（镜像 2D placer 预览权威位姿；非放置态隐藏）
 var _zone_preview_proxy: MeshInstance3D = null
 
@@ -337,8 +340,10 @@ func _process(delta: float) -> void:
 	_sync_obstacles()
 	_sync_zones()
 	_sync_summons()
+	_sync_item_visuals()
 	_sync_zone_preview()
 	_sync_command_selection()
+	_sync_ball_firework_form()
 	# 换人重建检测：不受 field_visible 限制（备战阶段换人也要重建，开赛即正确）
 	_check_roster_rebuild()
 	var field_visible: bool = _field_zone.visible
@@ -514,10 +519,18 @@ func _sync_summons() -> void:
 		if proxy != null and is_instance_valid(proxy):
 			proxy.queue_free()
 		_summon_proxies.erase(ent)
-	# 贴位姿（每帧，单位制 (x, 0, y)）
+	# 贴位姿（每帧，单位制 (x, 0, y)）+ 24号B3 符号牌敌我分流喂观测方
+	# 观测方=人类操控者队；无人类（fullai）=空→全员亮（D6 双向观测先例）；球主队未知由显示层 fail-closed 不亮
+	var input_mgr = battle_mgr.input_mgr if battle_mgr != null else null
+	var ctrl = input_mgr.controlled_player if input_mgr != null and input_mgr.get("controlled_player") != null else null
+	var observer_team := str(ctrl.get("team")) if ctrl != null and is_instance_valid(ctrl) else ""
 	for ent in _summon_proxies:
 		if ent != null and is_instance_valid(ent):
-			_summon_proxies[ent].sync_from_2d(ent.global_position, ent.rotation)
+			var proxy = _summon_proxies[ent]
+			if proxy != null and is_instance_valid(proxy):
+				if proxy.has_method("set_content_reveal"):
+					proxy.set_content_reveal(observer_team)
+				proxy.sync_from_2d(ent.global_position, ent.rotation)
 
 
 func _on_summon_spawned_3d(payload: Dictionary) -> void:
@@ -551,6 +564,82 @@ func _on_summon_despawned_3d(payload: Dictionary) -> void:
 		if proxy != null and is_instance_valid(proxy):
 			proxy.queue_free()
 		_summon_proxies.erase(ent)
+
+
+## 24号 B3 增补：三道具 3D 显示（锅/药/烟花；懒订阅 ITEM_ACQUIRED/USED，granter 零改动只读消费）
+func _sync_item_visuals() -> void:
+	if _item_bus == null or not is_instance_valid(_item_bus):
+		_item_bus = get_tree().get_first_node_in_group("battle_event_bus") if get_tree() else null
+		if _item_bus != null:
+			_item_bus.subscribe(_item_bus.GameEvent.ITEM_ACQUIRED, _on_item_acquired_3d)
+			_item_bus.subscribe(_item_bus.GameEvent.ITEM_USED, _on_item_used_3d)
+	# 生命周期：玩家失效/代理失效即撤；锅=装备态，拦截标志复位（耐久尽/清账，granter 既有职责）即撤
+	var dead: Array = []
+	for pid in _item_visuals:
+		var entry: Dictionary = _item_visuals[pid]
+		var player = entry["player"]
+		var proxy = entry["proxy"]
+		if player == null or not is_instance_valid(player) or proxy == null or not is_instance_valid(proxy):
+			dead.append(pid)
+			continue
+		# 待用语义（35号S2d）：pending_item_id==显示中道具=仍待用；清空/变化=已结算（ITEM_ACQUIRED 替换口在先，此处兜底）→撤
+		# 35号S2b 补：锅=装备态例外——pending 已清但拦截标志存活（耐久尽/摘锅由 granter 撤）→手持锅保持
+		var equipped_pan: bool = str(entry["item_id"]) == "fenny_pan" \
+				and bool(player.get("defend_intercept_ready")) \
+				and str(player.get("defend_intercept_item")) == "fenny_pan"
+		if str(player.get("pending_item_id")) != str(entry["item_id"]) and not equipped_pan:
+			dead.append(pid)
+			continue
+		if not bool(entry.get("held", false)):
+			proxy.sync_from_player(player.global_position)   # 地面兜底分支才需要每帧贴位（手持挂代理子节点自动跟随）
+	for pid in dead:
+		_remove_item_visual(pid)
+
+
+func _on_item_acquired_3d(payload: Dictionary) -> void:
+	var player = payload.get("player")
+	var item_id := str(payload.get("item_id", ""))
+	if player == null or not is_instance_valid(player) or item_id.is_empty():
+		return
+	var pid: int = player.get_instance_id()
+	_remove_item_visual(pid)   # 一球员一显示位：重复获得/换道具=最新为准
+	var vis_script: GDScript = load("res://scripts/battle3d/visual/item_visual_3d.gd")
+	if vis_script == null:
+		return
+	var proxy: Node3D = Node3D.new()
+	proxy.set_script(vis_script)
+	# 手持（主人令 2026-10-15：真实道具模型手持）：挂球员 3D 代理手位随人走；无代理退回 _world 地面点位同步
+	var host_proxy: Node3D = _player_proxies.get(player)
+	var held := false
+	if host_proxy != null and is_instance_valid(host_proxy):
+		host_proxy.add_child(proxy)
+		proxy.position = proxy.HAND_LOCAL_POS
+		held = true
+	else:
+		_world.add_child(proxy)
+	proxy.setup(item_id)
+	_item_visuals[pid] = {"proxy": proxy, "player": player, "item_id": item_id, "held": held}
+	print("[Bridge3D] 🎒 道具 3D 代理挂载 → %s @ %s (%s)" % [item_id, str(player.get("character_id")), "手持" if held else "地面兜底"])
+
+
+func _on_item_used_3d(payload: Dictionary) -> void:
+	var player = payload.get("player")
+	if player == null or not is_instance_valid(player):
+		return
+	var pid: int = player.get_instance_id()
+	var entry = _item_visuals.get(pid)
+	# 即时消耗型（药水/烟花）：用即撤（锅无主动使用，走 ready 旗标口）
+	if entry != null and str(entry["item_id"]) == str(payload.get("item_id", "")):
+		_remove_item_visual(pid)
+
+
+func _remove_item_visual(pid: int) -> void:
+	var entry = _item_visuals.get(pid)
+	if entry != null:
+		var proxy = entry["proxy"]
+		if proxy != null and is_instance_valid(proxy):
+			proxy.queue_free()
+		_item_visuals.erase(pid)
 
 
 ## 名单同步：迟到球员补建（dev 模式球员在开赛回调才创建，晚于 bridge）
@@ -856,6 +945,21 @@ func _make_selection_ring(color: Color) -> MeshInstance3D:
 	ring.material_override = mat
 	_world.add_child(ring)
 	return ring
+
+
+## 35号S2b②：烟花形态桥同步——读 2D 权威球的 firework_form meta（发球置/命中清），
+## 状态变化才调 proxy 形态口（零判定，纯显示镜像）
+var _fw_form_last: bool = false
+
+func _sync_ball_firework_form() -> void:
+	if _ball_proxy == null or not is_instance_valid(_ball_proxy):
+		return
+	var on: bool = _ball_2d != null and is_instance_valid(_ball_2d) and _ball_2d.has_meta("firework_form")
+	if on != _fw_form_last:
+		_ball_proxy.set_firework_form(on)
+		_fw_form_last = on
+		if on:
+			print("[Bridge3D] 🎆 球代理切换烟花形态（橙金+自发光）")
 
 func _clear_selection_rings() -> void:
 	if _tgt_ring_red != null and is_instance_valid(_tgt_ring_red):

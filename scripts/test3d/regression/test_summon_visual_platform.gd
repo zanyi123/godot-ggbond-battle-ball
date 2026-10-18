@@ -60,6 +60,9 @@ func _run() -> void:
 	_assert(shark != null, "spawn: shuimu_shark_att 生成成功（类型表加载正常）")
 	var ball: Node = sm.spawn("fenny_magic_ball_att", owner_id, player.global_position + Vector2(120, 0), {"owner_ref": player, "skill_id": "fenny_2"})
 	_assert(ball != null, "spawn: fenny_magic_ball_att 生成成功")
+	# 冻结实体物理（CharacterBody2D 物理帧会移动实体→与显示帧同步竞态；冻结后贴位断言确定性）
+	shark.set_physics_process(false)
+	ball.set_physics_process(false)
 	await process_frame
 	await process_frame
 
@@ -111,6 +114,23 @@ func _run() -> void:
 	_assert(def_proxy_ok, "显示: 守白球=蓝环")
 
 	# ===== 平台环境零污染：spawn/despawn 全走公开 API，2D 层数据未越权 =====
+	# ===== 24号B3·符号（35号S2a 定装已落地：真实链守白球生成即定装→贴面符号自动点亮）=====
+	var any_def_proxy: Node3D = null
+	var any_def_ent: Node = null
+	for ent in bridge._summon_proxies:
+		if is_instance_valid(ent) and str(ent.get("summon_type")) == "fenny_magic_ball_def":
+			any_def_proxy = bridge._summon_proxies[ent]
+			any_def_ent = ent
+			break
+	_assert(any_def_proxy != null and any_def_ent != null
+		and str(any_def_ent.get("_content_item")) != ""
+		and any_def_proxy.get_node_or_null("ContentMark") != null,
+		"定装点亮: 真实链守白球生成即定装（35号S2a）→贴面符号自动在位（内容=%s）" % str(any_def_ent.get("_content_item") if any_def_ent != null else ""))
+	_assert(any_def_proxy != null and any_def_proxy._content_mark != null
+		and (any_def_proxy._content_mark.get_node_or_null("ContentModel") != null
+			or any_def_proxy._content_mark.get_child_count() >= 5),
+		"定装点亮: 内容物识别在位（36号真模型优先/符号回落）")
+
 	_assert(int(sm._live.size()) == bridge._summon_proxies.size(), "一致性: 在场实体数=代理数（无孤儿代理/无漏挂）")
 
 	print("\n========== 结果: %d/%d PASS ==========" % [_pass, _pass + _fail])

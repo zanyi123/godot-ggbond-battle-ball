@@ -168,17 +168,26 @@ func _run() -> void:
 		await process_frame
 		if not is_instance_valid(def_ball):
 			break
-	_assert(_grant_count(a1) > b_items_before, "白④ 指挥飞抵自己→道具交付（granter 账本+1）")
+	# 35号S2d 口径同步（主人 10-11 设计）：交付=待用（pending 写入）→使用时账本+1（状态机两段全验）
+	_assert(a1.get("pending_item_id") == "fenny_pan", "白④ 指挥飞抵自己→道具交付（35号待用口径：pending 写入）")
+	var used4: bool = a1.use_pending_item()
+	_assert(used4 and _grant_count(a1) > b_items_before, "白④b 待用道具使用→granter 账本+1（结算时点=使用）")
 	# 白⑤：攻球指挥出击→飞抵敌爆炸（无锅敌真伤；锅拦截已在 transfer27 J1 覆盖）
 	var att_ball: Node2D = mgr.spawn("fenny_magic_ball_att", a1.get_instance_id(), b1.global_position + Vector2(-14, 0), {"owner_ref": a1})
 	att_ball.set("lifespan_left", 999.0)
-	att_ball.issue_order_at(b1.global_position)  # 指挥出击（飞抵触碰敌→爆炸）
+	att_ball.issue_order_at(b1.global_position)  # 指挥出击（飞抵触碰敌→二段：触碰 5 伤→0.5s→AOE 30）
 	var b_hp0: float = float(b1.get("stamina"))
 	for f in range(10):
 		await process_frame
 		if not is_instance_valid(att_ball) or float(b1.get("stamina")) < b_hp0:
 			break
-	_assert(float(b1.get("stamina")) < b_hp0, "白⑤: 攻球指挥出击→飞抵敌爆炸伤害")
+	print("    [白⑤dbg] att_valid=%s att_state=%s att_pos=%s b1_hp=%s b1_pos=%s b1_def=%s mgr_of_att=%s" % [
+		str(is_instance_valid(att_ball)), str(att_ball.get("state")) if is_instance_valid(att_ball) else "freed",
+		str(att_ball.global_position) if is_instance_valid(att_ball) else "?",
+		str(float(b1.get("stamina"))), str(b1.global_position), str(b1.is_defeated),
+		str(att_ball.get("_mgr") != null) if is_instance_valid(att_ball) else "?"])
+	await create_timer(0.8).timeout  # 35号S1：真实时间过 0.5s 二段窗口（headless 帧率不可靠）
+	_assert(float(b1.get("stamina")) < b_hp0, "白⑤: 攻球指挥出击→飞抵敌爆炸伤害（含 35号二段首击）")
 	# 白⑤b：无锅敌人=爆炸真伤（b1 先挪离，保证索敌唯一指向 b2）
 	b1.position = Vector2(-450, -280)
 	var b2: CharacterBody2D = PlayerScript.new()
@@ -194,6 +203,7 @@ func _run() -> void:
 		await process_frame
 		if not is_instance_valid(att_ball2) or float(b2.get("stamina")) < b2_hp0:
 			break
+	await create_timer(0.8).timeout  # 35号S1：真实时间过二段窗口
 	_assert(float(b2.get("stamina")) < b2_hp0, "白⑤b: 攻球指挥出击→飞抵敌爆炸伤害落地")
 
 	# ========== 芬尼·能量强化（接下来单个魔术球效果增强）==========

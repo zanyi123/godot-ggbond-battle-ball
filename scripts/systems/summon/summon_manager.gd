@@ -12,6 +12,7 @@ var _live: Array = []                       # 在场实体引用
 var _auto_spawners: Array = []              # [{owner_id, type_id, interval_frames, acc_frames, params}]
 var _limit_restores: Array = []             # [{type_id, old_limit, frames_left}]（工单23 芬尼#1 duration 到期还原）
 var _empowers: Dictionary = {}              # owner_id -> {config: Dictionary, left: int, frames_left: float}（芬尼#4 强化态）
+var _content_rot: int = 0                   # 35号S2a：守球内容物定装轮转计数（确定性，禁 randf）
 var _frame_acc: int = 0                     # 固定步长帧计数（确定性时钟）
 
 
@@ -69,6 +70,13 @@ func spawn(type_id: String, owner_id: int, pos: Vector2, params: Dictionary = {}
 	get_parent().add_child(ent)
 	ent.global_position = pos
 	ent.setup(tdef, owner_id, spawn_params)
+	# 35号S2a（35号设计说明 §三口径）：守球出生即定装内容物——确定性轮转（禁 randf，确定性纪律）；
+	# 字段经 params→实体 _params["_content_item"]+实体属性，供显示层透视标注（已交付读端）与交付端消费
+	var pool_def = tdef.get("on_ball", {}).get("item_pool", null)
+	if pool_def is Array and not (pool_def as Array).is_empty():
+		spawn_params["_content_item"] = str((pool_def as Array)[_content_rot % (pool_def as Array).size()])
+		_content_rot += 1
+		ent.set("_content_item", spawn_params["_content_item"])
 	_live.append(ent)
 	# 27-R2：登记到施法者名下（操1 项7 SUMMONING/子态桥的读端=player.summons）
 	var owner_p: Node = spawn_params.get("owner_ref", null)

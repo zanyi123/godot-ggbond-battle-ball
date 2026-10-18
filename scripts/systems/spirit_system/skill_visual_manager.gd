@@ -48,8 +48,11 @@ func _load_tags_registry() -> void:
 ## 注入战斗引用（由 battle_manager 调用）
 func setup(battle_mgr: Node, ball: Area2D, all_players: Array) -> void:
 	# 13-C 基础 UI：盾本体 2D 兜底可视（订阅盾生成信号，弧面子节点挂到盾实体上——UI 只读零判定）
+	# 36号修（2026-10-12 主人令）：补 is_connected 防护——常规开赛+开发者模式两条路径都会
+	# 调 setup（1v1 平台双路径首触现形），重复连接报红；同函数球信号两行早有同款防护
 	var om = battle_mgr.get_node_or_null("ObstacleManager") if battle_mgr != null else null
-	if om != null and om.has_signal("player_shield_spawned"):
+	if om != null and om.has_signal("player_shield_spawned") \
+			and not om.player_shield_spawned.is_connected(_on_player_shield_spawned):
 		om.player_shield_spawned.connect(_on_player_shield_spawned)
 	battle_manager = battle_mgr
 	ball_node = ball

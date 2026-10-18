@@ -126,6 +126,47 @@ func _run() -> void:
 	await process_frame
 	_assert(ball_fb_vis._ring_mat.albedo_color == BallScript.ATTACK_RING_COLOR, "A2: 环色回退（无后缀→on_ball 模式=攻红）")
 
+	# ===== 24号B3·内容物符号（贴纸式定案：几何贴球面五方向+敌我分流）=====
+	# 定装字段 _content_item 已由 F1 域（35号S2a）落地为实体属性；本段用 meta 注入覆盖测试内容
+	var PlayerScript: GDScript = load("res://scripts/battle/player.gd")
+	var owner_a: CharacterBody2D = PlayerScript.new()
+	owner_a.team = "a"
+	root.add_child(owner_a)
+	var mark_tdef := {"kind": "magic_ball", "hitbox": "circle:18", "lifespan": 20.0,
+		"on_ball": {"mode": "grant_item", "item_pool": ["fenny_pan", "fenny_potion", "fenny_firework"]}}
+	var mark_expect := [["fenny_pan", "锅"], ["fenny_potion", "药"], ["fenny_firework", "烟花"]]
+	for pair in mark_expect:
+		var ce = SummonScript.new()
+		ce.summon_type = "fenny_magic_ball_def"
+		root.add_child(ce)
+		ce.setup(mark_tdef, 0, {"owner_ref": owner_a})
+		ce.set_meta("_content_item", pair[0])   # meta 注入覆盖（真属性空串时兜底通道）
+		var ce_vis: Node3D = BallScript.new()
+		root.add_child(ce_vis)
+		ce_vis.setup(ce)
+		await process_frame
+		var mark: Node3D = ce_vis.get_node_or_null("ContentMark")
+		# 36号：识别显示升级=真道具模型优先（挂 ContentModel 自转）+加载失败回落五方向符号（两案并存）
+		var model_mode: bool = mark != null and mark.get_node_or_null("ContentModel") != null
+		var sym_mode: bool = mark != null and mark.get_child_count() >= 5
+		_assert(mark != null and (model_mode or sym_mode), "%s: 内容物识别在位（36号真模型优先/符号回落，model=%s）" % [pair[1], str(model_mode)])
+		ce_vis.set_content_reveal("a")
+		_assert(mark != null and mark.visible, "%s: 己方观测(a队)→亮标" % pair[1])
+		ce_vis.set_content_reveal("b")
+		_assert(mark != null and not mark.visible, "%s: 敌方观测(b队)→白球不可区分（标隐藏）" % pair[1])
+		ce_vis.set_content_reveal("")
+		_assert(mark != null and mark.visible, "%s: fullai 无人类观测→全员亮（D6 双向观测先例）" % pair[1])
+	# fail-closed：属性空且无 meta → 不建标
+	var nf = SummonScript.new()
+	nf.summon_type = "fenny_magic_ball_def"
+	root.add_child(nf)
+	nf.setup(mark_tdef, 0, {"owner_ref": owner_a})
+	var nf_vis: Node3D = BallScript.new()
+	root.add_child(nf_vis)
+	nf_vis.setup(nf)
+	await process_frame
+	_assert(nf_vis.get_node_or_null("ContentMark") == null, "fail-closed: 属性空+无 meta→不建标（攻球同路径不泄漏）")
+
 	# ===== 均匀撒点（主人令：白球随机生成均匀分布在要求场地上；确定性种子）=====
 	var pts: Array = BallScript.scatter_positions(64)
 	_assert(pts.size() == 64, "撒点: 数量=64")

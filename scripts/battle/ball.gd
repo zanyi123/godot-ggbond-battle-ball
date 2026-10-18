@@ -565,6 +565,13 @@ func _on_body_entered(body: Node2D) -> void:
 	var effect: String = result.get("effect", "none")
 	ball_hit_player.emit(player, actual_damage)
 
+	# 35号S2b④：烟花形态一次性——命中真身结算后即恢复决竞球形态（buff/形态清除，桥下一帧跟随）
+	if attacker_player != null and is_instance_valid(attacker_player) and bool(attacker_player.get("pending_firework_form")):
+		attacker_player.set("pending_firework_form", false)
+		if has_meta("firework_form"):
+			remove_meta("firework_form")
+		print("[Ball] 🎆 烟花命中恢复: 决竞球形态复原（buff 清除）")
+
 	# 波6 #18 带人位移：命中结算附加拖拽（免控目标在 player 侧拒绝）
 	var pull_speed: float = float(ball_mods.get("carry_pull_speed", 0.0))
 	if pull_speed > 0.0 and actual_damage > 0 and player.has_method("begin_carry_push"):
@@ -786,6 +793,14 @@ func launch(from: Vector2, direction: Vector2, damage: float, max_dist: float, a
 	if attacker and attacker.has_method("get_base_ball_speed"):
 		base_ball_speed = attacker.get_base_ball_speed()
 	ball_speed = base_ball_speed  # 使用球员个性化球速
+	# 35号S2b③：烟花态发球——球速 +20%（主人口径"烟花 buff 球速↑"；形态 meta 供桥/命中口消费）
+	var _fw_on: bool = attacker != null and is_instance_valid(attacker) and bool(attacker.get("pending_firework_form"))
+	if _fw_on:
+		ball_speed *= 1.2
+		set_meta("firework_form", true)
+		print("[Ball] 🎆 烟花球发球: 球速+20%%（%.0f）" % ball_speed)
+	elif has_meta("firework_form"):
+		remove_meta("firework_form")
 	
 	max_flight_distance = max_dist
 	attacker_player = attacker

@@ -207,6 +207,24 @@ func _get_controlled_player() -> Node:
 	return null
 
 
+## 35号S3：FP 准星射线悬停（第一人称捕获态无光标坐标——input_manager 相机中心射线命中后直接喂结果；
+## 复用三级高亮链：hovered_ball/hovered_char 置位后 bridge _sync_command_selection 照常渲染）
+func set_command_hover_ray(player_id: int, hit_ball: Node = null, hit_char: Node = null) -> void:
+	var ctx: Dictionary = _operator_context.get(player_id, {})
+	if ctx.is_empty() or int(ctx.get("mark_stage", 0)) == 0:
+		return
+	if int(ctx.get("mark_stage", 0)) == 1:
+		if hit_ball != null:
+			ctx["hovered_ball"] = hit_ball
+		else:
+			ctx.erase("hovered_ball")
+	else:
+		if hit_char != null:
+			ctx["hovered_char"] = hit_char
+		else:
+			ctx.erase("hovered_char")
+
+
 ## 34号S7：悬停检测（input_manager 每帧喂鼠标世界坐标）——
 ## stage1=snap 内同类型白球→hovered_ball；stage2=snap 内角色→hovered_char
 func set_command_hover(player_id: int, world_pos: Vector2) -> void:
@@ -492,9 +510,11 @@ func get_space_mode(player_id: int) -> String:
 ## 取消（C/再按）：清操作上下文
 func _clear_operator_context(player_id: int) -> void:
 	_operator_context.erase(player_id)
-	# 34号S7 要点②：光标恢复统一收口——凡清操控上下文路径（C键取消/收窗/下令/败退/切场）
-	# 光标必回 VISIBLE，防选择模式光标泄漏（headless 无窗=no-op 零副作用）
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# 34号S7 要点②+35号S3：光标恢复统一收口——凡清操控上下文路径光标必回；
+	# FP（第一人称捕获）下保持 CAPTURED 不强制 VISIBLE（准星即指针，勿破坏 FP 视角）
+	var _im = get_parent() if get_parent() != null else null
+	var fp: bool = _im != null and _im.get("fp_mode") == true
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if fp else Input.MOUSE_MODE_VISIBLE
 
 
 ## ==================== 波C（操球窗口 单写者认领）：AI 虚拟输入源（03主题③方案a） ====================

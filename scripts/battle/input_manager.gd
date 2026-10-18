@@ -152,7 +152,68 @@ func toggle_fp_mode() -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	else:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	print("[Input] 第一人称 %s" % ("进入" if fp_mode else "退出"))
+		# 35号S3：退出 FP 时若在白球指挥态→收窗（六出口之一，防跨视角悬停态残留）
+		if skill_state_manager != null and controlled_player != null and skill_state_manager.is_ball_command_mode(controlled_player.get_instance_id()):
+			skill_state_manager.exit_command_mode(controlled_player.get_instance_id(), "fp_exit")
+			print("[Input] 退出第一人称→白球指挥态收窗")
+
+
+## 35号S3：FP 准星射线命中（白球指挥态专用）——相机中心射线对候选求最近命中；
+## stage1=全队同类型白球（3D 位 y=150 悬浮面，命中半径 60）；stage2=球员（y=60 身位，命中半径 80）
+func _fp_ray_hover_targets() -> Array:
+	var out: Array = [null, null]  # [hit_ball, hit_char]
+	if controlled_player == null or skill_state_manager == null:
+		return out
+	# 35号S3：射线源=与 camera_3d_controller._update_fp 同源公式手算（get_camera_3d 拿不到桥的
+	# FP 相机=origin/dir 全零永不命中的实测坑）——眼高=z_height+60，朝向=yaw/pitch 球坐标
+	var eye_h: float = float(controlled_player.get("z_height")) + 60.0
+	var origin: Vector3 = Vector3(controlled_player.global_position.x, eye_h, controlled_player.global_position.y)
+	var dir: Vector3 = Vector3(
+		cos(fp_yaw) * cos(fp_pitch),
+		sin(fp_pitch),
+		sin(fp_yaw) * cos(fp_pitch))
+	var mark1: bool = skill_state_manager.get_operator_substate(controlled_player.get_instance_id()) == "MARKING"
+	if not mark1:
+		return out
+	var mstage: int = int((skill_state_manager._operator_context.get(controlled_player.get_instance_id(), {}) as Dictionary).get("mark_stage", 0))
+	var bm: Node = controlled_player.get_parent() if controlled_player.get_parent() != null else null
+	if bm == null or bm.get("team_a_players") == null:
+		return out
+	var my_team := str(controlled_player.get("team"))
+	var best_d: float = 1e9
+	if mstage == 1:
+		var want: String = str((skill_state_manager._operator_context.get(controlled_player.get_instance_id(), {}) as Dictionary).get("command_type", ""))
+		for p in (bm.team_a_players + bm.team_b_players):
+			if p == null or not is_instance_valid(p) or str(p.get("team")) != my_team:
+				continue
+			var sms = p.get("summons")
+			if sms is Array:
+				for s in sms:
+					if not is_instance_valid(s) or str(s.get("summon_type")) != want:
+						continue
+					var bpos: Vector3 = Vector3((s as Node2D).global_position.x, 150.0, (s as Node2D).global_position.y)
+					var d := _point_ray_dist(bpos, origin, dir)
+					if d <= 60.0 and d < best_d:
+						best_d = d
+						out[0] = s
+	else:
+		for p in (bm.team_a_players + bm.team_b_players):
+			if p == null or not is_instance_valid(p) or p == controlled_player:
+				continue
+			var cpos: Vector3 = Vector3(p.global_position.x, 60.0, p.global_position.y)
+			var d := _point_ray_dist(cpos, origin, dir)
+			if d <= 80.0 and d < best_d:
+				best_d = d
+				out[1] = p
+	return out
+
+
+func _point_ray_dist(point: Vector3, origin: Vector3, dir: Vector3) -> float:
+	var to_p: Vector3 = point - origin
+	var t: float = to_p.dot(dir)
+	if t < 0.0:
+		return 1e9
+	return sqrt(maxf(0.0, to_p.length_squared() - t * t))  # 点到射线垂距
 
 
 func _on_left_click_press() -> void:
@@ -173,7 +234,16 @@ func _on_left_click_press() -> void:
 		var sub: String = skill_state_manager.get_operator_substate(controlled_player.get_instance_id())
 		if sub != "" and not skill_state_manager.is_drag_skill(controlled_player.get_instance_id()) \
 				and sub in ["AIMING", "SELECTING", "MARKING", "SUMMONING"]:
-			skill_state_manager.confirm_substate_at(controlled_player.get_instance_id(), mouse_world_pos)
+			# 35号S5：FP 捕获态 confirm 坐标源=准星射线悬停目标位（mouse_world_pos 在捕获态冻结
+			# 不更新→准星选中的球永远选不中）；stage1 用悬停球位/stage2 用悬停角色位，脱靶回退鼠标位
+			var confirm_pos: Vector2 = mouse_world_pos
+			if fp_mode and skill_state_manager.is_ball_command_mode(controlled_player.get_instance_id()):
+				var _sel: Dictionary = skill_state_manager.get_command_selection(controlled_player.get_instance_id())
+				if int(_sel.get("stage", 0)) == 1 and _sel.get("hovered_ball", null) != null:
+					confirm_pos = (_sel.get("hovered_ball") as Node2D).global_position
+				elif int(_sel.get("stage", 0)) == 2 and _sel.get("hovered_char", null) != null:
+					confirm_pos = (_sel.get("hovered_char") as Node2D).global_position
+			skill_state_manager.confirm_substate_at(controlled_player.get_instance_id(), confirm_pos)
 			return
 
 	if controlled_player.is_carrying_ball:
@@ -257,6 +327,13 @@ func _on_right_click_press() -> void:
 		var sub: String = skill_state_manager.get_operator_substate(controlled_player.get_instance_id())
 		if sub in ["SELECTING", "MARKING"]:
 			skill_state_manager.clear_substate_selection(controlled_player.get_instance_id())
+			return
+
+	# 35号S2d（主人 10-11 设计）：持有待用道具→右键=使用道具（用掉后右键恢复接球语义）；
+	# 技能态右键=取消选中（上方分支先行），此处只占"操控球员态"（Object.get 仅 1 参，33号b 陷阱一）
+	if str(controlled_player.get("pending_item_id")) != "":
+		if controlled_player.has_method("use_pending_item"):
+			controlled_player.use_pending_item()
 			return
 
 	if is_aiming:
@@ -529,7 +606,12 @@ func _process(delta: float) -> void:
 		skill_state_manager.poll_pending_mark(controlled_player.get_instance_id())
 		# 34号S7 要点⓪：选择模式——每帧喂悬停坐标+出口巡检（败退/球尽→收口恢复光标）；归一口判定（不再按 operator 字符串分叉）
 		if skill_state_manager.is_ball_command_mode(controlled_player.get_instance_id()):
-			skill_state_manager.set_command_hover(controlled_player.get_instance_id(), mouse_world_pos)
+			# 35号S3：FP 捕获态=准星射线喂结果；默认视角=鼠标世界坐标 snap（既有）
+			if fp_mode:
+				var _fp_hits: Array = _fp_ray_hover_targets()
+				skill_state_manager.set_command_hover_ray(controlled_player.get_instance_id(), _fp_hits[0], _fp_hits[1])
+			else:
+				skill_state_manager.set_command_hover(controlled_player.get_instance_id(), mouse_world_pos)
 			if controlled_player.is_defeated or not is_instance_valid(controlled_player):
 				skill_state_manager.exit_command_mode(controlled_player.get_instance_id(), "defeated")
 
@@ -619,6 +701,11 @@ func _handle_skill_key_press(slot: int) -> void:
 
 	var player_id = controlled_player.get_instance_id()
 	var auto_release = skill_state_manager.on_skill_key_pressed(player_id, slot)
+
+	# 35号S3：FP（第一人称捕获）下白球指挥态保持鼠标捕获——ssm 置位的 HIDDEN 由 FP 覆盖回
+	# （准星即指针；六出口恢复在 _clear_operator_context 已有 fp 分支回 CAPTURED）
+	if fp_mode and skill_state_manager.is_ball_command_mode(player_id):
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 	if auto_release:
 		# 双击：自动释放

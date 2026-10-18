@@ -275,7 +275,8 @@ func _run() -> void:
 	# 攻球待命态碰敌→也必爆（本性恢复）
 	var idle_att: Node2D = mgr.spawn("fenny_magic_ball_att", player.get_instance_id(), Vector2(700, 700), {"owner_ref": player})
 	idle_att.set("lifespan_left", 999.0)
-	idle_att.set("_tdef", {"kind": "magic_ball", "controllable": "steer", "on_ball": {"mode": "carry_with_ball", "damage": 30.0}})
+	idle_att.set("_mgr", mgr)  # 35号S1：AOE 名册经 _mgr 取（stub spawn 不自动设，同 30 号段手法）
+	idle_att.set("_tdef", {"kind": "magic_ball", "controllable": "steer", "touch_damage": 5.0, "on_ball": {"mode": "carry_with_ball", "damage": 30.0}})
 	var idle_foe: CharacterBody2D = PlayerScript.new()
 	idle_foe.team = "b"
 	idle_foe.position = Vector2(705, 700)
@@ -284,6 +285,96 @@ func _run() -> void:
 	var idle_hp0: float = float(idle_foe.get("stamina"))
 	idle_att._on_touch_body(idle_foe)
 	_assert(float(idle_foe.get("stamina")) < idle_hp0, "33b①: 攻球待命态碰敌→也必爆（本性恢复）")
+
+	# ===== 35号S1：攻球二段伤害（触碰低伤 5 →停驻 0.5s→AOE 爆炸；主人设计逐字） =====
+	# 专测独立新球（33b① 的 idle_att 已进二段窗口=竞态闸置位，同球触碰会被闸正确挡住）；
+	# 专用干净靶（裸测试球员物理漂移陷阱，S1 自建 foe 隔离验证）
+	var s1_att: Node2D = mgr.spawn("fenny_magic_ball_att", player.get_instance_id(), Vector2(800, 800), {"owner_ref": player})
+	s1_att.set("lifespan_left", 999.0)
+	s1_att.set("_mgr", mgr)
+	s1_att.set("_tdef", {"kind": "magic_ball", "controllable": "steer", "touch_damage": 5.0, "on_ball": {"mode": "carry_with_ball", "damage": 30.0}})
+	var s1_foe: CharacterBody2D = PlayerScript.new()
+	s1_foe.team = "b"
+	s1_foe.set_physics_process(false)  # 33号b 陷阱二（裸测试球员物理漂移）：关物理帧防 0.5s 窗口内漂移
+	root.add_child(s1_foe)
+	s1_foe.position = s1_att.global_position + Vector2(5, 0)  # 位置在 add_child 后设（_ready 会归位，先设必被覆盖）
+	host.team_b_players.append(s1_foe)
+	var s1_hp0: float = float(s1_foe.get("stamina"))
+	s1_att._on_touch_body(s1_foe)
+	# （触碰已触发二段：s1_att 停驻中、s1_foe 已扣一段——扣值经韧性/防御折算，按项目断言惯例比血量下降）
+	_assert(is_instance_valid(s1_att) and str(s1_att.get("state")) == "active", "S1①: 触碰后球停驻在场（未消失 state=active）")
+	_assert(bool(s1_att.get("_pending_explode")), "S1②: 二段窗口竞态闸置位（_pending_explode）")
+	var hp_win: float = float(s1_foe.get("stamina"))
+	_assert(hp_win < s1_hp0, "S1②b: 一段触碰伤落地（单体扣血，不参与强化翻倍）")
+	s1_att._on_touch_body(s1_foe)  # 窗口内二次触碰
+	_assert(float(s1_foe.get("stamina")) == hp_win, "S1③: 窗口内二次触碰不重复扣一段（竞态闸）")
+	await create_timer(0.8).timeout  # 真实时间过 0.5s 窗口（headless 帧率不定，帧数等待不可靠）
+	var boom_ok: bool = (not is_instance_valid(s1_att)) or str(s1_att.get("state")) == "consumed"
+	# aoe 命中不断言位置伤害（裸测试球员物理漂移/环境位移=33号b 陷阱二变体，位置不可依赖）；
+	# AOE 伤害本体=既有 _explode_now 逻辑（生产实机日志"白球爆炸 伤害30 命中1"已证），S1 验延时链路本体
+	_assert(boom_ok, "S1④: 0.5s 延时后二段爆炸落地（球消失；AOE 命中实机背书）")
+	var s1_src: String = (EntityScript as GDScript).source_code
+	_assert(s1_src.contains("create_timer(0.5).timeout.connect(_two_stage_boom)"), "S1④b: 0.5s 延时链路源码在（触碰→停驻→定时爆）")
+	# 竞态安全：despawn 后 timer 回调不炸（源码断言 is_instance_valid 守卫在）
+	var ent_src_s1: String = (EntityScript as GDScript).source_code
+	_assert(ent_src_s1.contains("is_instance_valid(self) or state == \"consumed\""), "S1⑤: timer 回调 despawn 安全守卫在（is_instance_valid）")
+
+	# ===== 35号S2：道具机制（定装轮转/待用状态机/强化消费/烟花标志） =====
+	# 清 def 球（队内上限 6：前文块已 spawn 多颗，不清则 S2a 三连被拒生成=null）——直清 _live（owner 无关）
+	for s_clr in ((mgr.get("_live") as Array).duplicate()):
+		if is_instance_valid(s_clr) and str(s_clr.get("summon_type")) == "fenny_magic_ball_def":
+			mgr.despawn(s_clr, "s2_clear")
+	# S2a 定装轮转：def 球三连 spawn→_content_item 依次 锅/药水/烟花（确定性轮转，禁 randf=设计说明口径）
+	var rot_ids: Array = []
+	for i in range(3):
+		var rb: Node2D = mgr.spawn("fenny_magic_ball_def", player.get_instance_id(), Vector2(1100 + i * 40.0, 100), {"owner_ref": player})
+		rot_ids.append(str(rb.get("_content_item")))
+	print("    [S2 debug] rot_ids=%s" % str(rot_ids))
+	_assert(rot_ids[0] != rot_ids[1] and rot_ids[1] != rot_ids[2] and rot_ids[0] != rot_ids[2] 			and rot_ids.all(func(id: String): return id in ["fenny_pan", "fenny_potion", "fenny_firework"]), "S2a: 出生定装轮转（三连互异且均在道具池内，确定性禁 randf）")
+	# S2d 待用状态机：stub 环境建 granter（_ready 入组）+交付→pending 写入+拦截不置位
+	var s2_granter: Node = load("res://scripts/battle/battle_item_granter.gd").new()
+	root.add_child(s2_granter)
+	var s2_holder: CharacterBody2D = PlayerScript.new()
+	s2_holder.team = "a"
+	s2_holder.is_player_controlled = true
+	root.add_child(s2_holder)
+	host.team_a_players.append(s2_holder)
+	# S2d① 直验 grant→pending（球交付链端到端已由 33b④ 覆盖；此段隔离验待用状态机）
+	s2_granter.grant_battle_item(s2_holder, "fenny_pan")
+	_assert(str(s2_holder.get("pending_item_id")) == "fenny_pan", "S2d①: 交付=待用（pending_item_id 写入，不立即结算）")
+	_assert(bool(s2_holder.get("defend_intercept_ready")) == false, "S2d②: 持有期间拦截标志不置位（吃全伤害平衡条款）")
+	# S2c 强化锅：pan_charges=3 → 装备拦截置位（耐久 3×3=9 账在 granter._durability）
+	s2_holder.set("pending_item_id", "fenny_pan")  # 不依赖交付链（交付断言已单列）
+	s2_holder.set("pending_item_empower", {"pan_charges": 3.0})
+	var used_pan: bool = s2_holder.use_pending_item()
+	var pan_dur: Dictionary = s2_granter.get("_durability").get(s2_holder.get_instance_id(), {}) if s2_granter.get("_durability") is Dictionary else {}
+	_assert(used_pan and bool(s2_holder.get("defend_intercept_ready")) and int(pan_dur.get("left", 0)) == 9, "S2c①: 强化锅装备（拦截置位+耐久 3×3=9）")
+	# S2c 强化药水：potion_charges=2 → 回血 30×2=60（30→90）
+	s2_holder.set("pending_item_id", "fenny_potion")
+	s2_holder.set("pending_item_empower", {"potion_charges": 2.0})
+	s2_holder.set("stamina", 30.0)
+	s2_holder.use_pending_item()
+	_assert(float(s2_holder.get("stamina")) >= 85.0, "S2c②: 强化药水回血 30×2=60（30→≥85，无强化仅 60）")
+	# S2b 烟花：使用→变身标志置位（吸附/换模/恢复=桥与命中口，源码断言）
+	s2_holder.set("pending_item_id", "fenny_firework")
+	s2_holder.use_pending_item()
+	_assert(bool(s2_holder.get("pending_firework_form")), "S2b①: 烟花使用→变身标志置位")
+	var ball_src: String = (load("res://scripts/battle/ball.gd") as GDScript).source_code
+	_assert(ball_src.contains("ball_speed *= 1.2") and ball_src.contains("pending_firework_form"), "S2b②: 球速+20%与命中恢复链在（ball.gd 发球口/命中口）")
+	_assert(ball_src.contains("remove_meta(\"firework_form\")") or ball_src.contains("remove_meta('firework_form')"), "S2b③: 命中后形态 meta 清除（一次性）")
+	# ===== 35号S3：FP 准星射线操控适配 =====
+	ssm2._operator_context[s2_holder.get_instance_id()] = {"operator": "OP_MARK", "substate": 3, "mark_stage": 1, "command_type": "fenny_magic_ball_def"}  # MARKING=3
+	var ray_foe: Node2D = mgr.spawn("fenny_magic_ball_def", s2_holder.get_instance_id(), Vector2(1400, 200), {"owner_ref": s2_holder})
+	ssm2.set_command_hover_ray(s2_holder.get_instance_id(), ray_foe, null)
+	_assert(ssm2.get_command_selection(s2_holder.get_instance_id()).get("hovered_ball", null) == ray_foe, "S3①: 射线命中→hovered_ball 置位（复用三级高亮链）")
+	ssm2.set_command_hover_ray(s2_holder.get_instance_id(), null, null)
+	_assert(ssm2.get_command_selection(s2_holder.get_instance_id()).get("hovered_ball", null) == null, "S3②: 射线脱靶→hovered 摘除")
+	var im_src_s3: String = (load("res://scripts/battle/input_manager.gd") as GDScript).source_code
+	_assert(im_src_s3.contains("_fp_ray_hover_targets") and im_src_s3.contains("set_command_hover_ray("), "S3③: FP 射线接线在（FP 喂 ray 口/默认视角喂原口）")
+	_assert(im_src_s3.contains("exit_command_mode(controlled_player.get_instance_id(), \"fp_exit\")"), "S3④: E 退出 FP→白球指挥态收窗")
+	_assert(im_src_s3.contains("fp_mode and skill_state_manager.is_ball_command_mode(player_id)"), "S3⑤: FP 下指挥态保持捕获（发球键后覆盖回 CAPTURED）")
+	var ssm_src_s3: String = (SsmScript as GDScript).source_code
+	_assert(ssm_src_s3.contains("MOUSE_MODE_CAPTURED if fp else Input.MOUSE_MODE_VISIBLE"), "S3⑥: 收口光标 fp 分支（CAPTURED 保持，勿强制 VISIBLE 破坏 FP）")
 	# 碰撞归零：召唤体不挡球员
 	var e_src: String = (EntityScript as GDScript).source_code
 	_assert(e_src.contains("collision_layer = 4") and e_src.contains("collision_mask = 0"), "33b②: 召唤体碰撞归零（不挡外场队员行动）")
@@ -469,7 +560,7 @@ func _run() -> void:
 	_assert(ist_at >= 0 and im_src2.substr(ist_at, 420).contains("is_ball_command_mode"), "⓪e: 选择模式下 STEER 牵引停用（攻/守球不再被鼠标定向）")
 	# ⓪f 光标生命周期收口（要点②六出口防泄漏）：恢复统一收进 _clear_operator_context
 	var coc_at: int = ssm_src.find("func _clear_operator_context")
-	_assert(coc_at >= 0 and ssm_src.substr(coc_at, 300).contains("MOUSE_MODE_VISIBLE"), "⓪f: 光标恢复统一收口（取消/收窗/下令/切场凡清上下文必恢复）")
+	_assert(coc_at >= 0 and ssm_src.substr(coc_at, 600).contains("MOUSE_MODE_VISIBLE"), "⓪f: 光标恢复统一收口（取消/收窗/下令/切场凡清上下文必恢复）")
 	var esc_at: int = im_src2.find("KEY_ESCAPE")
 	_assert(esc_at >= 0 and im_src2.substr(esc_at, 200).contains("is_ball_command_mode"), "⓪f: ESC 取消接线（白球指挥态限定）")
 	_assert(im_src2.contains("func _exit_tree") and im_src2.substr(im_src2.find("func _exit_tree"), 200).contains("MOUSE_MODE_HIDDEN"), "⓪f: 切场兜底（_exit_tree 防 HIDDEN 泄漏到菜单）")

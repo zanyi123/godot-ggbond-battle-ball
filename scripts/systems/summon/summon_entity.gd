@@ -13,6 +13,7 @@ var lifespan_left: float = 0.0
 var _mgr: Node = null               # summon_manager 反向引用（despawn/融合）
 var _tdef: Dictionary = {}          # 类型定义
 var _params: Dictionary = {}
+var _content_item: String = ""      # 35号S2a：出生定装内容物（显示层透视读端；交付=定装优先）
 
 const BURROW_TICK_INTERVAL := 60    # 潜地耗能结算间隔（帧；1s@60fps，固定步长确定性）
 
@@ -132,11 +133,42 @@ func _nearest_char_near(pos: Vector2, radius: float, want_enemy: bool) -> Node:
 func _arrive() -> void:
 	match str(_order.get("mode", "")):
 		"explode":
-			_explode_now()
+			_begin_two_stage(null)  # 35号S1：到达指令点同样二段（停驻 0.5s→爆，观感一致）
 		"grant":
 			_grant_now()
 		_:
 			_consume("used")
+
+
+## ===== 35号S1（主人设计逐字"白球命中后的触碰伤害（低），然后为爆炸伤害（延时 0.5 秒）"）=====
+## 二段伤害：第一段=触碰低伤（单体，仅被撞敌人，**不参与强化翻倍**——原作强化只翻倍爆炸伤害）；
+## 第二段=0.5s 后既有 _explode_now（AOE/强化翻倍/破障碍全保留）。types 表 touch_damage>0 才走二段，
+## 无字段类型维持旧即时爆（向后兼容）。_pending_explode=0.5s 窗口竞态闸（二次触碰/重复触发忽略）。
+var _pending_explode: bool = false
+
+func _begin_two_stage(hit_body: Node) -> void:
+	if _pending_explode:
+		return  # 已进二段流程：窗口内二次触碰/重复触发忽略
+	if float(_tdef.get("touch_damage", 0.0)) <= 0.0:
+		_explode_now()  # 未配二段的类型=旧即时爆（兼容）
+		return
+	_pending_explode = true
+	var td: float = float(_tdef.get("touch_damage"))
+	if hit_body != null and is_instance_valid(hit_body) and hit_body.get("stamina") != null:
+		var attacker: Node = owner_ref if owner_ref != null and is_instance_valid(owner_ref) else null
+		var _td_ret: Dictionary = hit_body.take_damage(td, attacker, str(_params.get("element", "")))
+		print("[Summon] 💥 白球触碰(一段): %s 受 %.0f 伤害（二段爆炸 0.5s 后）ret=%s hp=%s" % [
+			str(hit_body.char_data.get("name", "?")) if hit_body.get("char_data") != null else "?", td,
+			str(_td_ret), str(hit_body.get("stamina"))])
+	velocity = Vector2.ZERO  # 停驻命中点（观感：球撞敌→停→爆）
+	_flying = false
+	get_tree().create_timer(0.5).timeout.connect(_two_stage_boom)
+
+
+func _two_stage_boom() -> void:
+	if not is_instance_valid(self) or state == "consumed":
+		return  # 窗口内被 despawn（寿命/被清）→timer 安全空转
+	_explode_now()
 
 
 ## 33号c：施法者是否人类操控（分流：人类球=储备听指挥 / AI 球=自动行为平替）
@@ -218,15 +250,31 @@ func _grant_now() -> void:
 	var pool = _tdef.get("on_ball", {}).get("item_pool", [])
 	if ally != null and is_instance_valid(ally) and pool is Array and not (pool as Array).is_empty():
 		var granter: Node = get_tree().get_first_node_in_group("battle_item_granters")
-		var item_id: String = str((pool as Array)[_ticks % (pool as Array).size()])
+		var item_id: String = _content_item_id(pool)  # 35号S2a：出生定装优先（透视标注所见即所得）
 		if granter != null and granter.has_method("grant_battle_item"):
 			granter.grant_battle_item(ally, item_id)
 			print("[Summon] 🎁 道具交付: %s ← %s" % [str(ally.char_data.get("name", "?")), item_id])
 	_consume("delivered")
 
 
+## 35号S2a：交付内容物=出生定装（_content_item）优先，pool 首个回落（fail-safe）
+func _content_item_id(pool: Array) -> String:
+	var c := str(_params.get("_content_item", ""))
+	if c.is_empty():
+		var attr = get("_content_item")
+		c = str(attr) if attr != null else ""
+	if not c.is_empty():
+		return c
+	return str(pool[0]) if pool is Array and not (pool as Array).is_empty() else ""
+
+
 func _physics_process(delta: float) -> void:
 	if state == "consumed":
+		return
+	# 35号S1：二段窗口期（触碰后 0.5s）完全停驻——不游不飞，观感"球撞敌→停→爆"
+	if _pending_explode:
+		velocity = Vector2.ZERO
+		move_and_slide()
 		return
 	_ticks += 1
 	# 玩家操控飞行（1001 主人令"球的飞行过程要出来"）：直奔指令点，到达即结算并消失
@@ -445,23 +493,24 @@ func _on_touch_body(body: Node) -> void:
 		# AI 施法者的球=自动行为平替（19A 尾款落地前的 AI 操控代偿）
 		if not caster_is_human:
 			if mode == "carry_with_ball" and is_player and str(body.get("team")) != str(owner_ref.team if owner_ref != null and is_instance_valid(owner_ref) else ""):
-				_explode_now()
+				_begin_two_stage(body)  # 35号S1：AI 出击球同走二段（无特判）
 				return
 			if body.get("is_active") != null:
 				on_ball_proximity(body)
 			return
-		# 人类球：攻球碰敌必爆（本性，待命/飞行均爆）
+		# 人类球：攻球碰敌必爆（本性，待命/飞行均爆）——35号S1：二段（先触碰低伤，0.5s 后 AOE）
 		if mode == "carry_with_ball" and is_player:
 			if owner_ref != null and is_instance_valid(owner_ref) and str(body.get("team")) != str(owner_ref.team):
-				_explode_now()
+				_begin_two_stage(body)
 			return
 		# 人类守球：仅指挥飞抵结算（触碰不结算=储备语义）；飞行中触碰→交付给触碰者
 		if _flying and mode == "grant_item":
 			var granter: Node = get_tree().get_first_node_in_group("battle_item_granters") if get_tree() else null
 			var pool = _tdef.get("on_ball", {}).get("item_pool", [])
-			if granter != null and granter.has_method("grant_battle_item") and pool is Array and not (pool as Array).is_empty():
-				granter.grant_battle_item(body, str((pool as Array)[0]))
-				print("[Summon] 🎁 道具交付(触碰): %s ← %s" % [str(body.char_data.get("name", "?")) if body.get("char_data") != null else "?", str((pool as Array)[0])])
+			var item_id: String = _content_item_id(pool)  # 35号S2a：出生定装优先
+			if granter != null and granter.has_method("grant_battle_item") and not item_id.is_empty():
+				granter.grant_battle_item(body, item_id)
+				print("[Summon] 🎁 道具交付(触碰): %s ← %s" % [str(body.char_data.get("name", "?")) if body.get("char_data") != null else "?", item_id])
 			_consume("delivered")
 		return
 

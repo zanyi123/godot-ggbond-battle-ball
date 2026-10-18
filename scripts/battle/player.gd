@@ -67,6 +67,12 @@ var defend_intercept_ready: bool = false   # 受击拦截态（take_damage 前�
 var defend_intercept_item: String = ""     # 拦截源标识（payload 用；耐久由拦截源自管）
 var defend_break_element: String = ""      # 属性瓦解：被该元素球命中即瓦解（空=无；撕咬="雷火"）
 
+# 35号S2d 待用道具（主人 10-11 设计）：交付=待用不立即结算——右键（玩家）/AI 时机触发 use_pending_item；
+# 持有期间拦截标志不置位=吃全伤害（平衡条款，主人明示风险设计）
+var pending_item_id: String = ""           # 待用道具 id（fenny_pan/fenny_potion/fenny_firework；空=无）
+var pending_item_empower: Dictionary = {}  # 交付时透传的强化账（pan_charges/potion_charges/firework_mult）
+var pending_firework_form: bool = false    # 35号S2b：烟花变身态（桥切球形态+球速 buff；命中口恢复）
+
 # 状态指示器基础色（由 enter_catch / set_carrying_ball 设置，状态灯/技能激活可覆盖）
 var _base_indicator_color: Color = Color.TRANSPARENT
 
@@ -1177,6 +1183,25 @@ func _update_jump_visual() -> void:
 		var t: float = clampf(z_height / 80.0, 0.0, 1.0)
 		_jump_shadow.modulate.a = 1.0 - 0.6 * t
 		_jump_shadow.scale = Vector2(1.0 - 0.25 * t, 1.0 - 0.25 * t)
+
+
+## 35号S2d：使用待用道具（玩家右键/AI 时机触发）——结算委托 granter.apply_pending_item（道具逻辑单域）；
+## 烟花返回时置变身标志（S2b 链路起点：桥切形态+球速 buff，命中口恢复）
+func use_pending_item() -> bool:
+	var item_id := str(pending_item_id)
+	if item_id.is_empty():
+		return false
+	var granter: Node = get_tree().get_first_node_in_group("battle_item_granters")
+	var applied: String = ""
+	if granter != null and granter.has_method("apply_pending_item"):
+		applied = str(granter.apply_pending_item(self))
+	pending_item_id = ""
+	pending_item_empower = {}
+	if applied == "firework":
+		pending_firework_form = true
+		print("[Player] 🎆 烟花变身：持球形态切换（命中敌人后恢复）")
+		return true
+	return not applied.is_empty()
 
 
 func take_damage(amount: float, attacker: CharacterBody2D = null, attacker_element: String = "") -> Dictionary:

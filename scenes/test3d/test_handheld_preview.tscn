@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://h3ndheldprev1"]
+
+[ext_resource type="Script" path="res://scripts/test3d/preview/handheld_preview.gd" id="1_preview"]
+
+[node name="HandheldPreview" type="Node3D"]
+script = ExtResource("1_preview")

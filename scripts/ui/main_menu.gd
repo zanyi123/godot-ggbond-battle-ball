@@ -13,6 +13,10 @@ var _mode_selection_nodes: Array[Node] = []
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
+	# 36号：F7 入口=技能测试专用平台（键位表已登记；主菜单按下即切场景）
+	# 36号：F7 用 _input 截获（见 _input 实现）
+	set_process_input(true)
+
 	# 背景
 	var bg := ColorRect.new()
 	bg.name = "BG"
@@ -118,6 +122,14 @@ func _on_enter_player_mode() -> void:
 			PlayerSaveManager.load_slot(GameManager.MODE_SLOT_PLAYER)
 	_clear_mode_selection()
 	_build_main_menu(false)
+
+
+## 36号：F7=技能测试专用平台入口（键位表登记；用 _input 截获防 UI 消费——
+## _unhandled_input 会被全屏 Control 的键盘焦点吃掉）
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_F7:
+		get_viewport().set_input_as_handled()
+		get_tree().change_scene_to_file("res://scenes/test3d/skill_test_platform.tscn")
 
 
 ## 进入管理员模式
