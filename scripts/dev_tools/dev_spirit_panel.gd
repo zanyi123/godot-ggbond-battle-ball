@@ -984,6 +984,40 @@ func _open_skill_edit_panel(skill_id: String) -> void:
 	ctl_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	popup_vbox.add_child(ctl_line)
 
+	# 38号 A6-② 补（2026-10-24 主人批）：操控模板下拉=快速套用；选中即写 skills.json 的 control_template
+	var ctl_row := HBoxContainer.new()
+	ctl_row.name = "ControlTemplateRow"
+	var ctl_pick_label := Label.new()
+	ctl_pick_label.text = "操控模板:"
+	ctl_pick_label.add_theme_font_size_override("font_size", 13)
+	ctl_row.add_child(ctl_pick_label)
+	var ctl_option := OptionButton.new()
+	ctl_option.name = "ControlTemplateOption"
+	ctl_option.add_item("（默认操控 / 未挂模板）")
+	var ctl_ids: Array[String] = []
+	var tpl_dir := DirAccess.open("res://data/control_templates")
+	if tpl_dir != null:
+		for f in tpl_dir.get_files():
+			if not str(f).ends_with(".json"):
+				continue
+			var tid := str(f).trim_suffix(".json")
+			if tid == "ctl_publish_test":
+				continue
+			ctl_ids.append(tid)
+			ctl_option.add_item(tid)
+	var cur_ctl_idx := 0
+	if ctl_id != "":
+		var found_i := ctl_ids.find(ctl_id)
+		if found_i >= 0:
+			cur_ctl_idx = found_i + 1
+	ctl_option.selected = cur_ctl_idx
+	ctl_option.item_selected.connect(func(i: int):
+		var sel := "" if i <= 0 else ctl_ids[i - 1]
+		ctl_line.text = "操控模板：" + (sel if sel != "" else "默认操控（未挂模板）")
+		ctl_line.modulate = Color(0.6, 0.85, 1.0) if sel != "" else Color(1, 1, 1, 0.5))
+	ctl_row.add_child(ctl_option)
+	popup_vbox.add_child(ctl_row)
+
 	# 按分类显示标签按钮
 	var selected_tags: Array = skill_data.get("tags", []).duplicate(true)
 	var tag_params_data: Dictionary = skill_data.get("tag_params", {}).duplicate(true)
@@ -1063,7 +1097,7 @@ func _open_skill_edit_panel(skill_id: String) -> void:
 	confirm_btn.pressed.connect(_on_skill_confirm.bind(
 		skill_data, is_new, name_edit, desc_edit, detail_edit,
 		type_option, skill_sliders, ic_edit, icon_path_edit, selected_tags, tag_params_data,
-		op_option
+		op_option, ctl_option
 	))
 	confirm_row.add_child(confirm_btn)
 
@@ -1395,7 +1429,8 @@ func _on_skill_confirm(
 	icon_path_edit: LineEdit,
 	selected_tags: Array,
 	tag_params_data: Dictionary,
-	op_option: OptionButton
+	op_option: OptionButton,
+	ctl_option: OptionButton
 ) -> void:
 	# 收集数据
 	var skill_data: Dictionary = original_data.duplicate(true)
@@ -1410,6 +1445,12 @@ func _on_skill_confirm(
 	var ops: Array = get_operator_list()
 	var op_sel: int = op_option.selected
 	skill_data["operator"] = str(ops[op_sel]) if op_sel >= 0 and op_sel < ops.size() else "OP_AUTO"
+
+	# 操控模板引用：下拉选中=快速套用；默认项=不挂模板（erase 保持旧行为）
+	if ctl_option != null and ctl_option.selected > 0:
+		skill_data["control_template"] = ctl_option.get_item_text(ctl_option.selected)
+	else:
+		skill_data.erase("control_template")
 
 	# 处理图标图片：若用户选了新图片，复制到项目目录；若清空则置空
 	var icon_src := icon_path_edit.text.strip_edges()

@@ -76,6 +76,30 @@
 			"skills": [
 				"skill_梦幻_1"
 			]
+		},
+		{
+			"description": "操控出口验收元灵：持有 fenny_2（魔术白球-攻），用于正式比赛全链验收（2026-10-24）",
+			"element": "梦幻",
+			"icon_color": "#DDA0DD",
+			"id": "spirit_accept_fenny",
+			"level": 1.0,
+			"max_level": 10.0,
+			"name": "验收·杯艾",
+			"skills": [
+				"fenny_2"
+			]
+		},
+		{
+			"description": "操控出口面板验收元灵：冰雪，持有面板新建的快牙猎杀",
+			"element": "冰雪",
+			"icon_color": "#2E86C1",
+			"id": "spirit_1",
+			"level": 1,
+			"max_level": 10,
+			"name": "验收·阿朗姆",
+			"skills": [
+				"skill_冰雪_2"
+			]
 		}
 	]
 }

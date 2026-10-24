@@ -53,6 +53,22 @@
 				"shuimu_4",
 				"shuimu_5"
 			]
+		},
+		{
+			"id": "spirit_accept_fenny",
+			"name": "验收·杯艾",
+			"element": "梦幻",
+			"skills": [
+				"fenny_2"
+			]
+		},
+		{
+			"id": "spirit_1",
+			"name": "验收·阿朗姆",
+			"element": "冰雪",
+			"skills": [
+				"skill_冰雪_2"
+			]
 		}
 	],
 	"loadouts": [

@@ -1658,6 +1658,11 @@ func _on_spirit_changed(index: int, spirit_id: String) -> void:
 		player.spirit_trigger = spirit_system.skill_trigger
 		print("[BattleManager] 元灵切换后更新技能: %s" % str(skill_ids))
 
+	# 35/36：正式路径补白球补充器注册（此前只在 LoadoutLoader/36 平台注册→正式比赛按技无球可指挥）
+	var sm_spirit := get_tree().get_first_node_in_group("summon_managers") if is_inside_tree() else null
+	if sm_spirit != null and sm_spirit.has_method("ensure_ball_spawner_for_player"):
+		sm_spirit.ensure_ball_spawner_for_player(player)
+
 	# 同步刷新 HUD 技能栏
 	var hud = ui_layer.get_node_or_null("HUD")
 	if hud and hud.has_method("_update_player_skill_icons"):
@@ -1766,7 +1771,14 @@ func _on_prep_match_started() -> void:
 				player_stats.register_player(p)
 		match_duration = 0.0
 
-		# 发球:球给随机一方
+	# 35/36：正式路径开局兜底（幂等）——按已装元灵技能注册白球补充器
+	var sm_start := get_tree().get_first_node_in_group("summon_managers")
+	if sm_start != null and sm_start.has_method("ensure_ball_spawner_for_player"):
+		for p_start in team_a_players + team_b_players:
+			if p_start != null and is_instance_valid(p_start):
+				sm_start.ensure_ball_spawner_for_player(p_start)
+
+	# 发球:球给随机一方
 	_assign_initial_ball()
 
 

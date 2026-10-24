@@ -102,6 +102,7 @@ func _run() -> void:
 	_assert("G10a: ssm 模板读取口已挂（_template_val 单一出口+消费点×2+缓存键含 skill_id）", ssm_src.count("_template_val(") >= 3 and ssm_src.contains('tid + ":" + skill_id') and ssm_src.contains("ControlTemplateValidator"))
 	var panel_src := _read_file("res://scripts/dev_tools/dev_spirit_panel.gd")
 	_assert("G10b: 元灵面板只读行（E3：操控模板展示）", panel_src.contains("操控模板："))
+	_assert("G10e: 技能弹窗操控模板下拉（快速套用写 control_template）", panel_src.contains("ControlTemplateOption") and panel_src.contains("skill_data[\"control_template\"] = ctl_option.get_item_text"))
 	# G10c 复核修复行为断言（10-23）：两技能共模板缓存隔离+lock_snap 可读
 	var ssm = load("res://scripts/systems/spirit_system/skill_state_manager.gd").new()
 	ssm._operator_context = {999: {"skill_id": "fenny_2"}, 998: {"skill_id": "fenny_3"}}

@@ -129,6 +129,34 @@ func stop_auto_spawner(owner_id: int, type_id: String = "") -> void:
 	_auto_spawners = _auto_spawners.filter(func(a): return int(a["owner_id"]) != owner_id or (type_id != "" and str(a["type_id"]) != type_id))
 
 
+## 35/36/full-ai/正式路径共用：按球员已装技能注册白球补充器（fenny_2→攻球 / fenny_3→守球）+ 开局首生成。
+## 正式比赛路径此前无此调用（只有 LoadoutLoader / 36 平台各自注册）——此口单一入口、幂等可重复调用；
+## 换元灵/卸下时停掉旧类型补充器（防 att/def 两套同时生成）。
+func ensure_ball_spawner_for_player(player: CharacterBody2D) -> String:
+	if player == null or not is_instance_valid(player):
+		return ""
+	var ball_type := ""
+	for sid in player.get_equipped_skills():
+		if str(sid) == "fenny_2":
+			ball_type = "fenny_magic_ball_att"
+		elif str(sid) == "fenny_3":
+			ball_type = "fenny_magic_ball_def"
+	var pid: int = player.get_instance_id()
+	if ball_type.is_empty():
+		stop_auto_spawner(pid)
+		return ""
+	for a in _auto_spawners:
+		if int(a.get("owner_id", -1)) == pid and str(a.get("type_id", "")) == ball_type:
+			return ball_type   # 平台/Loadout 已注册=幂等，不重复生成
+	stop_auto_spawner(pid)   # 换类型：先停旧账（att/def 互切）
+	register_auto_spawner(pid, ball_type, 5.0, {"owner_ref": player, "summon_type": ball_type, "count": 1})
+	# 原作"开局首生成"：生成位走 manager 统一解析（敌带全域随机→已确定性骰子）
+	spawn(ball_type, pid, resolve_spawn_position(ball_type, player), {"owner_ref": player, "summon_type": ball_type})
+	print("[Summon] 白球体系初始化(正式路径): %s → %s（开局1+5s/个）" % [
+		str(player.char_data.get("name", "?")) if player.get("char_data") != null else "?", ball_type])
+	return ball_type
+
+
 ## 23 芬尼#1：上限提升（duration 到期自动还原旧值；固定步长帧账本）
 func set_active_limit_timed(type_id: String, n: int, old_limit: int, duration_s: float) -> void:
 	set_active_limit(type_id, n)

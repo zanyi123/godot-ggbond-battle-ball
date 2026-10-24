@@ -687,13 +687,16 @@ func _wb_make_control(key: String) -> Control:
 			sp.step = 0.1
 			sp.value = float(cur)
 			sp.custom_minimum_size = Vector2(96, 0)
-			sp.value_changed.connect(_on_param.bind(key))
+			# 38号工作台：SpinBox.value_changed 首参=新值，必须用 lambda 把 (key, value) 按 _on_param 签名传；
+			# 原 _on_param.bind(key) 会把 float 当第一个 String 形参→运行时报错、参数改不动（2026-10-24 验收抓出）
+			sp.value_changed.connect(func(v: float): _on_param(key, v))
 			wb_controls[key] = sp
 			return sp
 		"bool":
 			var cb := CheckBox.new()
 			cb.button_pressed = bool(cur)
-			cb.toggled.connect(_on_param.bind(key))
+			# 同上：CheckBox.toggled 首参=bool，用 lambda 按 (key, value) 传
+			cb.toggled.connect(func(on: bool): _on_param(key, on))
 			wb_controls[key] = cb
 			return cb
 		"enum":
