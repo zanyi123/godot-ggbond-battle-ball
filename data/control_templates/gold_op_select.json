@@ -1,0 +1,17 @@
+{
+	"version": 1,
+	"source": "gold",
+	"operator": "OP_SELECT",
+	"params": {
+		"ctl_input_operator": "OP_SELECT",
+		"ctl_input_view_mode": "camera",
+		"ctl_input_preview_solo": true,
+		"ctl_input_hover_snap": 120.0,
+		"ctl_input_lock_snap": 150.0,
+		"ctl_visual_model_path": "",
+		"ctl_visual_color": "#50D4FFE0",
+		"ctl_visual_alpha": 0.45,
+		"ctl_visual_hover_y": 75.0,
+		"ctl_time_spawn_delay": 0.0
+	}
+}

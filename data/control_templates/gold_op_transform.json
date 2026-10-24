@@ -1,0 +1,12 @@
+{
+	"version": 1,
+	"source": "gold",
+	"operator": "OP_TRANSFORM",
+	"params": {
+		"ctl_input_operator": "OP_TRANSFORM",
+		"ctl_visual_color": "#FFCC26FF",
+		"ctl_visual_alpha": 1.0,
+		"ctl_visual_scale": 1.0,
+		"ctl_time_spawn_delay": 0.0
+	}
+}
