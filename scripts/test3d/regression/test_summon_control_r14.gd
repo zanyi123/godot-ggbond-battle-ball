@@ -24,6 +24,12 @@ class StubHost extends Node2D:
 	var team_a_players: Array = []
 	var team_b_players: Array = []
 
+## 35号 P0-1 回归用假体：带 team 字段伪装球员，但没有 use_pending_item / is_player_controlled
+## （必须继承 CharacterBody2D：grant_battle_item 的入参是强类型 CharacterBody2D）
+class FakeBody extends CharacterBody2D:
+	var team: String = "a"
+	var is_active: bool = false
+
 func _run() -> void:
 	print("\n========== 27-R1~R4：召唤操控链验收 ==========\n")
 	for i in range(3):
@@ -362,6 +368,25 @@ func _run() -> void:
 	var ball_src: String = (load("res://scripts/battle/ball.gd") as GDScript).source_code
 	_assert(ball_src.contains("ball_speed *= 1.2") and ball_src.contains("pending_firework_form"), "S2b②: 球速+20%与命中恢复链在（ball.gd 发球口/命中口）")
 	_assert(ball_src.contains("remove_meta(\"firework_form\")") or ball_src.contains("remove_meta('firework_form')"), "S2b③: 命中后形态 meta 清除（一次性）")
+
+	# ===== 35号 P0-1 回归：守球交付身份闸（非球员不得交付；堵 bool(null) 运行时错误 + 道具丢失）=====
+	var rogue: FakeBody = FakeBody.new()
+	host.add_child(rogue)
+	var rogue_ok: bool = s2_granter.grant_battle_item(rogue, "fenny_pan")
+	_assert(not rogue_ok, "P0-1①: 非球员直调 grant_battle_item → fail-closed false（不再走 bool(null)）")
+	_assert(rogue.get("pending_item_id") == null, "P0-1②: 非球员未被写入 pending_item_id（道具不丢给假体）")
+	# 触碰面：飞行守球碰「有 team、无 use_pending_item」的体 → 不交付、球不消耗
+	var p0_ball: Node2D = mgr.spawn("fenny_magic_ball_def", s2_holder.get_instance_id(), Vector2(1500, 100), {"owner_ref": s2_holder})
+	p0_ball.set("lifespan_left", 999.0)
+	p0_ball.set("_flying", true)
+	p0_ball._on_touch_body(rogue)
+	_assert(is_instance_valid(p0_ball) and str(p0_ball.get("state")) == "active", "P0-1③: 飞行守球碰非球员→不交付不消耗（球仍 active）")
+	# 真球员对照：同一飞行守球碰真球员 → 正常交付待用
+	p0_ball._on_touch_body(s2_holder)
+	_assert(is_instance_valid(p0_ball) and str(p0_ball.get("state")) == "consumed" \
+			and str(s2_holder.get("pending_item_id")) in ["fenny_pan", "fenny_potion", "fenny_firework"], "P0-1④: 真球员同路径仍正常交付（身份闸不误杀）")
+	var ent_src_p0: String = (EntityScript as GDScript).source_code
+	_assert(ent_src_p0.contains("mode == \"grant_item\" and is_player and body.has_method(\"use_pending_item\")"), "P0-1⑤: 交付分支身份闸源码在（实体层，防守卫被回退）")
 	# ===== 35号S3：FP 准星射线操控适配 =====
 	ssm2._operator_context[s2_holder.get_instance_id()] = {"operator": "OP_MARK", "substate": 3, "mark_stage": 1, "command_type": "fenny_magic_ball_def"}  # MARKING=3
 	var ray_foe: Node2D = mgr.spawn("fenny_magic_ball_def", s2_holder.get_instance_id(), Vector2(1400, 200), {"owner_ref": s2_holder})

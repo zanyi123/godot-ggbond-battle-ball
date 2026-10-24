@@ -12,11 +12,11 @@ func _run() -> void:
 	var models := {
 		"frying_pan": "res://assets/game_models/items_handheld/frying_pan.glb",
 		"potion_red": "res://assets/game_models/items_handheld/potion_red.fbx",
-		"rocket_baseA": "res://assets/game_models/items_handheld/rocket_baseA.glb",
-		"rocket_finsA": "res://assets/game_models/items_handheld/rocket_finsA.glb",
-		"rocket_fuelA": "res://assets/game_models/items_handheld/rocket_fuelA.glb",
-		"rocket_sidesA": "res://assets/game_models/items_handheld/rocket_sidesA.glb",
-		"rocket_topA": "res://assets/game_models/items_handheld/rocket_topA.glb",
+		"rocket_baseA": "res://assets/game_models/items_handheld/firework/rocket_baseA.glb",
+		"rocket_finsA": "res://assets/game_models/items_handheld/firework/rocket_finsA.glb",
+		"rocket_fuelA": "res://assets/game_models/items_handheld/firework/rocket_fuelA.glb",
+		"rocket_sidesA": "res://assets/game_models/items_handheld/firework/rocket_sidesA.glb",
+		"rocket_topA": "res://assets/game_models/items_handheld/firework/rocket_topA.glb",
 	}
 	var all_ok := true
 	for key in models:

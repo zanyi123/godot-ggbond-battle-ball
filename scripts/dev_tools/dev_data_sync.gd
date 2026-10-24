@@ -509,10 +509,12 @@ static func validate_skill_data(skill_data: Dictionary, existing: Array, exclude
 			if known.size() > 0 and not (str(pkey) in known):
 				print("[DevSync] 警告: %s 的参数 %s 不在 registry params 列表（保留，向后兼容）" % [tag_id, str(pkey)])
 	# 工单14/操1：operator 字段校验（操控规划/04 大点1）
+	# 2026-10-24 主人令：本处原为第四份写死的 12 项名单 → 改为读单一来源 skill_state_manager.OPERATORS（现 18 项），
+	# 避免「面板扩了、校验没扩」导致保存被拦；枚举唯一来源化，后续再扩不失效。
 	var operator := str(skill_data.get("operator", "OP_AUTO"))
-	var operators := ["OP_AUTO", "OP_AIM", "OP_POINT", "OP_MARK", "OP_STEER", "OP_MIDFLY", "OP_TOGGLE", "OP_KEY_JUMP", "OP_PLACE", "OP_SUMMON", "OP_FP", "OP_COMBO"]
+	var operators: Array = load("res://scripts/systems/spirit_system/skill_state_manager.gd").OPERATORS
 	if not (operator in operators):
-		errors.append("未知操作方式 operator: %s（12 枚举之外）" % operator)
+		errors.append("未知操作方式 operator: %s（%d 枚举之外）" % [operator, operators.size()])
 	elif str(skill_data.get("type", "active")) == "passive" and operator != "OP_AUTO":
 		errors.append("被动技能只允许 operator=OP_AUTO（当前 %s）" % operator)
 	elif operator == "OP_MIDFLY":

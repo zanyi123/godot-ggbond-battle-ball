@@ -1,7 +1,12 @@
 extends Node
+
 class_name SkillStateManager
 ## 技能状态管理器
 ## 管理技能激活/取消/释放状态，支持连按2下自动释放
+
+## 38号批4 操控出口：模板读取口（只在此开路由——snap 参数化，路由分支不变）
+const ControlTemplateValidator := preload("res://scripts/systems/control_templates/schema_validator.gd")
+var _tpl_cache: Dictionary = {}
 
 signal skill_activated(skill_id: String, player_id: int)
 signal skill_cancelled(skill_id: String, player_id: int)
@@ -36,10 +41,15 @@ var _active_player_skills: Dictionary = {}
 
 ## ==================== 操1（操控规划/04）：operator 子态扩展 ====================
 
-## 12 类操作枚举（schema "operator" 字段合法值；OP_COMBO 仅保留枚举随 S1）
+## 18 类操作枚举（schema "operator" 字段合法值；OP_COMBO 仅保留枚举随 S1）
+## 2026-10-24 主人令：12 → 18，新增 6 项与 schema_validator.OPERATORS_18、37演示平台 18 条操控标签三方对齐。
+## 原 12 类在激活期有子态（见下方 OPERATOR_SUBSTATE）；新增 6 类不登记子态=激活期无子态（同 OP_AUTO 口径），
+## 故 OPERATOR_SUBSTATE 表**不需同步改动**。此前 12 项导致开发面板下拉选不到新操控方式，且 get_operator()
+## 会把非法值回落 OP_AUTO——扩表后该回落不再吞掉 6 个新值。
 const OPERATORS: Array[String] = [
 	"OP_AUTO", "OP_AIM", "OP_POINT", "OP_MARK", "OP_STEER", "OP_MIDFLY",
 	"OP_TOGGLE", "OP_KEY_JUMP", "OP_PLACE", "OP_SUMMON", "OP_FP", "OP_COMBO",
+	"OP_SELECT", "OP_ORIENT", "OP_TRAIL", "OP_GUIDE", "OP_TRANSFORM", "OP_HOLD",
 ]
 
 ## 激活后的操作子态
@@ -136,7 +146,7 @@ func confirm_substate_at(player_id: int, world_pos: Vector2) -> String:
 		var mstage: int = int(ctx.get("mark_stage", 0))
 		var cp2: Node = _get_controlled_player()
 		if mstage == 1:
-			var ball: Node = _nearest_command_ball(cp2, world_pos, 120.0, str(ctx.get("command_type", "")))
+			var ball: Node = _nearest_command_ball(cp2, world_pos, _template_val(player_id, "ctl_input_hover_snap", 120.0), str(ctx.get("command_type", "")))
 			if ball != null:
 				ctx["selected_summon"] = ball
 				ctx["mark_stage"] = 2
@@ -235,7 +245,7 @@ func set_command_hover(player_id: int, world_pos: Vector2) -> void:
 	if cp == null or not is_instance_valid(cp):
 		return
 	if int(ctx.get("mark_stage", 0)) == 1:
-		var ball: Node = _nearest_command_ball(cp, world_pos, 120.0, str(ctx.get("command_type", "")))
+		var ball: Node = _nearest_command_ball(cp, world_pos, _template_val(player_id, "ctl_input_hover_snap", 120.0), str(ctx.get("command_type", "")))
 		if ball != null:
 			ctx["hovered_ball"] = ball
 		else:
@@ -1040,6 +1050,25 @@ func is_mouse_required(skill_id: String) -> bool:
 
 
 ## 获取技能数据
+## 38号批4+复核修复：操控模板单一出口——技能带 control_template 时参数从模板读；
+## 无字段=既有行为（D1 存量零影响）；坏模板=三级回落（不崩）；比赛中不热切（D5 装载固化）。
+## 缓存键=tid+":"+skill_id：同模板不同技能回落链互不污染（复核修复 10-23——原键=tid，两技能
+## 共模板且 operator 不同（fenny_2=OP_STEER/fenny_3=OP_MARK）时 gold 回落链被首技能缓存污染）
+## 可读任意 ctl_ 键（hover_snap=点球选中 / lock_snap=出击锁定挂点 v2 接入）
+func _template_val(player_id: int, key: String, def: float) -> float:
+	var skill_id := str(_operator_context.get(player_id, {}).get("skill_id", ""))
+	var sd: Dictionary = _get_skill_data(skill_id)
+	var tid := str(sd.get("control_template", ""))
+	if tid == "":
+		return def
+	var ck := tid + ":" + skill_id
+	if not _tpl_cache.has(ck):
+		var tpl: Dictionary = ControlTemplateValidator.read_template_file("res://data/control_templates/%s.json" % tid)
+		_tpl_cache[ck] = ControlTemplateValidator.resolve_params(tpl.get("params", {}), str(sd.get("operator", "OP_AUTO")))
+		print("[ControlTemplate] 技能模板已装载: %s（%s）" % [tid, ck])
+	return float(_tpl_cache[ck].get(key, def))
+
+
 func _get_skill_data(skill_id: String) -> Dictionary:
 	if not FileAccess.file_exists("res://data/spirits/skills.json"):
 		return {}

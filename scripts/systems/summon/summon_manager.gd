@@ -263,6 +263,20 @@ func _resolve_owner_node(owner_id: int) -> Node:
 	return null
 
 
+## 38号 sim 规矩①：生成/散布类随机禁裸 randf→确定性骰子（Knuth 乘法散列，照 ai_manager._dodge_roll 范式）
+## 输入=owner_id+本场合生成序号+salt 串——同场次同输入恒同输出，与全局 randf 消费顺序解耦
+var _spawn_seq: Dictionary = {}              # owner_id -> 已生成序号（确定性序号源；场景重载自然清零）
+
+func _spawn_roll(owner_id: int, salt: String) -> float:
+	var seq := int(_spawn_seq.get(owner_id, 0))
+	_spawn_seq[owner_id] = seq + 1
+	var h: int = (owner_id % 1000003) * 2654435761 + (seq % 100007) * 40503 + (salt.hash() % 1000033) * 65599
+	h = h % 4294967296
+	if h < 0:
+		h += 4294967296
+	return float(h) / 4294967296.0
+
+
 ## 32号b：生成位解析（数据驱动 spawn_hint）——鲨鱼=施法者脚下 / 白球=外场带全域随机
 ## （34号S7b 勘误 2026-10-08：己方外场=敌方内场背后=交叉布局右带，33号原口径即正确——
 ##  本窗口曾误改左带方向已回退，spawn_hint 保持 enemy_outer_random 原名原位）
@@ -272,9 +286,13 @@ func resolve_spawn_position(type_id: String, owner_node: Node) -> Vector2:
 	var hint := str(tdef.get("spawn_hint", "caster"))
 	var team := str(owner_node.get("team")) if owner_node != null and is_instance_valid(owner_node) else ""
 	if hint == "enemy_outer_random" and (team == "a" or team == "b"):
-		# 外场竖带全域随机（A→右带=己方外场(敌方内场背后) / B→左带镜像；randf=主人明令随机）
-		var x: float = randf_range(385.0, 505.0) if team == "a" else randf_range(-505.0, -385.0)
-		return Vector2(x, randf_range(-320.0, 320.0))
+		# 外场竖带全域散布（A→右带=己方外场(敌方内场背后) / B→左带镜像）
+		# 38号 sim 规矩①：主人明令的"随机散布"改确定性骰子实现——散布观感保留，同 seed 逐位恢复
+		var oid: int = owner_node.get_instance_id()
+		var roll_x: float = _spawn_roll(oid, type_id + "_x")
+		var roll_y: float = _spawn_roll(oid, type_id + "_y")
+		var x: float = (385.0 + roll_x * 120.0) if team == "a" else -(385.0 + roll_x * 120.0)
+		return Vector2(x, -320.0 + roll_y * 640.0)
 	return owner_node.global_position if owner_node != null and is_instance_valid(owner_node) else Vector2.ZERO
 
 

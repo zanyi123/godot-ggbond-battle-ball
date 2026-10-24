@@ -8,7 +8,8 @@ signal closed()
 # 工单14 F5：技能编辑弹窗校验错误提示
 var skill_error_label: Label = null
 
-# 操2：操作方式 12 枚举显示简称（枚举单一来源=skill_state_manager.OPERATORS，见 get_operator_list）
+# 操2：操作方式枚举显示简称（枚举单一来源=skill_state_manager.OPERATORS，见 get_operator_list）
+# 2026-10-24 主人令：随 OPERATORS 12→18 同步补 6 条简称，保持「下拉项 = 最新简称」不缺项
 const OPERATOR_LABELS: Dictionary = {
 	"OP_AUTO": "自动",
 	"OP_AIM": "瞄准",
@@ -22,9 +23,15 @@ const OPERATOR_LABELS: Dictionary = {
 	"OP_SUMMON": "召唤",
 	"OP_FP": "FP",
 	"OP_COMBO": "合技",
+	"OP_SELECT": "选择",
+	"OP_ORIENT": "定向",
+	"OP_TRAIL": "轨迹",
+	"OP_GUIDE": "制导",
+	"OP_TRANSFORM": "变身",
+	"OP_HOLD": "维持",
 }
 
-## 操2：12 类操作枚举列表（读 skill_state_manager 常量，避免双处维护）
+## 操2：18 类操作枚举列表（读 skill_state_manager 常量，避免双处维护）
 static func get_operator_list() -> Array:
 	return load("res://scripts/systems/spirit_system/skill_state_manager.gd").OPERATORS
 
@@ -967,6 +974,15 @@ func _open_skill_edit_panel(skill_id: String) -> void:
 	tags_title.add_theme_color_override("font_color", Color(0.8, 0.7, 0.3))
 	tags_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	popup_vbox.add_child(tags_title)
+
+	# 38号批4（E3）：操控模板只读行（编辑去工作台，面板不提供编辑）
+	var ctl_line := Label.new()
+	var ctl_id := str(skill_data.get("control_template", ""))
+	ctl_line.text = "操控模板：" + (ctl_id if ctl_id != "" else "默认操控（未挂模板）")
+	ctl_line.add_theme_font_size_override("font_size", 13)
+	ctl_line.modulate = Color(0.6, 0.85, 1.0) if ctl_id != "" else Color(1, 1, 1, 0.5)
+	ctl_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	popup_vbox.add_child(ctl_line)
 
 	# 按分类显示标签按钮
 	var selected_tags: Array = skill_data.get("tags", []).duplicate(true)

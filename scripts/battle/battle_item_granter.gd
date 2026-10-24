@@ -40,7 +40,10 @@ func _ensure_subscribed() -> void:
 ## 写 player.pending_item_id（右键/AI 时机触发 apply_pending_item 结算）；存量
 ## "锅立即装备"口径由待用态替代：持有期间拦截标志不置位=吃全伤害（平衡条款，主人明示风险设计）
 func grant_battle_item(player: CharacterBody2D, item_id: String, source: String = "magic_ball", empower: Dictionary = {}) -> bool:
-	if player == null or not is_instance_valid(player) or item_id.is_empty():
+	# 35号 P0-1 fail-closed：非球员（球/召唤体/裸 Node2D）没有 use_pending_item，
+	# 若放行会在下方 bool(player.get("is_player_controlled")) 抛 Invalid call 并吞道具
+	if player == null or not is_instance_valid(player) \
+			or not player.has_method("use_pending_item") or item_id.is_empty():
 		return false
 	_ensure_subscribed()
 	match item_id:

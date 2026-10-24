@@ -475,7 +475,8 @@ func _on_touch_body(body: Node) -> void:
 	var is_player: bool = body.get("team") != null and str(body.get("team")) in ["a", "b"]
 	var kind := str(_tdef.get("kind", ""))
 	if kind == "shark":
-		if is_player:
+		# 35号 P0-1 审计：身份闸=球员 + 检测体可受伤（team 字段可能被非球员实体携带，仅按 team 判会误入）
+		if is_player and body.has_method("take_damage"):
 			var my_team := _resolve_my_team()
 			if not my_team.is_empty() and str(body.get("team")) != my_team and float(_tdef.get("contact_damage", 0.0)) > 0.0:
 				body.take_damage(float(_tdef.get("contact_damage")), owner_ref if owner_ref != null and is_instance_valid(owner_ref) else null, str(_params.get("element", "")))
@@ -504,7 +505,8 @@ func _on_touch_body(body: Node) -> void:
 				_begin_two_stage(body)
 			return
 		# 人类守球：仅指挥飞抵结算（触碰不结算=储备语义）；飞行中触碰→交付给触碰者
-		if _flying and mode == "grant_item":
+		# 35号 P0-1：身份闸——只交付给真球员（有 use_pending_item）；球/召唤体碰触=直接穿过，不消耗本球
+		if _flying and mode == "grant_item" and is_player and body.has_method("use_pending_item"):
 			var granter: Node = get_tree().get_first_node_in_group("battle_item_granters") if get_tree() else null
 			var pool = _tdef.get("on_ball", {}).get("item_pool", [])
 			var item_id: String = _content_item_id(pool)  # 35号S2a：出生定装优先

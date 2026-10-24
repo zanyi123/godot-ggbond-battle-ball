@@ -21,15 +21,21 @@ func _run() -> void:
 	var panel_script: GDScript = load("res://scripts/dev_tools/dev_spirit_panel.gd")
 	var sm_script: GDScript = load("res://scripts/systems/spirit_system/skill_state_manager.gd")
 
-	# ===== ① 枚举源一致：面板读 skill_state_manager.OPERATORS，共 12 项 =====
+	# ===== ① 枚举源一致：面板读 skill_state_manager.OPERATORS，共 18 项 =====
+	# 2026-10-24 主人令：12 → 18（需求变更跟随，非改断言压红——新增 6 项 OP_SELECT/ORIENT/TRAIL/GUIDE/TRANSFORM/HOLD）
 	var ops: Array = panel_script.get_operator_list()
-	_assert("枚举: 面板 get_operator_list 读取 12 项", ops.size() == 12)
+	_assert("枚举: 面板 get_operator_list 读取 18 项", ops.size() == 18)
 	_assert("枚举: 与 skill_state_manager.OPERATORS 同源", str(ops) == str(sm_script.OPERATORS))
 	var expect_ops := ["OP_AUTO", "OP_AIM", "OP_POINT", "OP_MARK", "OP_STEER", "OP_MIDFLY",
-		"OP_TOGGLE", "OP_KEY_JUMP", "OP_PLACE", "OP_SUMMON", "OP_FP", "OP_COMBO"]
-	_assert("枚举: 12 类名逐一匹配工单定义", str(ops) == str(expect_ops))
+		"OP_TOGGLE", "OP_KEY_JUMP", "OP_PLACE", "OP_SUMMON", "OP_FP", "OP_COMBO",
+		"OP_SELECT", "OP_ORIENT", "OP_TRAIL", "OP_GUIDE", "OP_TRANSFORM", "OP_HOLD"]
+	_assert("枚举: 18 类名逐一匹配工单定义", str(ops) == str(expect_ops))
+	# ①b 三方对齐：面板 18 项必须与模板校验器 OPERATORS_18 完全一致（此前两者差 6 项=面板选不到新操控方式）
+	var validator_script: GDScript = load("res://scripts/systems/control_templates/schema_validator.gd")
+	var validator_ops: Array = validator_script.OPERATORS_18
+	_assert("枚举: 面板 18 项与模板校验器 OPERATORS_18 三方对齐", str(ops) == str(validator_ops))
 
-	# ===== ② 徽标映射：OPERATOR_LABELS 覆盖 12 枚举，非 AUTO 简称非空 =====
+	# ===== ② 徽标映射：OPERATOR_LABELS 覆盖 18 枚举，非 AUTO 简称非空 =====
 	var labels: Dictionary = panel_script.OPERATOR_LABELS
 	var labels_ok := true
 	for op in ops:
@@ -37,7 +43,7 @@ func _run() -> void:
 			labels_ok = false
 		elif str(op) != "OP_AUTO" and str(labels[op]).strip_edges() == "":
 			labels_ok = false
-	_assert("徽标: OPERATOR_LABELS 覆盖 12 枚举且非AUTO简称非空", labels_ok)
+	_assert("徽标: OPERATOR_LABELS 覆盖 18 枚举且非AUTO简称非空", labels_ok)
 
 	# ===== ③ 选择→保存→重载回显（走 14 保存链路；R1 备份在先）=====
 	_raw_backup = FileAccess.get_file_as_string("res://data/spirits/skills.json")
@@ -69,7 +75,7 @@ func _run() -> void:
 			echo2 = str(s.get("operator", ""))
 	_assert("回显: 编辑改 OP_TOGGLE→重载一致", echo2 == "OP_TOGGLE")
 
-	# 缺省路径（2026-09-25 随数据演进出兼容版）：有 operator 字段的必须 ∈ 12 枚举；
+	# 缺省路径（2026-09-25 随数据演进出兼容版）：有 operator 字段的必须 ∈ 18 枚举；
 	# 无字段的缺省 AUTO 语义由 skill_state_manager.get_operator 兜底（另有断言覆盖）
 	var LEGAL_OPS: Array = ops
 	var compat_ok := true
@@ -112,7 +118,7 @@ func _run() -> void:
 		"operator": "OP_NOPE"}
 	var e6: Array[String] = DevDataSync.validate_skill_data(bad_enum, existing, "")
 	_assert("校验: 非法枚举 OP_NOPE 被拦截", e6.any(func(e): return e.contains("枚举")))
-	# ④f 12 枚举逐个合法（active 基础条目，除 TOGGLE 补 mode/MIDFLY 补 params 外无 operator 报错）
+	# ④f 18 枚举逐个合法（active 基础条目，除 TOGGLE 补 mode/MIDFLY 补 params 外无 operator 报错）
 	var all_enum_ok := true
 	for op in ops:
 		var probe := {"id": "x_probe", "name": "t", "type": "active", "tags": [], "tag_params": {},
@@ -125,7 +131,7 @@ func _run() -> void:
 		var es: Array[String] = DevDataSync.validate_skill_data(probe, existing, "")
 		if es.any(func(e): return e.contains("operator") or e.contains("操作方式")):
 			all_enum_ok = false
-	_assert("校验: 12 枚举合法值全部不报 operator 错", all_enum_ok)
+	_assert("校验: 18 枚举合法值全部不报 operator 错", all_enum_ok)
 
 	# ===== ⑤ 操2 大点1.5：操作维度总开关（关闭=全按 OP_AUTO；不改接口签名）=====
 	var sm: Node = sm_script.new()
