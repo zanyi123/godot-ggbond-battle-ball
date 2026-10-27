@@ -31,8 +31,24 @@ fi
 
 # 健康检查阈值（与 baseline.json 的 hard_rules 对应，写死避免 JSON 解析）
 HARD_STUCK_MAX=0
-HARD_CATCHRATE_MIN=50    # 传球率硬危险线（百分口径；P4 附带发现修正：原 0.8 分数与百分数比较恒通过，2026-09-25 主人批）
-WARN_CATCHRATE_MIN=80    # 传球率警告线（50~80=对抗波动提示人工看）
+# D21a 双锚（2026-10-27 主人批，Q13 全开稳态口径）：按 switches 实测态自动选传球率线——
+#   全关(交付/固化验证态)=硬50/警80；全开(实测/开波态)=硬35/警60（全开攻防演化实测 40~100，
+#   三次撞线同源备案件=原50线量全开世界恒红）。其他红线（卡死0/击中/0-0）两态一致。
+SW_STATE="all_off"; HARD_CATCHRATE_MIN=50; WARN_CATCHRATE_MIN=80
+if command -v python >/dev/null 2>&1; then
+  _ANCHOR=$(python -c "
+import json
+try:
+    d=json.load(open('data/systems/spirit_ai/switches.json',encoding='utf-8'))
+    print('all_on' if d.get('master_enabled') is True else 'all_off')
+except Exception:
+    print('all_off')
+" 2>/dev/null)
+  if [ "$_ANCHOR" = "all_on" ]; then
+    SW_STATE="all_on"; HARD_CATCHRATE_MIN=35; WARN_CATCHRATE_MIN=60
+  fi
+fi
+echo "锚态: $SW_STATE（传球率硬$HARD_CATCHRATE_MIN/警$WARN_CATCHRATE_MIN）"
 HARD_HIT_MIN=1
 WARN_STATE_MIN=30
 WARN_STATE_MAX=400       # 对齐 baseline.json normal_range.state_changes_per_match 上限（09-13 已放宽至400；工装原写死130与基线脱节，2026-09-25 前置地基工单对齐）
