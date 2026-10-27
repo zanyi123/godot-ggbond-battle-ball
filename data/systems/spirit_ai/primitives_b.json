@@ -319,7 +319,7 @@
 		"player_cc_immune": {
 			"family": "player_control",
 			"direction": "self",
-			"timing_gate": "self_threatened",
+			"timing_gate": "enemy_ult_warning",
 			"value_param": "duration",
 			"value_unit": 10.0,
 			"value_min": 15.0,
@@ -327,7 +327,7 @@
 			"intent": "defense",
 			"intent_strength": 0.8,
 			"target_mode": "self",
-			"notes": "控制族：防控；理想时机=ENEMY_ULT_WARNING预警（主题⑤消息，未实现，轮询版先行）"
+			"notes": "控制族：防控；理想时机=ENEMY_ULT_WARNING预警（主题⑤消息，未实现，轮询版先行） | D4 批a（随D3开波轮）：gate self_threatened→enemy_ult_warning（17号敌大招预警窗口）"
 		},
 		"player_silence": {
 			"family": "player_control",

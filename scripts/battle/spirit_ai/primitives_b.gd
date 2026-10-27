@@ -125,6 +125,10 @@ static func timing_gate(descriptor: Dictionary, sad: Dictionary, ctx: Dictionary
 			if player != null and is_instance_valid(player) and player.has_method("is_status_active"):
 				return {"ok": bool(player.is_status_active("rooted")), "bonus": 1.0}
 			return {"ok": false, "bonus": 1.0}
+		"enemy_ult_warning":
+			# D4 批a（随D3开波轮，Q3 备案兑现）：敌方大招预警活跃 → 免控技理想时机
+			# 数据源=manager ctx 组装（comm v2 预警查询；缺省 fail-closed）
+			return {"ok": bool(ctx.get("enemy_ult_warning", false)), "bonus": 1.0}
 		"enemy_low_hp":
 			# Q2②（已批 09-27）：可见敌有残血(<0.35) → 收割技理想时机
 			for enemy in visible_enemies:
