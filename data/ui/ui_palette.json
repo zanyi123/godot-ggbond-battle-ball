@@ -1,0 +1,75 @@
+{
+	"meta": {
+		"name": "battle_ball_ui_palette",
+		"version": "0.1.0",
+		"status": "draft_awaiting_1027_2",
+		"updated": "2026-10-27",
+		"owner": "美术UI线乙线窗口",
+		"rule": "全 UI 取色唯一来源；脚本内禁止散落色值；定版只改本文件代码零改动",
+		"migration": "element/stat/status 三组色值=旧脚本逐位迁移（观感零变化）；semantic/rarity/durability=样张v3草案（待主人目检定版）；元素色待 1027-2 拍板后替换"
+	},
+	"element": {
+		"金刚": { "display": "神力", "color": "#d9bf4d" },
+		"梦幻": { "display": "泯灭", "color": "#b380e6" },
+		"草木": { "display": "巨木", "color": "#4dcc4d" },
+		"大地": { "display": "艮土", "color": "#b38c59" },
+		"冰雪": { "display": "玄冰", "color": "#66ccff" },
+		"雷火": { "display": "雷火", "color": "#ff6633" }
+	},
+	"rarity": {
+		"common": "#c8d2e8",
+		"good": "#5fca7c",
+		"rare": "#4f9dea",
+		"epic": "#a86ef0",
+		"legendary": "#e8b54a"
+	},
+	"semantic": {
+		"primary": "#e8b54a",
+		"primary_hi": "#ffd97a",
+		"on_primary": "#211503",
+		"bg_base": "#05080f",
+		"bg_panel": "#0a1120",
+		"bg_panel_hi": "#101a30",
+		"line": "#96b4ff29",
+		"line_hi": "#e8b54a8c",
+		"text": "#eef3ff",
+		"text_dim": "#b3c2e099",
+		"success": "#5fca7c",
+		"warn": "#e0a23e",
+		"danger": "#e06e6e",
+		"disabled": "#6b7690"
+	},
+	"stat": {
+		"stamina": "#e63333",
+		"defense": "#e6bf1a",
+		"speed": "#3380f2",
+		"attack": "#a6a6a6",
+		"resilience": "#8c8c8c",
+		"defense_factor": "#99cc4d",
+		"ball_speed": "#996633"
+	},
+	"status": {
+		"heal_block": { "char": "疗", "color": "#a64dd9" },
+		"energy_block": { "char": "能", "color": "#738ca6" },
+		"reflect": { "char": "反", "color": "#ff7333" },
+		"element_immune": { "char": "免", "color": "#f2f2f2" },
+		"element_weak": { "char": "弱", "color": "#8c2626" },
+		"energy_share": { "char": "摊", "color": "#33cccc" },
+		"charge_stock": { "char": "储", "color": "#4db3e6" },
+		"stealthed": { "char": "隐", "color": "#80808c" },
+		"invincible": { "char": "无", "color": "#ffe64d" },
+		"stunned": { "char": "晕", "color": "#e64d4d" },
+		"rooted": { "char": "锢", "color": "#996633" },
+		"silenced": { "char": "默", "color": "#b34d99" },
+		"disarmed": { "char": "缴", "color": "#cc804d" },
+		"mark": { "char": "印", "color": "#4dd966" },
+		"shield": { "char": "盾", "color": "#ffd600" },
+		"toggle": { "char": "T", "color": "#e6bf40" },
+		"heal": { "char": "+", "color": "#33e680" }
+	},
+	"durability": {
+		"ok": "#69d2a8",
+		"mid": "#e0a23e",
+		"low": "#e06e6e"
+	}
+}
