@@ -1630,13 +1630,15 @@
 		{
 			"category": "SUMMON",
 			"code": "30",
-			"description": "生成召唤物实体：summon_type=types表type_id；count=数量(上限内置截断)；位置=施法者环绕确定性散布；工单23水木快牙系(布场登记,增益复核)",
+			"description": "生成召唤物实体（工单23双口径：水木=summon_type/count，芬尼=type_id/spawn_count，handler 双键兼容）",
 			"energy_cost": 0,
 			"id": "summon_spawn",
 			"name": "召唤物生成",
 			"params": [
 				"summon_type",
+				"type_id",
 				"count",
+				"spawn_count",
 				"duration"
 			],
 			"reverse": "",

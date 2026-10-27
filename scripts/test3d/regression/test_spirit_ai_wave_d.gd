@@ -13,8 +13,8 @@ const WAVE_D_TAGS: Array[String] = [
 	"field_vision_block", "field_zone_boost", "field_zone_slow",
 	"field_zone_danger", "field_zone_safe", "field_zone_heal",
 	"field_obs_add", "field_obs_clear", "player_shield_obstacle", "field_drain_wall",
-	# 工单23时期2追加（增益窗口）：水木#3快道 + summon系两标签（family=summon 追认Q16）
-	"field_zone_energy_path", "summon_spawn", "summon_merge",
+	# 工单23时期2追加（增益窗口）：水木#3快道；summon_spawn/merge 已迁居 wave F（集成 c1f425b，_WAVE_PRIMITIVES 已注册"F"）
+	"field_zone_energy_path",
 ]
 
 ## 06§2.1 冻结字段 + 波D扩展字段 position_intent（Q4③）
@@ -56,7 +56,13 @@ func _run() -> void:
 		return
 	_assert("J2: wave=D / schema_version=3（Q4扩展版）", str(table.get("wave", "")) == "D" and int(table.get("schema_version", 0)) == 3)
 	var descriptors: Dictionary = table.get("descriptors", {})
-	_assert("J3: 描述符恰为13个（原10+工单23追加3）", descriptors.size() == 13)
+	_assert("J3: 描述符≥10且波D原10全在（子集式，后续追加稳健）", descriptors.size() >= 10)
+	var wave_d_core := ["field_vision_block", "field_zone_boost", "field_zone_slow", "field_zone_danger", "field_zone_safe", "field_zone_heal", "field_obs_add", "field_obs_clear", "player_shield_obstacle", "field_drain_wall"]
+	var core_missing: Array = []
+	for core_id in wave_d_core:
+		if not descriptors.has(core_id):
+			core_missing.append(core_id)
+	_assert("J3b: 波D核心10标签零缺失", core_missing.is_empty())
 
 	var registry_text := FileAccess.get_file_as_string(REGISTRY_PATH)
 	var registry: Variant = JSON.parse_string(registry_text)
@@ -325,7 +331,7 @@ func _run() -> void:
 
 	# ===== I-集成面：容错与读表 =====
 	var live: Dictionary = prim.get_descriptors()
-	_assert("I1: get_descriptors 读实表得13标签", live.size() == 13)
+	_assert("I1: get_descriptors 读实表≥10（子集式）", live.size() >= 10)
 	_assert("I2: timing_gate 对空 descriptor fail-closed", not bool(prim.timing_gate({}, {}, {}).get("ok")))
 	_assert("I3a: resolve_target_mode 空描述符回落none", prim.resolve_target_mode({}, {}) == "none")
 	_assert("I3b: resolve_target_mode 实描述符=field_position", prim.resolve_target_mode(desc_wall, {}) == "field_position")

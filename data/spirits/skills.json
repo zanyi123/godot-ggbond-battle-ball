@@ -221,9 +221,7 @@
 				"player_def_up_flat"
 			],
 			"trigger": {
-				"condition": {
-
-				},
+				"condition": {},
 				"event": "Defend.BOUNCED"
 			},
 			"type": "passive",
@@ -247,9 +245,7 @@
 				"player_def_up_flat"
 			],
 			"trigger": {
-				"condition": {
-
-				},
+				"condition": {},
 				"event": "Hit.HIT_TAKEN"
 			},
 			"type": "passive"
@@ -911,8 +907,8 @@
 			"base_description": "芬尼队·杯艾",
 			"control_template": "gold_op_select",
 			"cooldown": 15.0,
-			"description": "芬尼队·杯艾",
-			"detail": "工单23芬尼#2（types: fenny_magic_ball_att carry_with_ball+explode_on_enemy；操控=OP_STEER 19号链 controllable）",
+			"description": "魔术白球-攻\n外场上空生成多个白色爆炸魔术球，操控该球飞向对方进攻爆炸（工单23芬尼#2，原作逐字）",
+			"detail": "芬尼口径 type_id/spawn_count（handler 双窗键名兼容）；描述符经 wave F summon_spawn（count 口径落 min15，出手无碍）",
 			"element": "梦幻",
 			"energy_cost": 35,
 			"icon_color": "#DDA0DD",
@@ -921,9 +917,14 @@
 			"name": "魔术白球-攻",
 			"operator": "OP_STEER",
 			"tag_params": {
-
+				"summon_spawn": {
+					"type_id": "fenny_magic_ball_att",
+					"spawn_count": 3.0
+				}
 			},
-			"tags": [],
+			"tags": [
+				"summon_spawn"
+			],
 			"type": "active",
 			"unlock_cost": 0,
 			"unlock_level": 1
@@ -1000,6 +1001,91 @@
 			},
 			"tags": [
 				"summon_spawn"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"base_description": "配方1 出口版：操控飞向方向（飞行引导）",
+			"control_template": "gold_op_steer",
+			"cooldown": 10.0,
+			"description": "飞火流星·出口版\n激活后进入引导操控窗，操控球飞向指定方向，命中造成范围伤害",
+			"detail": "配方表 配方1 出口重建（2026-10-26）。与原 skill_雷火_2 差别：operator OP_AIM→OP_STEER（飞行引导，主人裁）+ 挂出口模板 gold_op_steer。标签与参数逐字照抄配方表。",
+			"element": "雷火",
+			"energy_cost": 20.0,
+			"icon_color": "#FF4500",
+			"icon_path": "",
+			"id": "skill_雷火_2_ctl",
+			"name": "飞火流星·出口版",
+			"operator": "OP_STEER",
+			"tag_params": {
+				"ball_dmg_up_pct": {
+					"value": 40.0
+				},
+				"ball_speed_up_pct": {
+					"multiplier": 1.5
+				}
+			},
+			"tags": [
+				"ball_dmg_up_pct",
+				"ball_speed_up_pct"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"base_description": "配方2 出口版：单体定身（玩家选位置，落点附近单体敌方）",
+			"control_template": "gold_op_mark",
+			"cooldown": 10.0,
+			"description": "蔓藤缠绕·出口版\n选择释放位置，落点附近的单个敌方球员被藤蔓定住，暂时无法移动",
+			"detail": "配方表 配方2 出口重建（2026-10-26）。与 skill_雷火_3 差别：①element 雷火→草木（配方表标注原作属小圣草木）②operator OP_AUTO→OP_MARK（单体选目标，主人裁）③target enemies→enemy_near_point（落点单体，2026-10-26 新增目标模式）+ 挂出口模板 gold_op_mark。标签与参数逐字照抄。",
+			"element": "草木",
+			"energy_cost": 20.0,
+			"icon_color": "#32CD32",
+			"icon_path": "",
+			"id": "skill_雷火_3_ctl",
+			"name": "蔓藤缠绕·出口版",
+			"operator": "OP_MARK",
+			"tag_params": {
+				"player_root": {
+					"duration": 2.0,
+					"radius": 160.0,
+					"target": "enemy_near_point"
+				}
+			},
+			"tags": [
+				"player_root"
+			],
+			"type": "active",
+			"unlock_cost": 0.0,
+			"unlock_level": 1.0
+		},
+		{
+			"base_description": "配方3 出口版：操控飞向方向（飞行引导），落点生成危险区",
+			"control_template": "gold_op_steer",
+			"cooldown": 10.0,
+			"description": "火凤燎原·出口版\n激活后进入引导操控窗，操控球飞向指定方向，球落点生成持续危险区域",
+			"detail": "配方表 配方3 出口重建（2026-10-26）。与原 skill_雷火_4 差别：operator OP_AUTO→OP_STEER（飞行引导，主人裁）+ 挂出口模板 gold_op_steer。标签与参数逐字照抄配方表（spawn_at=ball_land 保留）。",
+			"element": "雷火",
+			"energy_cost": 20.0,
+			"icon_color": "#FF6B35",
+			"icon_path": "",
+			"id": "skill_雷火_4_ctl",
+			"name": "火凤燎原·出口版",
+			"operator": "OP_STEER",
+			"tag_params": {
+				"field_zone_danger": {
+					"damage_value": 10.0,
+					"duration": 4.0,
+					"position": "0,0",
+					"size": "200,200",
+					"spawn_at": "ball_land"
+				}
+			},
+			"tags": [
+				"field_zone_danger"
 			],
 			"type": "active",
 			"unlock_cost": 0.0,

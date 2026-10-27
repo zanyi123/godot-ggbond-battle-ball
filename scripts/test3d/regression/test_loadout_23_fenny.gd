@@ -35,7 +35,7 @@ func _run() -> void:
 	for s in skills:
 		if typeof(s) == TYPE_DICTIONARY:
 			by_id[str(s.get("id", ""))] = s
-	_assert("J1: 技能总数 34（24基线+芬尼4+水木6）", skills.size() == 34)
+		_assert("J1: 技能总数≥34且两队10技全在库（24基线+芬尼4+水木6；总数随他家新增浮动，非brittle钉死——增益窗口10-02现代化）", skills.size() >= 34)  # 两队10技在库由 K1a 专断言
 	var ids_ok := true
 	for tid in FENNY_IDS:
 		if not by_id.has(tid):
