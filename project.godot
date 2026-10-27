@@ -32,6 +32,8 @@ TalentSystem="*res://scripts/systems/talent/talent_system.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 GlobalHotkeys="*res://scripts/core/global_hotkeys.gd"
 McpInteractionServer="*res://autoload/mcp_interaction_server.gd"
+NetManager="*res://autoload/net_manager.gd"
+
 [display]
 
 window/size/viewport_width=1440

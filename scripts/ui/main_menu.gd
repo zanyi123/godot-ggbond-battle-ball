@@ -222,6 +222,16 @@ func _build_main_menu(is_admin: bool) -> void:
 	add_child(btn_trade)
 	_menu_interactive_nodes.append(btn_trade)
 
+	# 联机对战按钮（工单01 S2：左列独立位，不动现有按钮布局）
+	var btn_net := Button.new()
+	btn_net.name = "BtnNetLobby"
+	btn_net.text = "联机对战"
+	btn_net.position = Vector2(150, 260)
+	btn_net.size = Vector2(220, 50)
+	btn_net.pressed.connect(_on_open_net_lobby)
+	add_child(btn_net)
+	_menu_interactive_nodes.append(btn_net)
+
 	# 奖励开关按钮（所有玩家可用）
 	var btn_reward := Button.new()
 	btn_reward.name = "BtnReward"
@@ -314,6 +324,24 @@ func _on_start_match() -> void:
 
 
 var char_ui: Control = null
+# 联机大厅（工单01 S2；照 char_ui 先例实例化叠加，关闭时由大厅回调恢复按钮）
+var _net_lobby: Control = null
+
+
+func _on_open_net_lobby() -> void:
+	# 已打开且可见 → 不做任何事
+	if _net_lobby and is_instance_valid(_net_lobby) and _net_lobby.visible:
+		return
+
+	# 已打开但失效 → 清理后重建
+	if _net_lobby and is_instance_valid(_net_lobby):
+		_net_lobby.queue_free()
+		_net_lobby = null
+
+	var NetLobbyClass = load("res://scripts/ui/net_lobby_ui.gd")
+	_net_lobby = NetLobbyClass.new()
+	add_child(_net_lobby)
+	_hide_menu_interactive_nodes()
 
 
 func _on_open_characters() -> void:
