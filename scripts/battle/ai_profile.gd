@@ -427,6 +427,56 @@ static func apply_weakness(profile: AIProfile, weakness_type: String) -> void:
 			profile.weakness_stuck_on_target = true  # 引擎: 70%概率打上次目标
 
 
+## ──── 30-S9 挂机托管档（工单30，2026-10-02 集成窗口）────
+## 原则（工单30 §二 R8）：介于主攻/辅助之间、**不超标准档强度**（托管太强不公平/太弱形同虚设）；
+## 隔离（构造性）：只在 NetManager.active 托管分支装载（联机侧判定），单机 sim 路径不触达；
+## 热调：HOSTED_OVERRIDES 可 set/get（工单30 S9-5）。
+## 注意：apply_difficulty("normal")=pass 不改值，故本档在难度应用**之后**显式逐项覆写。
+const HOSTED_PROFILE: Dictionary = {
+	# 思考/反应：比标准档（0.3s）慢一档=托管"淡淡的"手感
+	"skill_think_interval": 0.4,
+	# 出手欲望：略高于标准档（5.0）——托管求稳不浪投
+	"skill_use_threshold": 8.0,
+	# 能量门槛：中性（5.0 不变=不囤不浪）
+	"skill_energy_min": 5.0,
+	# 失误率：微升（托管非最优操作，0.15→0.18）
+	"skill_mistake_chance": 0.18,
+	# 后期加成收敛（标准档 2.5 过凶，托管 1.8）
+	"skill_late_game_bonus": 1.8,
+	# 领先/落后中性化（托管不追分不收线）
+	"skill_losing_bonus": 1.1,
+	"skill_leading_penalty": 0.5,
+}
+
+## 托管态热调覆盖（联机侧运行时调参口；键=HOSTED_PROFILE 同款）
+var HOSTED_OVERRIDES: Dictionary = {}
+
+## S9-1：挂机托管档装载——在难度应用之后调用（覆写终值）；仅 NetManager.active 托管分支调用
+func apply_hosted_profile(profile: AIProfile) -> void:
+	var merged: Dictionary = HOSTED_PROFILE.duplicate()
+	for key in HOSTED_OVERRIDES:
+		merged[key] = HOSTED_OVERRIDES[key]
+	for key in merged:
+		if key in profile:
+			profile.set(key, merged[key])
+
+
+## S9-5 热调口：联机侧运行时 set/get 单键
+func set_hosted_override(key: String, value: float) -> void:
+	HOSTED_OVERRIDES[key] = value
+
+
+func clear_hosted_overrides() -> void:
+	HOSTED_OVERRIDES.clear()
+
+
+func get_hosted_profile_view() -> Dictionary:
+	var merged: Dictionary = HOSTED_PROFILE.duplicate()
+	for key in HOSTED_OVERRIDES:
+		merged[key] = HOSTED_OVERRIDES[key]
+	return merged
+
+
 ## 叠加团队策略
 static func apply_team_strategy(profile: AIProfile, strategy: String) -> void:
 	profile.team_strategy_name = strategy
