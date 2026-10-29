@@ -17,20 +17,32 @@ var _tab_container: Control = null
 var _current_tab: int = 0
 var _tab_names: Array = ["战报", "数据", "奖励", "确认"]
 
-# 颜色方案
-const BG_COLOR := Color(0.06, 0.08, 0.12, 0.98)
-const WIN_COLOR := Color(0.2, 0.8, 0.3)
-const LOSE_COLOR := Color(0.8, 0.2, 0.2)
-const DRAW_COLOR := Color(0.8, 0.8, 0.2)
-const CARD_BG := Color(0.1, 0.12, 0.18, 0.95)
-const TEXT_COLOR := Color(0.85, 0.88, 0.92)
-const ACCENT_COLOR := Color(0.3, 0.6, 1.0)
+# 颜色方案（U1 存量改造试点：常量→色板 UiPalette 单一来源，2026-10-28 乙线）
+# 映射：BG=bg_base / WIN=success / LOSE=danger / DRAW=warn / CARD=bg_panel / TEXT=text / ACCENT=primary_hi（单金色纪律）
+var BG_COLOR: Color
+var WIN_COLOR: Color
+var LOSE_COLOR: Color
+var DRAW_COLOR: Color
+var CARD_BG: Color
+var TEXT_COLOR: Color
+var ACCENT_COLOR: Color
 
 signal result_confirmed()
 
 
+func _init() -> void:
+	BG_COLOR = Color(UiPalette.col("semantic.bg_base"), 0.98)
+	WIN_COLOR = UiPalette.col("semantic.success")
+	LOSE_COLOR = UiPalette.col("semantic.danger")
+	DRAW_COLOR = UiPalette.col("semantic.warn")
+	CARD_BG = Color(UiPalette.col("semantic.bg_panel"), 0.95)
+	TEXT_COLOR = UiPalette.col("semantic.text")
+	ACCENT_COLOR = UiPalette.col("semantic.primary_hi")
+
+
 func _ready() -> void:
 	# 全屏覆盖
+	theme = UiTheme.shared()
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
