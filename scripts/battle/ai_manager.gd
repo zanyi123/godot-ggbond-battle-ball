@@ -362,6 +362,9 @@ func _is_valid(ap: Dictionary) -> bool:
 		return false
 	if input_manager and input_manager.controlled_player == p:
 		return false
+	# 工单01 S5：联机远端人类位不由 AI 驱动（战斗桥按其上行指令驱动；指令缺席=托管接管语义由桥侧保持末速）
+	if p.has_meta("net_human_peer"):
+		return false
 	return true
 
 

@@ -104,11 +104,13 @@ static func decode_msg(bytes: PackedByteArray) -> Dictionary:
 
 # ── 工单 S0.3 契约包构造器 ─────────────────────────────
 
-## 指令包（含 D17 操控事件包）：guest→host 上行
-## control_events: Array[Dictionary]，每项对齐 38 号操控出口语义：
-##   {op:"aim", v:Vector2} / {op:"click", seq:int, pos:Vector2}
-##   {op:"place", pos:Vector2, shape:String} / {op:"op", op_id:String, params:Dictionary}
-static func make_input_command(peer_id: int, frame: int, move: Vector2, skill_slot: int, target_id: int, control_events: Array = []) -> Dictionary:
+## 指令包（含 D17 操控事件包，**已按操控域回签定稿 2026-10-27**）：
+## control_events 四 op：aim=状态流（10~15Hz 或阈值触发，host 插值，非事件队列）/
+##   click(seq,pos)两段点击 / place(pos,shape)confirm 终点（**预览流不上行**=guest 本地零判定）/
+##   op(op_id,params)（params=A 类 host 判定键照抄，逐键映射见操控域回签二）
+## key_events[]：横切离散键 {key:"space|E|T|Q|A|D|hold", phase:"pressed|released"}（回签补充①）
+## cancel：右键取消横切，**优先级最高**（回签补充②）
+static func make_input_command(peer_id: int, frame: int, move: Vector2, skill_slot: int, target_id: int, control_events: Array = [], key_events: Array = [], cancel: bool = false) -> Dictionary:
 	return {
 		"peer_id": peer_id,
 		"frame": frame,
@@ -116,6 +118,8 @@ static func make_input_command(peer_id: int, frame: int, move: Vector2, skill_sl
 		"skill_slot": skill_slot,
 		"target_id": target_id,
 		"control_events": control_events,
+		"key_events": key_events,
+		"cancel": cancel,
 	}
 
 ## 快照包（host 权威，≥20Hz 下行）：players/ball 状态 + events

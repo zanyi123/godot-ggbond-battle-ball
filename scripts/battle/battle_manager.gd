@@ -50,7 +50,8 @@ var _is_half_time_prep: bool = false
 # === P1方案A：自动模拟模式（headless 验证用，跳过备战面板）===
 var auto_simulate: bool = false       # 是否自动开始比赛（命令行 --sim 开启）
 # === 10工单P1：完全体AI观察模式（--fullai）：自动开赛+全AI接管（复用 sim 既有路径），保留 3D 场景供实机观战 ===
-var full_ai_observe: bool = false     # 观察模式（命令行 --fullai 开启；速度/半场时长用 --speed/--half 调）
+var full_ai_observe: bool = false
+var sim_via_cli: bool = false         # 工单01 S0.3：CLI 传 --sim/--fullai 才置位（程序化预设不拦）     # 观察模式（命令行 --fullai 开启；速度/半场时长用 --speed/--half 调）
 var dev_prep_mode: bool = false       # 开发者测试备战模式（命令行 --dev-prep 开启）
 var sim_time_scale: float = 6.0       # 模拟加速倍率（默认 6：物理稳定上限，更高会穿墙失真）
 # 默认快速模式参数（可被命令行覆盖）：每半场8秒 → 约30秒一场
@@ -91,6 +92,11 @@ var player_arrows: Dictionary = {}  # {player: arrow_node}
 func _ready() -> void:
 	# === P1方案A：sim 种子必须最先设（抢在 Godot 自动 randomize() 后重新固化）===
 	_parse_sim_args()
+	# 工单01 S0.3：CLI --sim/--fullai 与联机会话互斥，冲突拒绝启动（程序化预设=联机 host 对局本体，不拦）
+	if sim_via_cli and NetManager.active:
+		print("[Net] --sim/--fullai 与联机会话互斥（工单01 S0.3），拒绝启动")
+		get_tree().quit(1)
+		return
 	if GameManager and GameManager.last_menu_mode == "admin" and not dev_prep_mode:
 		dev_prep_mode = true
 	if auto_simulate:
@@ -164,6 +170,13 @@ func _ready() -> void:
 	if auto_simulate:
 		event_bus.log_enabled = true
 
+	# === 工单01 S5-2：联机会话配置自认领（大厅 change_scene 进入时 bm._match_config 为空，从 session 取）===
+	if NetManager.active and _match_config.is_empty() and NetManager.session != null and not NetManager.session._match_config.is_empty():
+		configure_match(NetManager.session._match_config)
+	# === 工单01 S5-2：联机 guest 副本模式（快照驱动渲染+输入上行；不做本地模拟/开赛）===
+	if NetManager.active and NetManager.session != null and not NetManager.session.is_host:
+		_net_guest_init()
+
 	# === 3D 场景桥接层（USE_3D_SCENE=true 时激活；2D 逻辑零改动，bridge 只读同步）===
 	if USE_3D_SCENE and (not auto_simulate or full_ai_observe):  # sim 强制纯 2D（基线可比）；--fullai 观察模式保留 3D（10工单P1）
 		var bridge := Node.new()
@@ -179,10 +192,12 @@ func _parse_sim_args() -> void:
 	for arg in OS.get_cmdline_args():
 		if arg == "--sim":
 			auto_simulate = true
+			sim_via_cli = true
 		elif arg == "--fullai":
 			# 10工单P1观察模式：复用 sim 自动开赛+全AI路径，但保留 3D（不强制纯 2D）
 			full_ai_observe = true
 			auto_simulate = true
+			sim_via_cli = true
 		elif arg == "--dev-prep":
 			dev_prep_mode = true
 		elif arg.begins_with("--speed="):
@@ -269,9 +284,86 @@ func _setup_input_manager() -> void:
 	input_mgr.quick_command_requested.connect(_on_quick_command)
 
 
+# 工单01 S5：模式化比赛配置（联机/1v1 等由 NetManager 侧下发；单机默认空=现 3v3 硬编码路径，读数不变。
+# S5 深改造批在 _setup_teams 内消费此配置：模式/双方球员 id 序/出生点表/槽位→peer 映射）
+var _match_config: Dictionary = {}
+var _net_bridge: NetBattleBridge = null   # 工单01 S5：联机战斗桥（仅 host 侧 attach）
+
+## 联机开赛配置入口（工单01 S5；NetManager.active 时由大厅调用；调用前后单机行为零差异）
+func configure_match(config: Dictionary) -> void:
+	_match_config = config
+
+
+## 工单01 S5-2：guest 副本模式初始化（快照渲染；本地输入只上行不驱动）
+func _net_guest_init() -> void:
+	_net_bridge = NetBattleBridge.new()
+	_net_bridge.bm = self   # guest 侧桥必须持 battle 引用（apply_snapshot_to_scene 依赖 bm）
+	_net_bridge.bind_snapshots()
+	# 工单01 S5（E9b）：guest 本地 AI 暂停——本地 AI 每物理帧抢写副本球员位置，会盖掉 host 快照钉位
+	if ai_mgr != null:
+		ai_mgr.set_physics_process(false)
+		ai_mgr.set_process(false)
+	if input_mgr != null:
+		input_mgr.set_controlled_player(null)   # 本地不受控：画面全由快照钉位
+	if preparation_ui != null and is_instance_valid(preparation_ui):
+		preparation_ui.visible = false
+	# 对局聊天 HUD（S13.2/D23 最小版；主人在用窗口期仅落码未测）
+	var hud := Node.new()
+	hud.set_script(load("res://scripts/ui/net_battle_chat_hud.gd"))
+	add_child(hud)
+	print("[Net] guest 副本模式：快照驱动渲染+输入上行+聊天 HUD")
+
+## guest 输入上行（20Hz 节流；移动走 InputMap 动作；4/5/6 技能槽边沿上行；聊天输入条打开时暂停上行防误发）
+func _net_guest_forward_input(delta: float) -> void:
+	_net_input_t += delta
+	if _net_input_t < 0.05:
+		return
+	_net_input_t = 0.0
+	if NetManager.session == null:
+		return
+	var mv := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	var slot := -1
+	for i in range(3):
+		var key: int = [KEY_4, KEY_5, KEY_6][i]
+		var pressed := Input.is_key_pressed(key)
+		var prev: bool = _net_skill_prev.get(key, false)
+		if pressed and not prev:
+			slot = i
+		_net_skill_prev[key] = pressed
+	NetManager.session.send_input_command(mv, slot)
+
+var _net_input_t: float = 0.0
+var _net_skill_prev: Dictionary = {}
+
+## 工单01 S5：联机 1v1 阵容（每队 1 人单点位，球员 id 取选角 picks；1026-5 正常全场）
+func _setup_net_1v1_impl() -> void:
+	var ra: Array = _match_config.get("roster_a", [])
+	var rb: Array = _match_config.get("roster_b", [])
+	var cid_a := "char_001"
+	var cid_b := "char_004"
+	if ra.size() > 0 and str((ra[0] as Dictionary).get("char_id", "")) != "":
+		cid_a = str((ra[0] as Dictionary).get("char_id"))
+	if rb.size() > 0 and str((rb[0] as Dictionary).get("char_id", "")) != "":
+		cid_b = str((rb[0] as Dictionary).get("char_id"))
+	var pa := _create_player(cid_a, "a", true, Vector2(-260, 0))
+	team_a_players.append(pa)
+	var pb := _create_player(cid_b, "b", false, Vector2(260, 0))
+	team_b_players.append(pb)
+	# 工单01 S5：远端人类位标 meta（ai_manager._is_valid 跳过；桥按其上行指令驱动）
+	if ra.size() > 0 and int((ra[0] as Dictionary).get("peer_id", 1)) != 1:
+		pa.set_meta("net_human_peer", int((ra[0] as Dictionary).get("peer_id")))
+	if rb.size() > 0:
+		pb.set_meta("net_human_peer", int((rb[0] as Dictionary).get("peer_id")))
+	print("[Net] 1v1 阵容生成: A=%s vs B=%s" % [cid_a, cid_b])
+
+
 func _setup_teams() -> void:
 	"""创建双方球队"""
 	if dev_prep_mode:
+		return
+	# 工单01 S5：联机阵容（configure_match 下发）——1v1 每队 1 人单点位；其余模式本批回落现 3v3 硬编码
+	if NetManager.active and not _match_config.is_empty() and str(_match_config.get("mode")) == "MP_1V1":
+		_setup_net_1v1_impl()
 		return
 
 	var team_a_ids := ["char_001", "char_002", "char_003"]
@@ -632,6 +724,16 @@ func _process(delta: float) -> void:
 	# 累计比赛时长
 	if match_started and not GameManager.is_paused:
 		match_duration += delta
+	# 工单01 S5：联机 host 快照 20Hz 出向
+	if _net_bridge != null:
+		_net_bridge.tick(delta)
+	# 工单01 S5-2：host 远端指令驱动 / guest 快照渲染+输入上行
+	if _net_bridge != null and NetManager.active and NetManager.session != null:
+		if NetManager.session.is_host:
+			_net_bridge.apply_remote(delta)
+		else:
+			_net_bridge.apply_snapshot_to_scene(delta)
+			_net_guest_forward_input(delta)
 	
 	_check_violations()
 	_update_all_player_arrows()
@@ -1679,6 +1781,12 @@ var _pre_match_equipment: Dictionary = {}
 func _on_prep_match_started() -> void:
 	"""备战界面点击开始比赛后:恢复场地、开始比赛、发球、解锁输入"""
 	print("[Match] 备战完成,开始比赛!")
+	# 工单01 S5：联机 host 对局→战斗桥（快照 20Hz 出向+结算转发）
+	if NetManager.active and NetManager.session != null and NetManager.session.is_host:
+		_net_bridge = NetBattleBridge.new()
+		_net_bridge.attach(self, NetManager.session)
+		_net_bridge.bind_commands()
+		print("[Net] 战斗桥已挂接（host 权威出向+远端指令驱动）")
 
 	# 重新计算所有球员的属性加成（确保备战界面换的装备/吃的食物生效）
 	for player: CharacterBody2D in team_a_players + team_b_players:
@@ -1998,6 +2106,10 @@ func _on_back_to_menu() -> void:
 
 ## 自动模拟模式：比赛结束回调→停止采集+输出报告+退出
 func _on_sim_match_ended(score_a: int, score_b: int, _result: String) -> void:
+	# 工单01 S5：联机 host 对局结束 → 会话结算广播（guest 收 RESULT）
+	if _net_bridge != null and NetManager.active and NetManager.session != null:
+		var winner := "A" if score_a > score_b else ("B" if score_b > score_a else "draw")
+		NetManager.session.end_match({"score": {"A": score_a, "B": score_b}, "winner": winner, "reason": "normal"})
 	Engine.time_scale = 1.0  # 恢复正常速度
 	if match_stats:
 		match_stats.stop_recording()

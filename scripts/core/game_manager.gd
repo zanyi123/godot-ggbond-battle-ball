@@ -67,6 +67,9 @@ signal match_resumed()
 func _process(delta: float) -> void:
 	if is_paused:
 		return
+	# 工单01 S5-3：guest 禁本地推进（阶段/计时走 host 快照，NetBattleBridge.apply_guest 应用）
+	if NetManager.active and NetManager.session != null and not NetManager.session.is_host:
+		return
 	
 	if match_phase in [MatchPhase.FIRST_HALF, MatchPhase.SECOND_HALF, MatchPhase.HALF_TIME]:
 		match_time -= delta

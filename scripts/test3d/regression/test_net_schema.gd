@@ -53,18 +53,28 @@ func _run() -> void:
 	var bnt := NetSchema.decode_msg(NetSchema.encode_msg(NetSchema.MSG_NOTICE, nt))
 	_assert(str((bnt["d"] as Dictionary).get("type")) == "afk", "C2g: NoticeEvent 编解码往返")
 
-	# C3 D17 操控事件包：四种鼠标语义全装载
+	# C3 D17 操控事件包：四种鼠标语义全装载（**已按操控域回签定稿**：+key_events/cancel）
 	var ops: Array = [
 		{"op": "aim", "v": Vector2(0.5, -0.5)},
 		{"op": "click", "seq": 1, "pos": Vector2(640, 360)},
 		{"op": "place", "pos": Vector2(120, 80), "shape": "rect"},
 		{"op": "op", "op_id": "OP_SELECT", "params": {"template": "gold_op_select"}},
 	]
-	var cmd17 := NetSchema.make_input_command(3, 1, Vector2.ZERO, -1, 0, ops)
+	var keys: Array = [{"key": "space", "phase": "pressed"}, {"key": "hold", "phase": "released"}]
+	var cmd17 := NetSchema.make_input_command(3, 1, Vector2.ZERO, -1, 0, ops, keys, true)
 	var b17 := NetSchema.decode_msg(NetSchema.encode_msg(NetSchema.MSG_INPUT_CMD, cmd17))
 	var evs: Array = (b17["d"] as Dictionary).get("control_events", [])
 	_assert(evs.size() == 4, "C3a: control_events 四种操控语义装载（D17）")
 	_assert(evs.size() == 4 and str(evs[3].get("op_id")) == "OP_SELECT", "C3b: op_id+params 对齐 38 号操控出口")
+	var kevs: Array = (b17["d"] as Dictionary).get("key_events", [])
+	_assert(kevs.size() == 2 and str(kevs[0].get("key")) == "space", "C3c: key_events 横切离散键往返（回签补充①：space/E/T/Q/hold）")
+	_assert(bool((b17["d"] as Dictionary).get("cancel", false)), "C3d: cancel 右键取消横切往返（回签补充②，优先级最高）")
+	# 回签三覆盖性抽核（23 条剧本核查表）：OP_KEY_JUMP/OP_COMBO/OP_ORIENT 映射所需事件齐备
+	var has_place := false
+	for e in evs:
+		if str((e as Dictionary).get("op")) == "place":
+			has_place = true
+	_assert(has_place and not kevs.is_empty(), "C3e: 剧本9 铺开(place)与剧本16 迁移(key_events)所需事件并存（回签三 23 条核查同构）")
 
 	# C4 D18 频道矩阵
 	_assert(NetSchema.chat_channel_for_phase(NetSchema.PHASE_LOBBY) == "room", "C4a: 大厅/匹配等待=全员频道")

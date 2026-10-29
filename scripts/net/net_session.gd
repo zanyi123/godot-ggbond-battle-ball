@@ -318,6 +318,12 @@ func send_chat(text: String) -> void:
 	else:
 		transport.send_to_host(NetSchema.MSG_CHAT, chat)
 
+## S5-2 指令上行：guest 本地输入 → host（move=世界系方向；skill_slot=-1=无）
+func send_input_command(move: Vector2, skill_slot: int = -1) -> void:
+	if is_host or transport == null:
+		return
+	transport.send_to_host(NetSchema.MSG_INPUT_CMD, NetSchema.make_input_command(local_peer_id(), 0, move, skill_slot, 0), NetSchema.CH_STATE, false)
+
 ## host：对局内推快照（S5 驱动；M1 测试用）
 func push_snapshot(snap: Dictionary) -> void:
 	if is_host:
@@ -328,6 +334,7 @@ func end_match(result: Dictionary) -> void:
 	if not is_host:
 		return
 	transport.broadcast(NetSchema.MSG_RESULT, result)
+	transport.flush()   # host 进程可能随即退出（sim 终局 quit）：不 flush 则 RESULT 死在 ENet 发送队列
 	_set_phase(NetSchema.PHASE_RESULTS)
 	match_result.emit(result)
 
@@ -517,13 +524,15 @@ func _enter_picking() -> void:
 	_refresh_room()
 
 func _enter_loading() -> void:
-	# S3 选角收口：未锁定者随机兜底（队内剩余池），随后组配置进 LOADING
+	# S3 选角收口：未锁定者由 AI 选角策略补选（元灵AI域移交已交付 SpiritAIPickStrategy），
+	# 策略缺失/异常回落随机（队内剩余池），随后组配置进 LOADING
 	for s in _slots:
 		var pid := int(s["peer_id"])
 		if not _picks.has(pid):
+			var team := str(s["team"])
 			_picks[pid] = {
-				"char_id": _random_from(_team_free_chars(str(s["team"]))),
-				"spirit_id": _random_from(_team_free_spirits(str(s["team"]))),
+				"char_id": _strategy_pick("char", team, _team_free_chars(team)),
+				"spirit_id": _strategy_pick("spirit", team, _team_free_spirits(team)),
 			}
 	_match_config = _build_default_config()
 	transport.broadcast(NetSchema.MSG_MATCH_CONFIG, _match_config)
@@ -582,6 +591,26 @@ func _random_from(pool: Array) -> String:
 	if pool.is_empty():
 		return ""
 	return str(pool[randi() % pool.size()])
+
+## AI 选角策略补选（S3-4：元灵AI域 SpiritAIPickStrategy；静态接口 pick_character/pick_spirit）；
+## 脚本缺失/异常回落随机（移交单保底路径约定）
+func _strategy_pick(kind: String, team: String, free: Array) -> String:
+	if free.is_empty():
+		return ""
+	var picks: Array = []
+	for pid in _picks.keys():
+		if _slot_team(int(pid)) == team:
+			picks.append(_picks[pid])
+	var script = load("res://scripts/battle/spirit_ai/pick_strategy.gd")
+	if script != null and script.can_instantiate() == false and script.has_method("pick_character"):
+		var id := ""
+		if kind == "char":
+			id = str(script.pick_character(free, picks))
+		else:
+			id = str(script.pick_spirit(free, picks))
+		if id != "" and free.has(id):
+			return id
+	return _random_from(free)
 
 ## guest：选角锁定上报（S3；被拒走 chat_blocked 信号提示重选）
 func pick_and_lock(char_id: String, spirit_id: String) -> void:

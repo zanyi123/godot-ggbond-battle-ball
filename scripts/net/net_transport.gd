@@ -33,7 +33,10 @@ func start_server(bind_port: int) -> bool:
 	_host_peer_id = -1
 	_conn = ENetConnection.new()
 	var err: int = _conn.create_host_bound("*", bind_port, NetSchema.CHANNEL_COUNT, 8)
-	return err == OK
+	if err != OK:
+		_conn = null
+		return false
+	return true
 
 ## guest 端：连接 host
 func start_client(host_ip: String, host_port: int) -> bool:
@@ -44,6 +47,9 @@ func start_client(host_ip: String, host_port: int) -> bool:
 	if err != OK:
 		return false
 	var peer: ENetPacketPeer = _conn.connect_to_host(host_ip, host_port, NetSchema.CHANNEL_COUNT)
+	if peer == null:
+		_conn = null
+		return false
 	_host_peer_id = int(peer.get_instance_id())
 	_peers[_host_peer_id] = peer
 	_local_id = _host_peer_id   # 临时值；入房后由 set_local_id 更新为 host 分配 id
@@ -64,6 +70,11 @@ func close() -> void:
 
 func is_open() -> bool:
 	return _conn != null
+
+## 冲刷 ENet 发送队列（广播后进程可能随即退出，不 flush 则包死队列）
+func flush() -> void:
+	if _conn != null:
+		_conn.flush()
 
 func local_id() -> int:
 	return _local_id

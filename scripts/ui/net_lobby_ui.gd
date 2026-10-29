@@ -355,8 +355,11 @@ func _on_cancelled(reason: String) -> void:
 func _on_host_lost() -> void:
 	_on_left("与房主失去连接——已回大厅（等待阶段取消制 D15）")
 
-func _on_match_started(_config: Dictionary) -> void:
-	_set_status("已开赛（M1：会话层直通；战斗内权威同步=S5 下一批接入）")
+func _on_match_started(config: Dictionary) -> void:
+	# S5-2：开赛即进战场（配置由 battle_manager._ready 从 session._match_config 自认领；
+	# host=真人操控+备战面板；guest=副本模式快照渲染）
+	if not config.is_empty():
+		get_tree().change_scene_to_file("res://scenes/battle/battle_arena.tscn")
 
 func _on_match_result(result: Dictionary) -> void:
 	var score: Dictionary = result.get("score", {})
