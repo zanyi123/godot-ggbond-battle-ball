@@ -1,20 +1,22 @@
 {
 	"meta": {
 		"name": "battle_ball_ui_palette",
-		"version": "0.1.0",
-		"status": "draft_awaiting_1027_2",
-		"updated": "2026-10-27",
+		"version": "1.0.0",
+		"status": "locked",
+		"locked_at": "2026-10-28",
+		"locked_by": "主人批复：1027-1=科技赛事流 / 1027-2=候选A「v5直译·沉稳」",
+		"updated": "2026-10-28",
 		"owner": "美术UI线乙线窗口",
-		"rule": "全 UI 取色唯一来源；脚本内禁止散落色值；定版只改本文件代码零改动",
-		"migration": "element/stat/status 三组色值=旧脚本逐位迁移（观感零变化）；semantic/rarity/durability=样张v3草案（待主人目检定版）；元素色待 1027-2 拍板后替换"
+		"rule": "全 UI 取色唯一来源；脚本内禁止散落色值；换色只改本文件代码零改动",
+		"migration": "stat/status=旧脚本迁移值；semantic/rarity/durability=样张v3草案（实机目检后可微调）；element=1027-2 定版候选A（含 color/deep/soft 三态）"
 	},
 	"element": {
-		"金刚": { "display": "神力", "color": "#d9bf4d" },
-		"梦幻": { "display": "泯灭", "color": "#b380e6" },
-		"草木": { "display": "巨木", "color": "#4dcc4d" },
-		"大地": { "display": "艮土", "color": "#b38c59" },
-		"冰雪": { "display": "玄冰", "color": "#66ccff" },
-		"雷火": { "display": "雷火", "color": "#ff6633" }
+		"金刚": { "display": "神力", "color": "#d9a441", "deep": "#8a6a24", "soft": "#d9a44133" },
+		"梦幻": { "display": "泯灭", "color": "#8a6fc8", "deep": "#5a4882", "soft": "#8a6fc833" },
+		"草木": { "display": "巨木", "color": "#4caf6d", "deep": "#317247", "soft": "#4caf6d33" },
+		"大地": { "display": "艮土", "color": "#a07b52", "deep": "#685035", "soft": "#a07b5233" },
+		"冰雪": { "display": "玄冰", "color": "#6ec6ff", "deep": "#4781a6", "soft": "#6ec6ff33" },
+		"雷火": { "display": "雷火", "color": "#ff7a3d", "deep": "#a64f28", "soft": "#ff7a3d33" }
 	},
 	"rarity": {
 		"common": "#c8d2e8",
@@ -71,5 +73,18 @@
 		"ok": "#69d2a8",
 		"mid": "#e0a23e",
 		"low": "#e06e6e"
+	},
+	"scene": {
+		"sky_top": "#02040a",
+		"sky_mid": "#0b1a36",
+		"sky_low": "#132449",
+		"scar_core": "#ffecbe8c",
+		"scar_mid": "#d9a44138",
+		"scar_outer": "#8a6fc81f",
+		"scar_ring": "#ffdb964d",
+		"planet_deep": "#0a1830",
+		"planet_mid": "#2b5aa8",
+		"planet_hi": "#5489d6",
+		"planet_rim": "#a0c8ff4d"
 	}
 }

@@ -1,0 +1,23 @@
+{
+	"meta": {
+		"name": "battle_ball_ui_motion",
+		"version": "1.0.0",
+		"updated": "2026-10-28",
+		"owner": "美术UI线乙线窗口",
+		"rule": "动效参数唯一来源；时长/周期/幅度只改本文件，模板零改动"
+	},
+	"tween": {
+		"hover_pop": { "dur": 0.12, "scale": 1.04 },
+		"press": { "dur": 0.08, "scale": 0.96 },
+		"slide_in": { "dur": 0.32 },
+		"fade_in": { "dur": 0.25 },
+		"fade_out": { "dur": 0.2 }
+	},
+	"shader": {
+		"breathe_period": 4.0,
+		"breathe_min": 0.72,
+		"sweep_period": 3.2,
+		"sweep_width": 0.18,
+		"sweep_alpha": 0.5
+	}
+}

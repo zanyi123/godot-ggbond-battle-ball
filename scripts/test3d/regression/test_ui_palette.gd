@@ -35,7 +35,7 @@ func _run() -> void:
 
 	# C1 文件与结构
 	_assert(FileAccess.file_exists("res://data/ui/ui_palette.json"), "C1a: 色板文件存在 data/ui/ui_palette.json")
-	_assert(UiPalette.get_value("meta.status") == "draft_awaiting_1027_2", "C1b: meta.status 草案标记在位")
+	_assert(UiPalette.get_value("meta.status") == "locked" and UiPalette.get_value("meta.locked_by") != null, "C1b: meta.status 锁版标记+批复来源在位")
 	_assert(UiPalette.get_value("meta.rule") is String and str(UiPalette.get_value("meta.rule")).contains("唯一来源"), "C1c: meta.rule 唯一来源纪律在位")
 
 	# C2 六元素（key=数据层旧词；display=v5 §7.4 定稿新词）
@@ -86,13 +86,20 @@ func _run() -> void:
 	UiPalette.reload()
 	_assert(UiPalette.col("semantic.primary") == Color.html("#e8b54a"), "C5: reload 后取值仍一致（幂等）")
 
-	# C6 旧值迁移一致（8 位量化容差 ≤1/255；元素组色值属 1027-2 范围不锁）
+	# C6 迁移一致（8 位量化容差 ≤1/255）+ 元素定版锁色（1027-2 候选A，hex 对 hex 精确锁）
 	_assert_col(UiPalette.status_entry("heal_block")["color"], Color(0.65, 0.3, 0.85), "C6a: 状态色迁移 heal_block #a64dd9≈旧(0.65,0.3,0.85)")
 	_assert_col(UiPalette.status_entry("shield")["color"], Color(1.0, 0.84, 0.0), "C6b: 状态色迁移 shield #ffd600≈旧(1.0,0.84,0.0)")
 	_assert_col(UiPalette.status_entry("mark")["color"], Color(0.3, 0.85, 0.4), "C6c: 状态色迁移 mark #4dd966≈旧(0.3,0.85,0.4)")
 	_assert_col(UiPalette.col("stat.stamina"), Color(0.9, 0.2, 0.2), "C6d: 属性色迁移 stamina #e63333≈旧(0.9,0.2,0.2)")
 	_assert_col(UiPalette.col("stat.ball_speed"), Color(0.6, 0.4, 0.2), "C6e: 属性色迁移 ball_speed #996633≈旧(0.6,0.4,0.2)")
-	_assert_col(UiPalette.element_color("雷火"), Color(1.0, 0.4, 0.2), "C6f: 元素色迁移期=旧值 雷火 #ff6633（1027-2 定版前零观感变化）")
+	_assert(UiPalette.get_value("meta.status") == "locked", "C6f0: 色板已锁版（1027-2 候选A）")
+	_assert(UiPalette.element_color("金刚") == Color.html("#d9a441"), "C6f1: 定版锁色 神力 #d9a441")
+	_assert(UiPalette.element_color("梦幻") == Color.html("#8a6fc8"), "C6f2: 定版锁色 泯灭 #8a6fc8")
+	_assert(UiPalette.element_color("草木") == Color.html("#4caf6d"), "C6f3: 定版锁色 巨木 #4caf6d")
+	_assert(UiPalette.element_color("大地") == Color.html("#a07b52"), "C6f4: 定版锁色 艮土 #a07b52")
+	_assert(UiPalette.element_color("冰雪") == Color.html("#6ec6ff"), "C6f5: 定版锁色 玄冰 #6ec6ff")
+	_assert(UiPalette.element_color("雷火") == Color.html("#ff7a3d"), "C6f6: 定版锁色 雷火 #ff7a3d")
+	_assert(UiPalette.col("element.雷火.deep") == Color.html("#a64f28") and UiPalette.col("element.雷火.soft") == Color.html("#ff7a3d33"), "C6f7: 元素三态 deep/soft 在位")
 
 	# C7 耐久色阶边界
 	_assert(UiPalette.durability_color(0.9) == UiPalette.durability_color(0.6) and UiPalette.durability_color(0.6) == UiPalette.col("durability.ok"), "C7a: 耐久>=0.5 走 ok 档")
