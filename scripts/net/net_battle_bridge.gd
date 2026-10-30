@@ -73,7 +73,7 @@ func _on_cmd(cmd: Dictionary) -> void:
 	last_cmd_peer = int(cmd.get("peer_id", 0))
 	last_cmd_move = str(cmd.get("move", "MISSING"))
 	last_cmd_raw = str(cmd)
-	_latest_cmd[int(cmd.get("peer_id", 0))] = {"move": cmd.get("move", Vector2.ZERO), "skill_slot": int(cmd.get("skill_slot", -1))}
+	_latest_cmd[int(cmd.get("peer_id", 0))] = {"move": cmd.get("move", Vector2.ZERO), "skill_slot": int(cmd.get("skill_slot", -1)), "ts": Time.get_ticks_msec()}
 
 ## host 每帧：按 config roster 的 peer→球员映射应用远端移动指令（AI 接口同构=直接设 velocity）
 var apply_writes: int = 0
@@ -83,6 +83,9 @@ var guest_player_dx: float = 0.0
 func apply_remote(delta: float) -> void:
 	if bm == null or session == null:
 		return
+	# 队列轮询消费（信号连接在 arena 树内静默失效已实证——快照同款，直读直喂）
+	while not session.cmd_queue.is_empty():
+		_on_cmd(session.cmd_queue.pop_front())
 	var cfg: Dictionary = bm._match_config
 	for roster_key in ["roster_a", "roster_b"]:
 		var team_players: Array = bm.team_a_players if roster_key == "roster_a" else bm.team_b_players
@@ -99,6 +102,9 @@ func apply_remote(delta: float) -> void:
 				continue
 			var cmd: Dictionary = _latest_cmd.get(pid, {})
 			var mv: Vector2 = cmd.get("move", Vector2.ZERO)
+			# 指令保活超时 0.5s=松键（guest 侧变化触发式不发包，靠超时归零停走）
+			if cmd.has("ts") and Time.get_ticks_msec() - int(cmd.get("ts", 0)) > 500:
+				mv = Vector2.ZERO
 			pl.velocity = mv * float(pl.get("speed") if pl.get("speed") != null else 300.0)
 			if mv != Vector2.ZERO:
 				apply_writes += 1
@@ -110,14 +116,36 @@ func apply_remote(delta: float) -> void:
 var latest_snap: Dictionary = {}
 var _snap_dirty := false
 
+## 直接喂入（worker/宿主收到快照即转发，绕开跨对象信号连接玄学）
+func on_snap(snap: Dictionary) -> void:
+	latest_snap = snap
+	last_snap_frame = int(snap.get("frame", -1))
+	_snap_dirty = true
+	_bind_rx += 1
+
 func bind_snapshots() -> void:
 	if session != null:
-		session.snapshot_received.connect(func(snap: Dictionary): latest_snap = snap; _snap_dirty = true)
+		session.snapshot_received.connect(func(snap: Dictionary):
+			latest_snap = snap
+			last_snap_frame = int(snap.get("frame", -1))
+			_snap_dirty = true
+			_bind_rx += 1)
 
 ## guest 每帧：把最新快照按序写进本端场景节点（位置+球），并喂 game_manager（阶段/比分）
+var apply_calls: int = 0
+var _bind_rx: int = 0
+var last_snap_frame: int = -1
+var last_b0_pos: String = ""
+
 func apply_snapshot_to_scene(delta: float) -> void:
+	apply_calls += 1
+	# 惰性绑定：arena 就绪时 NetManager.session 可能瞬时不可见（双实例/时序疑点），每帧查到即绑
+	if session == null and NetManager.session != null:
+		session = NetManager.session
+		bind_snapshots()
 	if bm == null or latest_snap.is_empty():
 		return
+	last_snap_frame = int(latest_snap.get("frame", -1))
 	var players: Array = latest_snap.get("players", [])
 	var all: Array = bm.team_a_players + bm.team_b_players
 	for i in mini(players.size(), all.size()):
@@ -127,6 +155,11 @@ func apply_snapshot_to_scene(delta: float) -> void:
 		if pl != null and is_instance_valid(pl):
 			pl.global_position = Vector2(float(pos[0]), float(pos[1]))
 			pl.velocity = Vector2.ZERO
+	var all2: Array = bm.team_a_players + bm.team_b_players
+	if all2.size() > 1 and players.size() > 1:
+		var b0: Node2D = all2[players.size() - 1]
+		if b0 != null and is_instance_valid(b0):
+			last_b0_pos = "%.1f,%.1f" % [b0.global_position.x, b0.global_position.y]
 	var b: Dictionary = latest_snap.get("ball", {})
 	var bpos: Array = b.get("pos", [])
 	var ball: Node2D = bm.ball_node

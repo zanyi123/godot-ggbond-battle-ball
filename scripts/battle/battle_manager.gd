@@ -330,40 +330,54 @@ func _net_guest_forward_input(delta: float) -> void:
 		if pressed and not prev:
 			slot = i
 		_net_skill_prev[key] = pressed
+	# 变化触发式上行（业界做法）：零输入且无技能事件不发包（省带宽；host 侧 0.5s 超时归零）
+	if mv == Vector2.ZERO and slot == -1:
+		return
 	NetManager.session.send_input_command(mv, slot)
 
 var _net_input_t: float = 0.0
 var _net_skill_prev: Dictionary = {}
 
-## 工单01 S5：联机 1v1 阵容（每队 1 人单点位，球员 id 取选角 picks；1026-5 正常全场）
-func _setup_net_1v1_impl() -> void:
+## 工单01 S5：联机三档通用阵容——roster 条目按 slot 落标准点位（1v1 单点位/COOP 与 6P 标准 3v3 点位），
+## 空侧=AI 默认三人（COOP 敌队）；人类 peer≠1 标 net_human meta（ai_manager 排除，桥按指令驱动）
+func _setup_net_teams_impl() -> void:
+	var is_1v1 := str(_match_config.get("mode")) == "MP_1V1"
+	var pa_pos: Array = [Vector2(-260, 0)] if is_1v1 else [Vector2(-260, -130), Vector2(-320, 0), Vector2(-260, 130)]
+	var pb_pos: Array = [Vector2(260, 0)] if is_1v1 else [Vector2(260, -130), Vector2(320, 0), Vector2(260, 130)]
 	var ra: Array = _match_config.get("roster_a", [])
 	var rb: Array = _match_config.get("roster_b", [])
-	var cid_a := "char_001"
-	var cid_b := "char_004"
-	if ra.size() > 0 and str((ra[0] as Dictionary).get("char_id", "")) != "":
-		cid_a = str((ra[0] as Dictionary).get("char_id"))
-	if rb.size() > 0 and str((rb[0] as Dictionary).get("char_id", "")) != "":
-		cid_b = str((rb[0] as Dictionary).get("char_id"))
-	var pa := _create_player(cid_a, "a", true, Vector2(-260, 0))
-	team_a_players.append(pa)
-	var pb := _create_player(cid_b, "b", false, Vector2(260, 0))
-	team_b_players.append(pb)
-	# 工单01 S5：远端人类位标 meta（ai_manager._is_valid 跳过；桥按其上行指令驱动）
-	if ra.size() > 0 and int((ra[0] as Dictionary).get("peer_id", 1)) != 1:
-		pa.set_meta("net_human_peer", int((ra[0] as Dictionary).get("peer_id")))
-	if rb.size() > 0:
-		pb.set_meta("net_human_peer", int((rb[0] as Dictionary).get("peer_id")))
-	print("[Net] 1v1 阵容生成: A=%s vs B=%s" % [cid_a, cid_b])
+	for i in mini(ra.size(), pa_pos.size()):
+		var e: Dictionary = ra[i]
+		var cid := str(e.get("char_id", "")) if str(e.get("char_id", "")) != "" else "char_00%d" % (i + 1)
+		var pl := _create_player(cid, "a", i == 0, pa_pos[i])
+		team_a_players.append(pl)
+		var pid := int(e.get("peer_id", 1))
+		if pid != 1:
+			pl.set_meta("net_human_peer", pid)   # 远端人类位（AI 排除；桥按指令驱动）
+	for i in mini(rb.size(), pb_pos.size()):
+		var e: Dictionary = rb[i]
+		var cid := str(e.get("char_id", "")) if str(e.get("char_id", "")) != "" else "char_00%d" % (i + 4)
+		var pl := _create_player(cid, "b", false, pb_pos[i])
+		team_b_players.append(pl)
+		pl.set_meta("net_human_peer", int(e.get("peer_id", 0)))
+	# COOP 空敌侧=AI 默认三人（§二：队伍B=3 AI）
+	if rb.is_empty():
+		var ai_ids := ["char_004", "char_005", "char_006"]
+		var ai_pos := [Vector2(260, -130), Vector2(320, 0), Vector2(260, 130)]
+		for i in 3:
+			team_b_players.append(_create_player(ai_ids[i], "b", false, ai_pos[i]))
+	var na := team_a_players.size()
+	var nb := team_b_players.size()
+	print("[Net] 联机阵容生成（%s）: A=%d 人 B=%d 人" % [str(_match_config.get("mode")), na, nb])
 
 
 func _setup_teams() -> void:
 	"""创建双方球队"""
 	if dev_prep_mode:
 		return
-	# 工单01 S5：联机阵容（configure_match 下发）——1v1 每队 1 人单点位；其余模式本批回落现 3v3 硬编码
-	if NetManager.active and not _match_config.is_empty() and str(_match_config.get("mode")) == "MP_1V1":
-		_setup_net_1v1_impl()
+	# 工单01 S5：联机阵容（configure_match 下发）——三档通用：roster 条目按 slot 落标准点位，空侧=AI 默认三人
+	if NetManager.active and not _match_config.is_empty():
+		_setup_net_teams_impl()
 		return
 
 	var team_a_ids := ["char_001", "char_002", "char_003"]
@@ -1331,6 +1345,10 @@ func _create_circle_points(center: Vector2, radius: float, segments: int) -> Pac
 
 func _setup_ai_manager() -> void:
 	"""设置AI管理器"""
+	# 工单01 S5：AI 只在 host 跑（guest 副本由快照钉位渲染，本地 AI 会抢占副本球员位置——E9b 根因）
+	if NetManager.active and NetManager.session != null and not NetManager.session.is_host:
+		print("[Net] guest 副本：跳过本地 AI 注册（快照驱动渲染）")
+		return
 	var ai_script := load("res://scripts/battle/ai_manager.gd")
 	ai_mgr = Node.new()
 	ai_mgr.name = "AIManager"
@@ -2118,6 +2136,9 @@ func _on_sim_match_ended(score_a: int, score_b: int, _result: String) -> void:
 	# E6-1：事件账本落盘
 	_dump_event_log(score_a, score_b)
 	print("[Sim] 比赛结束，退出")
+	# 工单01 S5：联机 host 对局=延迟退（给 RESULT/终局帧留网络缓冲冲刷窗；单机 sim 保持立即退不变）
+	if NetManager.active and NetManager.session != null:
+		await get_tree().create_timer(1.2).timeout
 	get_tree().quit()
 
 

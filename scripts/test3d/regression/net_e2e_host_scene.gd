@@ -68,4 +68,6 @@ func _finish(d: Dictionary) -> void:
 	var f := FileAccess.open(OUT, FileAccess.WRITE)
 	f.store_string(JSON.stringify(d))
 	f.close()
+	# 延迟退出：flush 只把包塞进 OS 发送缓冲，quit 竞速会吞掉尚未冲刷的包（多 peer 必丢）
+	await get_tree().create_timer(1.0).timeout
 	get_tree().quit(0 if bool(d.get("ok", false)) else 1)

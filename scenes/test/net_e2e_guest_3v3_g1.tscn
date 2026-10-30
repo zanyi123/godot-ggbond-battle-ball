@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/test3d/regression/net_e2e_guest_3v3_g1.gd" id="1"]
+
+[node name="NetE2EGuest3v3G1" type="Node"]
+script = ExtResource("1")

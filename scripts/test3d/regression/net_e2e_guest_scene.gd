@@ -11,6 +11,7 @@ var _started := false
 var _got := false
 var _result := {}
 var _cfg := {}
+var _arena: Node = null
 
 func _ready() -> void:
 	_run()
@@ -42,7 +43,9 @@ func _run() -> void:
 	s.t_result_wait = 30.0
 	s.snapshot_received.connect(func(snap: Dictionary):
 		_snap_phases.append(str(snap.get("phase", "")))
-		_last_score = snap.get("score", {}))
+		_last_score = snap.get("score", {})
+		if _arena != null and _arena._net_bridge != null:
+			_arena._net_bridge.on_snap(snap))
 	s.match_started.connect(func(cfg): _cfg = cfg; _started = true)
 	s.set_local_ready(true)
 	var waited := 0.0
@@ -64,6 +67,7 @@ func _run() -> void:
 	await get_tree().create_timer(0.3).timeout
 	var arena: Node = packed.instantiate()
 	arena.configure_match(_cfg if not _cfg.is_empty() else s._match_config)
+	_arena = arena
 	add_child(arena)
 	await get_tree().create_timer(0.8).timeout   # 等首批评快照钉位
 	var all: Array = arena.team_a_players + arena.team_b_players
@@ -96,6 +100,9 @@ func _run() -> void:
 		"final_phase": s.phase,
 		"replica_players": all.size(),
 		"moved_dx": moved_dx,
+		"apply_calls": arena._net_bridge.apply_calls if arena._net_bridge != null else -1,
+		"snap_frame": arena._net_bridge.last_snap_frame if arena._net_bridge != null else -1,
+		"b0_pos": arena._net_bridge.last_b0_pos,
 		"diag": diag,
 	})
 

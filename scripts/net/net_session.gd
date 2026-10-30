@@ -50,6 +50,7 @@ var _phase_at: float = 0.0
 var _last_beat: float = 0.0
 var _last_seen: Dictionary = {}   # peer_id -> last ts
 var _host_seen: float = -999.0    # guest 视角：最近收到 host 任何包的时刻
+var cmd_queue: Array = []   # host 侧指令队列（bridge 轮询消费；信号连接在 arena 内静默失效已实证，改队列直读）
 var _chat_log: Dictionary = {}    # peer_id -> Array[ts]（限流窗口）
 var _match_config: Dictionary = {}
 var _gate: Dictionary = {}        # S7 面板门 {panel, ready:{peer_id:bool}, confirm:bool, deadline, grace_at}
@@ -233,6 +234,7 @@ func _host_handle(peer_id: int, msg_type: int, d: Dictionary) -> void:
 		NetSchema.MSG_CHAT:
 			_host_dispatch_chat(peer_id, d)
 		NetSchema.MSG_INPUT_CMD:
+			cmd_queue.append(d)   # 队列直读（bridge 轮询消费）；信号 emit 保留给外部监听者
 			input_command_received.emit(d)
 
 # ── guest 消息处理 ──────────────────────────────
@@ -322,7 +324,9 @@ func send_chat(text: String) -> void:
 func send_input_command(move: Vector2, skill_slot: int = -1) -> void:
 	if is_host or transport == null:
 		return
-	transport.send_to_host(NetSchema.MSG_INPUT_CMD, NetSchema.make_input_command(local_peer_id(), 0, move, skill_slot, 0), NetSchema.CH_STATE, false)
+	# 指令走可靠通道：本构建 client→server 的不可靠上行实测全丢（快照下行不可靠却通——已探针实证）；
+	# 带宽账：InputCommand ~200B×20Hz×6 人 ≈24KB/s，LAN/家用上行无压力（高频 aim 优化后置）
+	transport.send_to_host(NetSchema.MSG_INPUT_CMD, NetSchema.make_input_command(local_peer_id(), 0, move, skill_slot, 0))
 
 ## host：对局内推快照（S5 驱动；M1 测试用）
 func push_snapshot(snap: Dictionary) -> void:
