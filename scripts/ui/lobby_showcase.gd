@@ -179,17 +179,20 @@ func _build_topbar() -> void:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(spacer)
-	_add_chip(bar, "源石", "12,580")
-	_add_chip(bar, "源晶", "46")
-	_add_chip(bar, "溯晶", "8")
+	_add_chip(bar, "源石", "12,580", "cur_yuanshi")
+	_add_chip(bar, "源晶", "46", "cur_yuanjing")
+	_add_chip(bar, "溯晶", "8", "cur_sujing")
 	_add_chip(bar, "归源队 · 星火赛Ⅲ", "")
 
 
-func _add_chip(bar: HBoxContainer, label: String, num: String) -> void:
+## 2026-10-30 接入 C6 图标：icon_name 非空时在 chip 左侧显示图标（UiIcon 单例取图）
+func _add_chip(bar: HBoxContainer, label: String, num: String, icon_name: String = "") -> void:
 	var chip := PanelContainer.new()
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 7)
 	chip.add_child(row)
+	if icon_name != "":
+		row.add_child(UiIcon.make_icon_rect(icon_name, 18))
 	var lb := Label.new()
 	lb.text = label
 	lb.theme_type_variation = "LblCaption"

@@ -72,20 +72,29 @@ func _build_currency_bar() -> void:
 	var start_x := 500
 	var spacing := 220
 	
+	# 2026-10-30 接入 C6 图标（06 档 B2「20 支零引用」→ 本处为首次消费）
+	# 图标名对应 assets/icons/ui/cur_*：童话币→源石(旧数据key fairy_coin)
+	# 注：数据 key 保留旧词（世界观 §7.8「只换显示名不动数据 key」）
 	var currencies: Array = [
-		{"key": "fairy_coin", "name": "童话币", "color": Color(1.0, 0.9, 0.6)},
-		{"key": "spirit_ore", "name": "元灵矿石", "color": Color(0.6, 0.8, 1.0)},
-		{"key": "crystal", "name": "水晶", "color": Color(0.8, 0.6, 1.0)}
+		{"key": "fairy_coin", "name": "童话币", "color": Color(1.0, 0.9, 0.6), "icon": "cur_yuanshi"},
+		{"key": "spirit_ore", "name": "元灵矿石", "color": Color(0.6, 0.8, 1.0), "icon": "cur_yuanjing"},
+		{"key": "crystal", "name": "水晶", "color": Color(0.8, 0.6, 1.0), "icon": "cur_sujing"}
 	]
 	
 	for i in range(currencies.size()):
 		var curr = currencies[i]
 		var x := start_x + i * spacing
 		
+		# 货币图标（UiIcon 单例取图，缺资源自动返回 null 不崩）
+		var icon_rect := UiIcon.make_icon_rect(curr["icon"], 22)
+		icon_rect.name = "CurrencyIcon_%s" % curr.key
+		icon_rect.position = Vector2(x, 24)
+		add_child(icon_rect)
+		
 		var label_name := Label.new()
 		label_name.name = "CurrencyName_%s" % curr.key
 		label_name.text = curr.name
-		label_name.position = Vector2(x, 25)
+		label_name.position = Vector2(x + 28, 25)
 		label_name.size = Vector2(100, 20)
 		label_name.add_theme_font_size_override("font_size", 14)
 		label_name.add_theme_color_override("font_color", curr.color)

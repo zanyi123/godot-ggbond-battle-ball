@@ -13,26 +13,44 @@ var _mode_selection_nodes: Array[Node] = []
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
+	# ★ 2026-10-30 U0-6 排版规范落地：根节点统一挂 Theme，所有子控件继承字号/色值/框件。
+	#   U0-6 §七 验收：面板脚本内不应再有 add_theme_font_size_override / 散落 Color(。
+	theme = UiTheme.shared()
+
 	# 36号：F7 入口=技能测试专用平台（键位表已登记；主菜单按下即切场景）
 	# 36号：F7 用 _input 截获（见 _input 实现）
 	set_process_input(true)
 
-	# 背景
-	var bg := ColorRect.new()
-	bg.name = "BG"
-	bg.size = Vector2(1440, 900)
-	bg.color = Color(0.1, 0.1, 0.2)
-	add_child(bg)
+	# 背景（2026-10-30 挂载：蓝白星动态背景 → 协会大厅）
+	# 原为 ColorRect(0.1,0.1,0.2) 纯色占位；现替换为 scenes/ui/bg_lobby_planet.tscn
+	# （四层实时 GPU 动效，14 秒无缝循环；资源见美术规划/08 档 §十五）
+	var bg_scene_path := "res://scenes/ui/bg_lobby_planet.tscn"
+	if ResourceLoader.exists(bg_scene_path):
+		var bg_dyn: Control = (load(bg_scene_path) as PackedScene).instantiate()
+		bg_dyn.name = "BG"
+		add_child(bg_dyn)
+		# 不在任何交互路径上挡鼠标（背景只做视觉）
+		bg_dyn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# 左侧压暗带：菜单区文字保持 Theme 原色也清晰（U0-6 §六 对比度）
+		if bg_dyn.has_method("add_left_scrim"):
+			bg_dyn.add_left_scrim(0.40, 0.58)
+	else:
+		# 资源缺失回退原占位色块（保持旧行为，不崩）
+		var bg := ColorRect.new()
+		bg.name = "BG"
+		bg.size = Vector2(1440, 900)
+		bg.color = Color(0.1, 0.1, 0.2)
+		add_child(bg)
 
-	# 标题
+	# 标题（2026-10-30 走 Theme：LblDisplay 40 档 + 色板文字色，去硬编码）
+	# 注：标题文案按 v5 §7.8 应改「寻源竞球者」——属主题改名，**主人令暂缓**，此处保持原文案
 	var title := Label.new()
 	title.name = "Title"
-	title.text = "猪猪侠之决竞球"
-	title.position = Vector2(470, 120)
-	title.size = Vector2(500, 70)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 36)
-	title.add_theme_color_override("font_color", Color.YELLOW)
+	title.text = "决竞球"
+	title.theme_type_variation = "LblDisplay"
+	title.position = Vector2(120, 78)
+	title.size = Vector2(700, 70)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	add_child(title)
 
 	# 如果有上次记录的模式，直接进入；否则显示模式选择
@@ -49,60 +67,66 @@ func _ready() -> void:
 
 
 ## 显示模式选择界面
+## ★ 2026-10-30 按 U0-6 排版规范重做（原为硬编码坐标+写死色值，零 Theme）
+##   §三 字号档：页题用 LblTitle / 节题 LblSection / 辅助 LblCaption
+##   §四 固定操作区：按钮高 ≥44px，快捷键提示行常驻底栏
+##   经验库 10-27「去卡片化」：大号裸文字 + 序号 + 斜切高亮，禁圆角卡片感
+##   §七 验收：本函数内**无 Color( / add_theme_color_override / add_theme_font_size_override**
 func _show_mode_selection() -> void:
 	_clear_mode_selection()
 
-	var subtitle := Label.new()
-	subtitle.text = "请选择模式"
-	subtitle.position = Vector2(470, 200)
-	subtitle.size = Vector2(500, 40)
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_font_size_override("font_size", 22)
-	subtitle.add_theme_color_override("font_color", Color(0.8, 0.8, 0.9))
-	add_child(subtitle)
-	_mode_selection_nodes.append(subtitle)
+	# 主菜单根节点挂 Theme（一处生效，子控件全继承）
+	theme = UiTheme.shared()
 
-	# 玩家模式按钮
-	var btn_player := Button.new()
-	btn_player.text = "玩家模式"
-	btn_player.position = Vector2(545, 320)
-	btn_player.size = Vector2(350, 65)
-	btn_player.add_theme_font_size_override("font_size", 22)
-	btn_player.add_theme_color_override("font_color", Color(0.6, 0.9, 1.0))
-	btn_player.pressed.connect(_on_enter_player_mode)
-	add_child(btn_player)
-	_mode_selection_nodes.append(btn_player)
+	var vs: Vector2 = get_viewport_rect().size
 
-	var player_desc := Label.new()
-	player_desc.text = "正常游戏体验，不含开发者工具"
-	player_desc.position = Vector2(545, 395)
-	player_desc.size = Vector2(350, 25)
-	player_desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	player_desc.add_theme_font_size_override("font_size", 13)
-	player_desc.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-	add_child(player_desc)
-	_mode_selection_nodes.append(player_desc)
+	# ── 页题区（左对齐，让出右侧主视觉；N1 规格「左1/3 留白」）
+	var title_lb := UiLayout.make_page_title("选 择 模 式")
+	title_lb.position = Vector2(UiLayout.PAD_PANEL * 3, 178)
+	title_lb.size = Vector2(560, 48)
+	add_child(title_lb)
+	_mode_selection_nodes.append(title_lb)
 
-	# 管理员模式按钮
-	var btn_admin := Button.new()
-	btn_admin.text = "管理员模式"
-	btn_admin.position = Vector2(545, 460)
-	btn_admin.size = Vector2(350, 65)
-	btn_admin.add_theme_font_size_override("font_size", 22)
-	btn_admin.add_theme_color_override("font_color", Color(0.5, 1.0, 0.6))
-	btn_admin.pressed.connect(_on_enter_admin_mode)
-	add_child(btn_admin)
-	_mode_selection_nodes.append(btn_admin)
+	var sub_lb := UiLayout.make_section_label("SELECT MODE")
+	sub_lb.position = Vector2(UiLayout.PAD_PANEL * 3, 234)
+	sub_lb.size = Vector2(560, 24)
+	add_child(sub_lb)
+	_mode_selection_nodes.append(sub_lb)
 
-	var admin_desc := Label.new()
-	admin_desc.text = "开发者工具 + 数据管理 + 物资发放（测试用）"
-	admin_desc.position = Vector2(545, 535)
-	admin_desc.size = Vector2(350, 25)
-	admin_desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	admin_desc.add_theme_font_size_override("font_size", 13)
-	admin_desc.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-	add_child(admin_desc)
-	_mode_selection_nodes.append(admin_desc)
+	# ── 菜单项（去卡片化：大号裸文字 + 序号）
+	var stack := UiLayout.make_vstack(UiLayout.GAP_M)
+	stack.position = Vector2(UiLayout.PAD_PANEL * 3, 300)
+	stack.custom_minimum_size = Vector2(380, 0)
+	add_child(stack)
+	_mode_selection_nodes.append(stack)
+
+	var e_player := UiLayout.make_menu_entry(1, "玩 家 模 式", _on_enter_player_mode)
+	stack.add_child(e_player)
+	_mode_selection_nodes.append(e_player)
+
+	var d_player := UiLayout.make_caption("正常游戏体验，不含开发者工具")
+	d_player.custom_minimum_size = Vector2(380, 0)
+	stack.add_child(d_player)
+	_mode_selection_nodes.append(d_player)
+
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, UiLayout.GAP_L - UiLayout.GAP_XS)
+	stack.add_child(spacer)
+	_mode_selection_nodes.append(spacer)
+
+	var e_admin := UiLayout.make_menu_entry(2, "管 理 员 模 式", _on_enter_admin_mode)
+	stack.add_child(e_admin)
+	_mode_selection_nodes.append(e_admin)
+
+	var d_admin := UiLayout.make_caption("开发者工具 · 数据管理 · 物资发放（测试用）")
+	d_admin.custom_minimum_size = Vector2(380, 0)
+	stack.add_child(d_admin)
+	_mode_selection_nodes.append(d_admin)
+
+	# ── 快捷键提示行（U0-6 §四 第4条：常驻底栏）
+	var hint := UiLayout.make_key_hint_bar("Enter 确认 · Esc 返回 · F7 技能测试平台")
+	add_child(hint)
+	_mode_selection_nodes.append(hint)
 
 
 func _clear_mode_selection() -> void:
@@ -173,64 +197,74 @@ func _build_main_menu(is_admin: bool) -> void:
 		_menu_interactive_nodes.append(mode_tag)
 
 	# 开始比赛按钮
-	var btn_start := Button.new()
+	var btn_start := UiLayout.make_primary_button("开始比赛", 350)
 	btn_start.name = "BtnStart"
 	btn_start.text = "开始比赛"
 	btn_start.position = Vector2(545, 260)
-	btn_start.size = Vector2(350, 55)
 	btn_start.pressed.connect(_on_start_match)
 	add_child(btn_start)
 	_menu_interactive_nodes.append(btn_start)
 
 	# 角色系统按钮
-	var btn_chars := Button.new()
+	var btn_chars := UiLayout.make_ghost_button("角色系统", 350)
 	btn_chars.name = "BtnCharacters"
 	btn_chars.text = "角色系统"
 	btn_chars.position = Vector2(545, 335)
-	btn_chars.size = Vector2(350, 55)
 	btn_chars.pressed.connect(_on_open_characters)
 	add_child(btn_chars)
 	_menu_interactive_nodes.append(btn_chars)
 
 	# 元灵系统按钮
-	var btn_spirits := Button.new()
+	var btn_spirits := UiLayout.make_ghost_button("元灵系统", 350)
 	btn_spirits.name = "BtnSpirits"
 	btn_spirits.text = "元灵系统"
 	btn_spirits.position = Vector2(545, 410)
-	btn_spirits.size = Vector2(350, 55)
 	btn_spirits.pressed.connect(_on_open_spirits)
 	add_child(btn_spirits)
 	_menu_interactive_nodes.append(btn_spirits)
 
 	# 基地按钮
-	var btn_base := Button.new()
+	var btn_base := UiLayout.make_ghost_button("基地", 350)
 	btn_base.name = "BtnBase"
 	btn_base.text = "基地"
 	btn_base.position = Vector2(545, 485)
-	btn_base.size = Vector2(350, 55)
 	btn_base.pressed.connect(_on_open_base)
 	add_child(btn_base)
 	_menu_interactive_nodes.append(btn_base)
 
 	# 交易按钮
-	var btn_trade := Button.new()
+	var btn_trade := UiLayout.make_ghost_button("交易", 350)
 	btn_trade.name = "BtnTrade"
 	btn_trade.text = "交易"
 	btn_trade.position = Vector2(545, 560)
-	btn_trade.size = Vector2(350, 55)
 	btn_trade.pressed.connect(_on_open_trade)
 	add_child(btn_trade)
 	_menu_interactive_nodes.append(btn_trade)
 
 	# 联机对战按钮（工单01 S2：左列独立位，不动现有按钮布局）
-	var btn_net := Button.new()
+	var btn_net := UiLayout.make_ghost_button("联机对战", 220)
 	btn_net.name = "BtnNetLobby"
 	btn_net.text = "联机对战"
 	btn_net.position = Vector2(150, 260)
-	btn_net.size = Vector2(220, 50)
 	btn_net.pressed.connect(_on_open_net_lobby)
 	add_child(btn_net)
 	_menu_interactive_nodes.append(btn_net)
+
+	# ── 设置 / 教学（2026-10-30 第3批：U1 面板进主流程）
+	# 之前 settings_panel / tutorial_overlay 只被测试套件引用，玩家无入口。
+	var btn_settings := UiLayout.make_ghost_button("设 置", 220)
+	btn_settings.name = "BtnSettings"
+	btn_settings.position = Vector2(150, 320)
+	btn_settings.pressed.connect(_on_open_settings)
+	add_child(btn_settings)
+	_menu_interactive_nodes.append(btn_settings)
+
+	var btn_tutorial := UiLayout.make_ghost_button("溯源第一课", 220)
+	btn_tutorial.name = "BtnTutorial"
+	btn_tutorial.position = Vector2(150, 380)
+	btn_tutorial.pressed.connect(_on_open_tutorial)
+	add_child(btn_tutorial)
+	_menu_interactive_nodes.append(btn_tutorial)
 
 	# 奖励开关按钮（所有玩家可用）
 	var btn_reward := Button.new()
@@ -326,6 +360,9 @@ func _on_start_match() -> void:
 var char_ui: Control = null
 # 联机大厅（工单01 S2；照 char_ui 先例实例化叠加，关闭时由大厅回调恢复按钮）
 var _net_lobby: Control = null
+# 2026-10-30 第3批：U1 面板实例（设置/教学）
+var _settings_panel: Control = null
+var _tutorial_overlay: Control = null
 
 
 func _on_open_net_lobby() -> void:
@@ -342,6 +379,61 @@ func _on_open_net_lobby() -> void:
 	_net_lobby = NetLobbyClass.new()
 	add_child(_net_lobby)
 	_hide_menu_interactive_nodes()
+
+
+## 设置面板入口（2026-10-30 第3批：U1 面板进主流程）
+## settings_panel.gd 已实现：三音量滑杆 + 画质/窗口下拉 + 键位占位行
+##   signal setting_changed(key, value) / close_requested
+##   持久化归实现窗口；本处只负责"开/关"与恢复菜单按钮
+func _on_open_settings() -> void:
+	if _settings_panel and is_instance_valid(_settings_panel) and _settings_panel.visible:
+		return
+	if _settings_panel and is_instance_valid(_settings_panel):
+		_settings_panel.queue_free()
+		_settings_panel = null
+	var SettingsClass = load("res://scripts/ui/settings_panel.gd")
+	if SettingsClass == null:
+		push_warning("[MainMenu] settings_panel.gd 加载失败，跳过")
+		return
+	_settings_panel = SettingsClass.new()
+	add_child(_settings_panel)
+	_hide_menu_interactive_nodes()
+	# 关闭信号 → 恢复菜单
+	if _settings_panel.has_signal("close_requested"):
+		_settings_panel.close_requested.connect(func() -> void:
+			if _settings_panel and is_instance_valid(_settings_panel):
+				_settings_panel.queue_free()
+				_settings_panel = null
+			_show_menu_interactive_nodes())
+	# 打开动画（U0-6 转场 ≤300ms）
+	if _settings_panel.has_method("open"):
+		_settings_panel.open()
+
+
+## 教学入口（溯源第一课）
+## tutorial_overlay.gd 已实现：5 步数据驱动（data/ui/tutorial_steps.json）
+##   signal tutorial_finished / start()
+func _on_open_tutorial() -> void:
+	if _tutorial_overlay and is_instance_valid(_tutorial_overlay) and _tutorial_overlay.visible:
+		return
+	if _tutorial_overlay and is_instance_valid(_tutorial_overlay):
+		_tutorial_overlay.queue_free()
+		_tutorial_overlay = null
+	var TutClass = load("res://scripts/ui/tutorial_overlay.gd")
+	if TutClass == null:
+		push_warning("[MainMenu] tutorial_overlay.gd 加载失败，跳过")
+		return
+	_tutorial_overlay = TutClass.new()
+	add_child(_tutorial_overlay)
+	_hide_menu_interactive_nodes()
+	if _tutorial_overlay.has_signal("tutorial_finished"):
+		_tutorial_overlay.tutorial_finished.connect(func() -> void:
+			if _tutorial_overlay and is_instance_valid(_tutorial_overlay):
+				_tutorial_overlay.queue_free()
+				_tutorial_overlay = null
+			_show_menu_interactive_nodes())
+	if _tutorial_overlay.has_method("start"):
+		_tutorial_overlay.start()
 
 
 func _on_open_characters() -> void:

@@ -330,10 +330,11 @@ func _show_rewards_panel() -> void:
 		"lose": result_text = "败北奖励"
 		_: result_text = "平局奖励"
 	
+	# 2026-10-30 接入 C6 货币图标（06 档 B2「20 支零引用」→ 消费点之二）
 	_add_reward_row(reward_vbox, result_text, "")
-	_add_reward_row(reward_vbox, "童话币", "+%d" % _rewards.get("fairy_coin", 0))
-	_add_reward_row(reward_vbox, "元灵矿石", "+%d" % _rewards.get("spirit_ore", 0))
-	_add_reward_row(reward_vbox, "水晶", "+%d" % _rewards.get("crystal", 0))
+	_add_reward_row(reward_vbox, "童话币", "+%d" % _rewards.get("fairy_coin", 0), "cur_yuanshi")
+	_add_reward_row(reward_vbox, "元灵矿石", "+%d" % _rewards.get("spirit_ore", 0), "cur_yuanjing")
+	_add_reward_row(reward_vbox, "水晶", "+%d" % _rewards.get("crystal", 0), "cur_sujing")
 	
 	# 连胜提示
 	var streak: int = RewardSystem.get_win_streak()
@@ -469,9 +470,13 @@ func _add_stat_row(grid: GridContainer, label: String, value: String) -> void:
 	grid.add_child(spacer)
 
 
-func _add_reward_row(parent: VBoxContainer, label: String, value: String) -> void:
+func _add_reward_row(parent: VBoxContainer, label: String, value: String, icon_name: String = "") -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
+	
+	# 2026-10-30 货币图标（UiIcon 单例；icon_name 为空则不出图标）
+	if icon_name != "":
+		row.add_child(UiIcon.make_icon_rect(icon_name, 18))
 	
 	var lbl := Label.new()
 	lbl.text = "  " + label
